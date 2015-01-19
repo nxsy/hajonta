@@ -1,0 +1,23 @@
+let hajonta_loaded=1
+function! s:build()
+  lcd ./build
+  let &makeprg='build'
+  silent make
+  lcd ..
+  botright copen
+endfunction
+
+command! Build call s:build()
+map <Leader>b :Build<cr>
+
+function! s:load_url(url)
+    execute "silent !start explorer \"" . a:url . "\""
+endfunction
+
+function! s:lookup()
+    let s:url = "http://social.msdn.microsoft.com/Search/en-US/?Refinement=181&Query=" . expand("<cword>")
+    call s:load_url(s:url)
+endfunction
+
+command! Lookup call s:lookup()
+map <silent> <F1> :Lookup<CR>
