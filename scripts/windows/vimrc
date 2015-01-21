@@ -1,10 +1,9 @@
 let hajonta_loaded=1
 function! s:build()
-  lcd ./build
   let &makeprg='build'
   silent make
-  lcd ..
   botright copen
+  wincmd p
 endfunction
 
 command! Build call s:build()
