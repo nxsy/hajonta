@@ -270,6 +270,23 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             glDisable(GL_STENCIL_TEST);
             glDisable(GL_CULL_FACE);
         } break;
+        case WM_SIZE:
+        {
+            int32_t window_width = LOWORD(lParam);
+            int32_t window_height = HIWORD(lParam);
+            int32_t height = window_height;
+            int32_t width = window_width;
+            float ratio = 960.0f / 540.0f;
+            if (height > width / ratio)
+            {
+                height = width / ratio;
+            }
+            else if (width > height * ratio)
+            {
+                width = height * ratio;
+            }
+            glViewport((window_width - width) / 2, (window_height - height) / 2, width, height);
+        } break;
         case WM_CLOSE:
         {
             PostQuitMessage(0);
