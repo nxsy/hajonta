@@ -1,5 +1,4 @@
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 
 #include <windows.h>
@@ -14,12 +13,16 @@ struct platform_state
     char *stop_reason;
 
     HDC device_context;
+
+    char binary_path[MAX_PATH];
 };
 
-struct vertex
+struct game_code
 {
-    float position[4];
-    float color[4];
+    game_update_and_render_func *game_update_and_render;
+
+    HMODULE game_code_module;
+    FILETIME last_updated;
 };
 
 LRESULT CALLBACK
@@ -142,8 +145,6 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             wglDeleteContext(wgl_context);
             wglMakeCurrent(state->device_context, final_context);
 
-            load_glfuncs();
-
             glViewport(0, 0, 960, 540);
         } break;
         case WM_SIZE:
@@ -211,169 +212,70 @@ handle_win32_messages(platform_state *state)
     }
 }
 
-struct game_state {
-    int32_t program;
-
-    int32_t u_offset_id;
-    int32_t a_pos_id;
-    int32_t a_color_id;
-
-    uint32_t vao;
-    uint32_t vbo;
-
-    float x;
-    float y;
-    float x_increment;
-    float y_increment;
-};
-
-void platform_fail(hajonta_thread_context *ctx, char *failure_reason)
+PLATFORM_FAIL(platform_fail)
 {
     platform_state *state = (platform_state *)ctx;
     state->stopping = 1;
     state->stop_reason = strdup(failure_reason);
 }
 
-GAME_UPDATE_AND_RENDER(guar)
+PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 {
-    game_state *state = (game_state *)memory->memory;
+    return wglGetProcAddress(function_name);
+}
 
-    if (!memory->initialized)
+bool win32_load_game_code(game_code *code, char *filename)
+{
+    WIN32_FILE_ATTRIBUTE_DATA data;
+
+    if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &data))
     {
-        state->program = glCreateProgram();
-        char *vertex_shader_source =
-            "#version 150 \n"
-            "uniform vec2 u_offset; \n"
-            "in vec4 a_pos; \n"
-            "in vec4 a_color; \n"
-            "out vec4 v_color; \n"
-            "void main (void) \n"
-            "{ \n"
-            "    v_color = a_color; \n"
-            "    gl_Position = a_pos + vec4(u_offset, 0.0, 0.0);\n"
-            "} \n"
-            ;
-
-
-        char *fragment_shader_source =
-            "#version 150 \n"
-            "in vec4 v_color; \n"
-            "out vec4 o_color; \n"
-            "void main(void) \n"
-            "{ \n"
-            "    o_color = v_color; \n"
-            "} \n"
-            ;
-
-        uint32_t vertex_shader_id;
-        uint32_t fragment_shader_id;
-
-        {
-            uint32_t shader = vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-            int compiled;
-            glShaderSource(shader, 1, &vertex_shader_source, 0);
-            glCompileShader(shader);
-            glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-            if (!compiled)
-            {
-                char info_log[1024];
-                glGetShaderInfoLog(shader, sizeof(info_log), 0, info_log);
-                return platform_fail(ctx, info_log);
-            }
-        }
-        {
-            uint32_t shader = fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
-            int compiled;
-            glShaderSource(shader, 1, &fragment_shader_source, 0);
-            glCompileShader(shader);
-            glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-            if (!compiled)
-            {
-                char info_log[1024];
-                glGetShaderInfoLog(shader, sizeof(info_log), 0, info_log);
-                return platform_fail(ctx, info_log);
-            }
-        }
-        glAttachShader(state->program, vertex_shader_id);
-        glAttachShader(state->program, fragment_shader_id);
-        glLinkProgram(state->program);
-
-        int linked;
-        glGetProgramiv(state->program, GL_LINK_STATUS, &linked);
-        if (!linked)
-        {
-            char info_log[1024];
-            glGetProgramInfoLog(state->program, sizeof(info_log), 0, info_log);
-            return platform_fail(ctx, info_log);
-        }
-
-        glUseProgram(state->program);
-
-        state->u_offset_id = glGetUniformLocation(state->program, "u_offset");
-        if (state->u_offset_id < 0) {
-            char info_log[] = "Could not locate u_offset uniform";
-            return platform_fail(ctx, info_log);
-        }
-        state->a_color_id = glGetAttribLocation(state->program, "a_color");
-        if (state->a_color_id < 0) {
-            char info_log[] = "Could not locate a_color attribute";
-            return platform_fail(ctx, info_log);
-        }
-        state->a_pos_id = glGetAttribLocation(state->program, "a_pos");
-        if (state->a_pos_id < 0) {
-            char info_log[] = "Could not locate a_pos attribute";
-            return platform_fail(ctx, info_log);
-        }
-
-        glGenVertexArrays(1, &state->vao);
-        glBindVertexArray(state->vao);
-
-        glGenBuffers(1, &state->vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-        vertex vertices[4] = {
-            {{-0.5, 0.5, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}},
-            {{ 0.5, 0.5, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
-            {{ 0.5,-0.5, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
-            {{-0.5,-0.5, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}},
-        };
-        glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), vertices, GL_STATIC_DRAW);
-
-        glEnableVertexAttribArray(state->a_pos_id);
-        glEnableVertexAttribArray(state->a_color_id);
-        glVertexAttribPointer(state->a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-        glVertexAttribPointer(state->a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
-
-        glDepthFunc(GL_ALWAYS);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_STENCIL_TEST);
-        glDisable(GL_CULL_FACE);
-
-        state->x = 0;
-        state->y = 0;
-        state->x_increment = 0.02f;
-        state->y_increment = 0.002f;
-
-        memory->initialized = 1;
+        return false;
+    }
+    FILETIME last_updated = data.ftLastWriteTime;
+    if (CompareFileTime(&last_updated, &code->last_updated) != 1)
+    {
+        return true;
     }
 
-    state->x += state->x_increment;
-    state->y += state->y_increment;
-    if ((state->x < -0.5) || (state->x > 0.5))
+    char locksuffix[] = ".lck";
+    char lockfilename[MAX_PATH];
+
+    strcpy(lockfilename, filename);
+    strcat(lockfilename, locksuffix);
+
+    if (GetFileAttributesEx(lockfilename, GetFileExInfoStandard, &data))
     {
-        state->x_increment *= -1;
-    }
-    if ((state->y < -0.5) || (state->y > 0.5))
-    {
-        state->y_increment *= -1;
+        return false;
     }
 
-    glUseProgram(state->program);
-    glClearColor(0.1f, 0.1f, 0.1f, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
+    char tempsuffix[] = ".tmp";
+    char tempfilename[MAX_PATH];
+    strcpy(tempfilename, filename);
+    strcat(tempfilename, tempsuffix);
 
-    float position[] = {state->x, state->y};
-    glUniform2fv(state->u_offset_id, 1, (float *)&position);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    if (code->game_code_module)
+    {
+        FreeLibrary(code->game_code_module);
+    }
+    CopyFile(filename, tempfilename, 0);
+
+    HMODULE new_module = LoadLibraryA(tempfilename);
+    if (!new_module)
+    {
+        return false;
+    }
+
+    game_update_and_render_func *game_update_and_render = (game_update_and_render_func *)GetProcAddress(new_module, "game_update_and_render");
+    if (!game_update_and_render)
+    {
+        return false;
+    }
+
+    code->game_code_module = new_module;
+    code->last_updated = last_updated;
+    code->game_update_and_render = game_update_and_render;
+    return true;
 }
 
 int CALLBACK
@@ -419,22 +321,43 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     }
 
     ShowWindow(window, nCmdShow);
-    game_update_and_render *guar_func = guar;
+    game_code code = {};
 
+    wglSwapIntervalEXT =
+        (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
     wglSwapIntervalEXT(1);
 
     platform_memory memory = {};
     memory.size = 64 * 1024 * 1024;
     memory.memory = malloc(memory.size);
+    memory.platform_fail = platform_fail;
+    memory.platform_glgetprocaddress = platform_glgetprocaddress;
 
     game_input input = {};
     input.delta_t = 1 / 60;
 
+    GetModuleFileNameA(0, state.binary_path, sizeof(state.binary_path));
+    char game_library_path[sizeof(state.binary_path)];
+    char *location_of_last_slash = strrchr(state.binary_path, '\\');
+    strncpy(game_library_path, state.binary_path, location_of_last_slash - state.binary_path);
+    strcat(game_library_path, "\\game.dll");
+
     while(!state.stopping)
     {
+        bool updated = win32_load_game_code(&code, game_library_path);
+        if (!code.game_code_module)
+        {
+            state.stopping = 1;
+            state.stop_reason = "Unable to load game code";
+        }
+        if (!updated)
+        {
+            state.stopping = 1;
+            state.stop_reason = "Unable to reload game code";
+        }
         handle_win32_messages(&state);
 
-        guar((hajonta_thread_context *)&state, &memory, &input);
+        code.game_update_and_render((hajonta_thread_context *)&state, &memory, &input);
 
         SwapBuffers(state.device_context);
     }
