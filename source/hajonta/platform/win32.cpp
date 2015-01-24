@@ -272,7 +272,7 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         } break;
         case WM_CLOSE:
         {
-            state->stopping = 1;
+            PostQuitMessage(0);
         } break;
         default:
         {
@@ -285,20 +285,35 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 static void
 handle_win32_messages(platform_state *state)
 {
-    MSG Message;
-    while(!state->stopping && PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
+    MSG message;
+    while(!state->stopping && PeekMessage(&message, 0, 0, 0, PM_REMOVE))
     {
-        switch(Message.message)
+        switch(message.message)
         {
             case WM_QUIT:
             {
                 state->stopping = true;
             } break;
+
+            case WM_SYSKEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYDOWN:
+            case WM_KEYUP:
+            {
+                uint32_t vkcode = message.wParam;
+                switch(vkcode)
+                {
+                    case VK_ESCAPE:
+                    {
+                        state->stopping = true;
+                    } break;
+                }
+            } break;
             default:
             {
-                TranslateMessage(&Message);
-                DispatchMessageA(&Message);
-            } break;
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+            }
         }
     }
 }
