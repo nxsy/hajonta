@@ -1,8 +1,10 @@
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 
 #include <windows.h>
 #include <gl/gl.h>
+#include <xaudio2.h>
 
 #include "hajonta/platform/common.h"
 #include "hajonta/platform/win32.h"
@@ -227,7 +229,6 @@ PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 bool win32_load_game_code(game_code *code, char *filename)
 {
     WIN32_FILE_ATTRIBUTE_DATA data;
-
     if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &data))
     {
         return false;
@@ -240,10 +241,8 @@ bool win32_load_game_code(game_code *code, char *filename)
 
     char locksuffix[] = ".lck";
     char lockfilename[MAX_PATH];
-
     strcpy(lockfilename, filename);
     strcat(lockfilename, locksuffix);
-
     if (GetFileAttributesEx(lockfilename, GetFileExInfoStandard, &data))
     {
         return false;
@@ -253,13 +252,11 @@ bool win32_load_game_code(game_code *code, char *filename)
     char tempfilename[MAX_PATH];
     strcpy(tempfilename, filename);
     strcat(tempfilename, tempsuffix);
-
     if (code->game_code_module)
     {
         FreeLibrary(code->game_code_module);
     }
     CopyFile(filename, tempfilename, 0);
-
     HMODULE new_module = LoadLibraryA(tempfilename);
     if (!new_module)
     {
@@ -342,8 +339,57 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     strncpy(game_library_path, state.binary_path, location_of_last_slash - state.binary_path);
     strcat(game_library_path, "\\game.dll");
 
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+
+    IXAudio2 *xaudio = {};
+    if(FAILED(XAudio2Create(&xaudio, 0))) {
+        MessageBoxA(0, "Unable to create XAudio2 instance", 0, MB_OK | MB_ICONSTOP);
+        return 1;
+    }
+
+    IXAudio2MasteringVoice *master_voice = {};
+    if(FAILED(xaudio->CreateMasteringVoice(&master_voice, 2, 48000))) {
+        MessageBoxA(0, "Unable to create XAudio2 master voice", 0, MB_OK | MB_ICONSTOP);
+        return 1;
+    }
+    WAVEFORMATEX wave_format = {};
+    wave_format.wFormatTag = WAVE_FORMAT_PCM;
+    wave_format.nChannels = 2;
+    wave_format.nSamplesPerSec = 48000;
+    wave_format.nAvgBytesPerSec = 48000 * 2 * (16 / 8);
+    wave_format.nBlockAlign = 2 * (16 / 8);
+    wave_format.wBitsPerSample = 16;
+
+    IXAudio2SourceVoice *source_voice = {};
+    xaudio->CreateSourceVoice(&source_voice, &wave_format);
+
+    int volume = 3000;
+    float pi = 3.14159265358979f;
+    uint16_t *audio_buffer_data = (uint16_t *)malloc(48000 * 2 * (16 / 8));
+    for (int i = 0; i < 48000 * 2;)
+    {
+        volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
+        audio_buffer_data[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+        audio_buffer_data[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+    }
+
+    int audio_offset = 0;
+
+    source_voice->Start(0);
+
+    XAUDIO2_BUFFER audio_buffer = {};
+    uint8_t intro[48000 * 2 * (16 / 8) / 250] = {};
+    audio_buffer.AudioBytes = sizeof(intro);
+    audio_buffer.pAudioData = (uint8_t *)intro;
+    source_voice->SubmitSourceBuffer(&audio_buffer);
+
     while(!state.stopping)
     {
+        audio_buffer.AudioBytes = 48000 * 2 * (16 / 8) / 60;
+        audio_buffer.pAudioData = ((uint8_t *)audio_buffer_data + audio_buffer.AudioBytes * (audio_offset));
+        audio_offset = (audio_offset + 1) % 60;
+        source_voice->SubmitSourceBuffer(&audio_buffer);
+
         bool updated = win32_load_game_code(&code, game_library_path);
         if (!code.game_code_module)
         {
