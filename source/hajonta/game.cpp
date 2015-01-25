@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stddef.h>
 
 #include <windows.h>
@@ -19,6 +20,9 @@ struct game_state {
     float y;
     float x_increment;
     float y_increment;
+
+    int audio_offset;
+    void *audio_buffer_data;
 };
 
 struct vertex
@@ -151,6 +155,16 @@ GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->y_increment = 0.002f;
 
         memory->initialized = 1;
+
+        int volume = 3000;
+        float pi = 3.14159265358979f;
+        state->audio_buffer_data = malloc(48000 * 2 * (16 / 8));
+        for (int i = 0; i < 48000 * 2;)
+        {
+            volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
+            ((uint16_t *)state->audio_buffer_data)[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            ((uint16_t *)state->audio_buffer_data)[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+        }
     }
 
     state->x += state->x_increment;
@@ -171,5 +185,8 @@ GAME_UPDATE_AND_RENDER(game_update_and_render)
     float position[] = {state->x, state->y};
     glUniform2fv(state->u_offset_id, 1, (float *)&position);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    sound_output->samples = &(((uint8_t *)state->audio_buffer_data)[state->audio_offset * 2 * sound_output->channels * sound_output->number_of_samples]);
+    state->audio_offset = (state->audio_offset + 1) % 60;
 }
 

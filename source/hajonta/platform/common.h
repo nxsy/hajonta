@@ -34,7 +34,15 @@ struct game_input
     float delta_t;
 };
 
-#define GAME_UPDATE_AND_RENDER(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+struct game_sound_output
+{
+    int32_t samples_per_second;
+    int32_t channels;
+    int32_t number_of_samples;
+    void *samples;
+};
+
+#define GAME_UPDATE_AND_RENDER(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 
 // FROM glext.h -

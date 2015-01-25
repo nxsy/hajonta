@@ -1,4 +1,3 @@
-#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -363,33 +362,28 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     IXAudio2SourceVoice *source_voice = {};
     xaudio->CreateSourceVoice(&source_voice, &wave_format);
 
-    int volume = 3000;
-    float pi = 3.14159265358979f;
-    uint16_t *audio_buffer_data = (uint16_t *)malloc(48000 * 2 * (16 / 8));
-    for (int i = 0; i < 48000 * 2;)
-    {
-        volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
-        audio_buffer_data[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
-        audio_buffer_data[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
-    }
-
     int audio_offset = 0;
 
     source_voice->Start(0);
 
     XAUDIO2_BUFFER audio_buffer = {};
+    audio_buffer.Flags |= XAUDIO2_END_OF_STREAM;
     uint8_t intro[48000 * 2 * (16 / 8) / 250] = {};
     audio_buffer.AudioBytes = sizeof(intro);
     audio_buffer.pAudioData = (uint8_t *)intro;
     source_voice->SubmitSourceBuffer(&audio_buffer);
 
+    XAUDIO2_VOICE_STATE voice_state;
+
+    struct foo {
+        uint32_t BuffersQueued;
+        uint64_t SamplesPlayed;
+    };
+
+    foo audio_history[60] = {};
+
     while(!state.stopping)
     {
-        audio_buffer.AudioBytes = 48000 * 2 * (16 / 8) / 60;
-        audio_buffer.pAudioData = ((uint8_t *)audio_buffer_data + audio_buffer.AudioBytes * (audio_offset));
-        audio_offset = (audio_offset + 1) % 60;
-        source_voice->SubmitSourceBuffer(&audio_buffer);
-
         bool updated = win32_load_game_code(&code, game_library_path);
         if (!code.game_code_module)
         {
@@ -403,7 +397,71 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         }
         handle_win32_messages(&state);
 
-        code.game_update_and_render((hajonta_thread_context *)&state, &memory, &input);
+        game_sound_output sound_output;
+        sound_output.samples_per_second = 48000;
+        sound_output.channels = 2;
+        sound_output.number_of_samples = 48000 / 60;
+        code.game_update_and_render((hajonta_thread_context *)&state, &memory, &input, &sound_output);
+
+        source_voice->GetState(&voice_state);
+        audio_buffer.AudioBytes = 48000 * 2 * (16 / 8) / 60;
+        audio_buffer.pAudioData = (uint8_t *)sound_output.samples;
+
+        audio_history[audio_offset].BuffersQueued = voice_state.BuffersQueued;
+        audio_history[audio_offset].SamplesPlayed = voice_state.SamplesPlayed;
+
+        audio_offset = (audio_offset + 1) % 60;
+        if (audio_offset == 0)
+        {
+            char longmsg[16384];
+#define BQ(x, y, z) audio_history[(x*y)+z].BuffersQueued
+            sprintf(longmsg, "BuffersQueued: "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d\n",
+            BQ(0, 6, 0), BQ(0, 6, 1), BQ(0, 6, 2), BQ(0, 6, 3), BQ(0, 6, 4), BQ(0, 6, 5),
+            BQ(1, 6, 0), BQ(1, 6, 1), BQ(1, 6, 2), BQ(1, 6, 3), BQ(1, 6, 4), BQ(1, 6, 5),
+            BQ(2, 6, 0), BQ(2, 6, 1), BQ(2, 6, 2), BQ(2, 6, 3), BQ(2, 6, 4), BQ(2, 6, 5),
+            BQ(3, 6, 0), BQ(3, 6, 1), BQ(3, 6, 2), BQ(3, 6, 3), BQ(3, 6, 4), BQ(3, 6, 5),
+            BQ(4, 6, 0), BQ(4, 6, 1), BQ(4, 6, 2), BQ(4, 6, 3), BQ(4, 6, 4), BQ(4, 6, 5),
+            BQ(5, 6, 0), BQ(5, 6, 1), BQ(5, 6, 2), BQ(5, 6, 3), BQ(5, 6, 4), BQ(5, 6, 5),
+            BQ(6, 6, 0), BQ(6, 6, 1), BQ(6, 6, 2), BQ(6, 6, 3), BQ(6, 6, 4), BQ(6, 6, 5),
+            BQ(7, 6, 0), BQ(7, 6, 1), BQ(7, 6, 2), BQ(7, 6, 3), BQ(7, 6, 4), BQ(7, 6, 5),
+            BQ(8, 6, 0), BQ(8, 6, 1), BQ(8, 6, 2), BQ(8, 6, 3), BQ(8, 6, 4), BQ(8, 6, 5),
+            BQ(9, 6, 0), BQ(9, 6, 1), BQ(9, 6, 2), BQ(9, 6, 3), BQ(9, 6, 4), BQ(9, 6, 5),
+            BQ(10, 6, 0), BQ(10, 6, 1), BQ(10, 6, 2), BQ(10, 6, 3), BQ(10, 6, 4), BQ(10, 6, 5),
+            BQ(11, 6, 0), BQ(11, 6, 1), BQ(11, 6, 2), BQ(11, 6, 3), BQ(11, 6, 4), BQ(11, 6, 5),
+            BQ(12, 6, 0), BQ(12, 6, 1), BQ(12, 6, 2), BQ(12, 6, 3), BQ(12, 6, 4), BQ(12, 6, 5),
+            BQ(13, 6, 0), BQ(13, 6, 1), BQ(13, 6, 2), BQ(13, 6, 3), BQ(13, 6, 4), BQ(13, 6, 5),
+            BQ(14, 6, 0), BQ(14, 6, 1), BQ(14, 6, 2), BQ(14, 6, 3), BQ(14, 6, 4), BQ(14, 6, 5));
+            OutputDebugStringA(longmsg);
+            audio_offset = 0;
+#define SP(x, y, z) audio_history[(x*y)+z].SamplesPlayed
+            sprintf(longmsg, "SamplesPlayed: "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d\n",
+            SP(0, 6, 0), SP(0, 6, 1), SP(0, 6, 2), SP(0, 6, 3), SP(0, 6, 4), SP(0, 6, 5),
+            SP(1, 6, 0), SP(1, 6, 1), SP(1, 6, 2), SP(1, 6, 3), SP(1, 6, 4), SP(1, 6, 5),
+            SP(2, 6, 0), SP(2, 6, 1), SP(2, 6, 2), SP(2, 6, 3), SP(2, 6, 4), SP(2, 6, 5),
+            SP(3, 6, 0), SP(3, 6, 1), SP(3, 6, 2), SP(3, 6, 3), SP(3, 6, 4), SP(3, 6, 5),
+            SP(4, 6, 0), SP(4, 6, 1), SP(4, 6, 2), SP(4, 6, 3), SP(4, 6, 4), SP(4, 6, 5),
+            SP(5, 6, 0), SP(5, 6, 1), SP(5, 6, 2), SP(5, 6, 3), SP(5, 6, 4), SP(5, 6, 5),
+            SP(6, 6, 0), SP(6, 6, 1), SP(6, 6, 2), SP(6, 6, 3), SP(6, 6, 4), SP(6, 6, 5),
+            SP(7, 6, 0), SP(7, 6, 1), SP(7, 6, 2), SP(7, 6, 3), SP(7, 6, 4), SP(7, 6, 5),
+            SP(8, 6, 0), SP(8, 6, 1), SP(8, 6, 2), SP(8, 6, 3), SP(8, 6, 4), SP(8, 6, 5),
+            SP(9, 6, 0), SP(9, 6, 1), SP(9, 6, 2), SP(9, 6, 3), SP(9, 6, 4), SP(9, 6, 5),
+            SP(10, 6, 0), SP(10, 6, 1), SP(10, 6, 2), SP(10, 6, 3), SP(10, 6, 4), SP(10, 6, 5),
+            SP(11, 6, 0), SP(11, 6, 1), SP(11, 6, 2), SP(11, 6, 3), SP(11, 6, 4), SP(11, 6, 5),
+            SP(12, 6, 0), SP(12, 6, 1), SP(12, 6, 2), SP(12, 6, 3), SP(12, 6, 4), SP(12, 6, 5),
+            SP(13, 6, 0), SP(13, 6, 1), SP(13, 6, 2), SP(13, 6, 3), SP(13, 6, 4), SP(13, 6, 5),
+            SP(14, 6, 0), SP(14, 6, 1), SP(14, 6, 2), SP(14, 6, 3), SP(14, 6, 4), SP(14, 6, 5));
+            OutputDebugStringA(longmsg);
+            audio_offset = 0;
+        }
+
+        source_voice->SubmitSourceBuffer(&audio_buffer);
+
 
         SwapBuffers(state.device_context);
     }
