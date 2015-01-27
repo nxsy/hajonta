@@ -1,1 +1,7 @@
 /build
+# qtcreator files
+/hajonta.config
+/hajonta.creator
+/hajonta.creator.user
+/hajonta.files
+/hajonta.includes
