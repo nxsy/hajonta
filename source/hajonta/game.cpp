@@ -1,11 +1,11 @@
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 
-#include <windows.h>
-#include <gl/gl.h>
+#include <GL/gl.h>
 
-#include "hajonta\platform\common.h"
-#include "hajonta\programs\a.h"
+#include "hajonta/platform/common.h"
+#include "hajonta/programs/a.h"
 
 struct game_state {
     a_program_struct program_a;
@@ -58,9 +58,6 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         return memory->platform_fail(ctx, info_log);
     }
 
-    glGenVertexArrays(1, &state->vao);
-    glBindVertexArray(state->vao);
-
     glGenBuffers(1, &state->vbo);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     vertex vertices[4] = {
@@ -82,7 +79,7 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glDisable(GL_CULL_FACE);
 }
 
-GAME_UPDATE_AND_RENDER(game_update_and_render)
+extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
 
@@ -107,8 +104,9 @@ GAME_UPDATE_AND_RENDER(game_update_and_render)
         for (int i = 0; i < 48000 * 2;)
         {
             volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
-            ((uint16_t *)state->audio_buffer_data)[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
-            ((uint16_t *)state->audio_buffer_data)[i++] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            ((uint16_t *)state->audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            ((uint16_t *)state->audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            i += 2;
         }
     }
 
