@@ -243,7 +243,7 @@ main(int argc, char **argv)
 
     fwrite(midbuffer, 1, strlen(midbuffer), p);
 
-    for (int i = 0;
+    for (uint32_t i = 0;
             i < uniform_index;
             ++i)
     {
@@ -259,7 +259,7 @@ main(int argc, char **argv)
         fwrite(uniform_location_string, 1, strlen(uniform_location_string), p);
     }
 
-    for (int i = 0;
+    for (uint32_t i = 0;
             i < attribute_index;
             ++i)
     {
