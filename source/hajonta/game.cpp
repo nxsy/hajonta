@@ -13,11 +13,6 @@
 struct game_state {
     a_program_struct program_a;
 
-    int32_t u_offset_id;
-    int32_t a_pos_id;
-    int32_t a_color_id;
-
-    uint32_t vao;
     uint32_t vbo;
 
     float x;
@@ -45,22 +40,6 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         return;
     }
 
-    state->u_offset_id = glGetUniformLocation(state->program_a.program, "u_offset");
-    if (state->u_offset_id < 0) {
-        char info_log[] = "Could not locate u_offset uniform";
-        return memory->platform_fail(ctx, info_log);
-    }
-    state->a_color_id = glGetAttribLocation(state->program_a.program, "a_color");
-    if (state->a_color_id < 0) {
-        char info_log[] = "Could not locate a_color attribute";
-        return memory->platform_fail(ctx, info_log);
-    }
-    state->a_pos_id = glGetAttribLocation(state->program_a.program, "a_pos");
-    if (state->a_pos_id < 0) {
-        char info_log[] = "Could not locate a_pos attribute";
-        return memory->platform_fail(ctx, info_log);
-    }
-
     glGenBuffers(1, &state->vbo);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     vertex vertices[4] = {
@@ -71,10 +50,10 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     };
     glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), vertices, GL_STATIC_DRAW);
 
-    glEnableVertexAttribArray(state->a_pos_id);
-    glEnableVertexAttribArray(state->a_color_id);
-    glVertexAttribPointer(state->a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    glEnableVertexAttribArray(state->program_a.a_pos_id);
+    glEnableVertexAttribArray(state->program_a.a_color_id);
+    glVertexAttribPointer(state->program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glVertexAttribPointer(state->program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
 
     glDepthFunc(GL_ALWAYS);
     glDisable(GL_DEPTH_TEST);
@@ -129,7 +108,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glClear(GL_COLOR_BUFFER_BIT);
 
     float position[] = {state->x, state->y};
-    glUniform2fv(state->u_offset_id, 1, (float *)&position);
+    glUniform2fv(state->program_a.u_offset_id, 1, (float *)&position);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
     sound_output->samples = &(((uint8_t *)state->audio_buffer_data)[state->audio_offset * 2 * sound_output->channels * sound_output->number_of_samples]);
