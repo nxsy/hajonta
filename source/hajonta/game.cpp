@@ -10,6 +10,8 @@
 #include "hajonta/platform/common.h"
 #include "hajonta/programs/a.h"
 
+#include "hajonta/math.cpp"
+
 struct game_state {
     a_program_struct program_a;
 
