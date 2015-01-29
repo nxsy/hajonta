@@ -46,3 +46,10 @@ v2normalize(v2 v)
     v2 result = {v.x / length, v.y / length};
     return result;
 }
+
+float
+v2dot(v2 left, v2 right)
+{
+    float result = (left.x * right.x + left.y * right.y);
+    return result;
+}
