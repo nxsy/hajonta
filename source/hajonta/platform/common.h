@@ -29,10 +29,46 @@ struct platform_memory
     platform_glgetprocaddress_func *platform_glgetprocaddress;
 };
 
+struct game_button_state
+{
+    bool ended_down;
+};
+
+struct game_buttons
+{
+    game_button_state move_up;
+    game_button_state move_down;
+    game_button_state move_left;
+    game_button_state move_right;
+};
+
+struct game_controller_state
+{
+    bool is_active;
+
+    float stick_x;
+    float stick_y;
+
+    union
+    {
+        game_button_state _buttons[sizeof(game_buttons)];
+        game_buttons buttons;
+    };
+};
+
+#define NUM_CONTROLLERS ((uint32_t)4)
 struct game_input
 {
     float delta_t;
+
+    game_controller_state controllers[NUM_CONTROLLERS];
 };
+
+inline game_controller_state *get_controller(game_input *input, uint32_t index)
+{
+    hassert(index < harray_count(input->controllers));
+    return &input->controllers[index];
+}
 
 struct game_sound_output
 {

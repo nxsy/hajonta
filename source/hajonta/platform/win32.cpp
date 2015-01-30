@@ -16,6 +16,9 @@ struct platform_state
     HDC device_context;
 
     char binary_path[MAX_PATH];
+
+    game_input *new_input;
+    game_input *old_input;
 };
 
 struct game_code
@@ -178,8 +181,25 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 }
 
 static void
+win32_process_keypress(game_button_state *new_button_state, bool was_down, bool is_down)
+{
+    if (was_down == is_down)
+    {
+        return;
+    }
+
+    if(new_button_state->ended_down != is_down)
+    {
+        new_button_state->ended_down = is_down;
+    }
+}
+
+static void
 handle_win32_messages(platform_state *state)
 {
+    game_controller_state *old_keyboard_controller = get_controller(state->old_input, 0);
+    game_controller_state *new_keyboard_controller = get_controller(state->new_input, 0);
+
     MSG message;
     while(!state->stopping && PeekMessage(&message, 0, 0, 0, PM_REMOVE))
     {
@@ -196,11 +216,35 @@ handle_win32_messages(platform_state *state)
             case WM_KEYUP:
             {
                 uint32_t vkcode = message.wParam;
+                /*
+                    30 The previous key state. The value is 1 if the key is
+                       down before the message is sent, or it is zero if the
+                       key is up.
+                    31 The transition state. The value is always 0 for a WM_KEYDOWN message.
+                */
+                bool was_down = (message.lParam & (1 << 30));
+                bool is_down = ((message.lParam & (1 << 31)) == 0);
                 switch(vkcode)
                 {
                     case VK_ESCAPE:
                     {
                         state->stopping = true;
+                    } break;
+                    case 'W':
+                    {
+                        win32_process_keypress(&new_keyboard_controller->buttons.move_up, was_down, is_down);
+                    } break;
+                    case 'A':
+                    {
+                        win32_process_keypress(&new_keyboard_controller->buttons.move_left, was_down, is_down);
+                    } break;
+                    case 'S':
+                    {
+                        win32_process_keypress(&new_keyboard_controller->buttons.move_down, was_down, is_down);
+                    } break;
+                    case 'D':
+                    {
+                        win32_process_keypress(&new_keyboard_controller->buttons.move_right, was_down, is_down);
                     } break;
                 }
             } break;
@@ -329,9 +373,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     memory.platform_fail = platform_fail;
     memory.platform_glgetprocaddress = platform_glgetprocaddress;
 
-    game_input input = {};
-    input.delta_t = 1 / 60;
-
     GetModuleFileNameA(0, state.binary_path, sizeof(state.binary_path));
     char game_library_path[sizeof(state.binary_path)];
     char *location_of_last_slash = strrchr(state.binary_path, '\\');
@@ -382,6 +423,10 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
     foo audio_history[60] = {};
 
+    game_input input[2] = {};
+    state.new_input = &input[0];
+    state.old_input = &input[1];
+
     while(!state.stopping)
     {
         bool updated = win32_load_game_code(&code, game_library_path);
@@ -395,13 +440,29 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             state.stopping = 1;
             state.stop_reason = "Unable to reload game code";
         }
+
+        state.new_input->delta_t = 1.0f / 60.0f;
+
+        game_controller_state *old_keyboard_controller = get_controller(state.old_input, 0);
+        game_controller_state *new_keyboard_controller = get_controller(state.new_input, 0);
+        *new_keyboard_controller = {};
+        new_keyboard_controller->is_active = true;
+        for (
+                uint32_t button_index = 0;
+                button_index < harray_count(new_keyboard_controller->_buttons);
+                ++button_index)
+        {
+            new_keyboard_controller->_buttons[button_index].ended_down =
+                old_keyboard_controller->_buttons[button_index].ended_down;
+        }
+
         handle_win32_messages(&state);
 
         game_sound_output sound_output;
         sound_output.samples_per_second = 48000;
         sound_output.channels = 2;
         sound_output.number_of_samples = 48000 / 60;
-        code.game_update_and_render((hajonta_thread_context *)&state, &memory, &input, &sound_output);
+        code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
 
         source_voice->GetState(&voice_state);
         audio_buffer.AudioBytes = 48000 * 2 * (16 / 8) / 60;
@@ -464,6 +525,10 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
 
         SwapBuffers(state.device_context);
+
+        game_input *temp_input = state.new_input;
+        state.new_input = state.old_input;
+        state.old_input = temp_input;
     }
 
     if (state.stop_reason)

@@ -43,6 +43,11 @@ v2
 v2normalize(v2 v)
 {
     float length = v2length(v);
+    if (length == 0)
+    {
+        return v;
+    }
+
     v2 result = {v.x / length, v.y / length};
     return result;
 }

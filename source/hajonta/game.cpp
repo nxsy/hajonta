@@ -17,10 +17,8 @@ struct game_state {
 
     uint32_t vbo;
 
-    float x;
-    float y;
-    float x_increment;
-    float y_increment;
+    v2 velocity;
+    v2 position;
 
     int audio_offset;
     void *audio_buffer_data;
@@ -67,16 +65,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
 
+    float delta_t = input->delta_t;
+
     if (!glCreateProgram)
     {
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
     }
     if (!memory->initialized)
     {
-        state->x = 0;
-        state->y = 0;
-        state->x_increment = 0.02f;
-        state->y_increment = 0.002f;
+        state->velocity = {0, 0};
+        state->position = {0, 0};
 
         gl_setup(ctx, memory);
 
@@ -94,23 +92,53 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    state->x += state->x_increment;
-    state->y += state->y_increment;
-    if ((state->x < -0.5) || (state->x > 0.5))
+    v2 acceleration = {};
+
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
     {
-        state->x_increment *= -1;
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+
+        game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.move_up.ended_down)
+        {
+            acceleration.y += 1.0f;
+        }
+        if (controller->buttons.move_down.ended_down)
+        {
+            acceleration.y -= 1.0f;
+        }
+        if (controller->buttons.move_left.ended_down)
+        {
+            acceleration.x -= 1.0f;
+        }
+        if (controller->buttons.move_right.ended_down)
+        {
+            acceleration.x += 1.0f;
+        }
     }
-    if ((state->y < -0.5) || (state->y > 0.5))
-    {
-        state->y_increment *= -1;
-    }
+
+    acceleration = v2normalize(acceleration);
+    acceleration = v2sub(acceleration, v2mul(state->velocity, 5.0f));
+    v2 movement = v2add(
+            v2mul(acceleration, 0.5f * (delta_t * delta_t)),
+            v2mul(state->velocity, delta_t)
+    );
+    state->position = v2add(state->position, movement);
+    state->velocity = v2add(
+            v2mul(acceleration, delta_t),
+            state->velocity
+    );
 
     glUseProgram(state->program_a.program);
     glClearColor(0.1f, 0.1f, 0.1f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    float position[] = {state->x, state->y};
-    glUniform2fv(state->program_a.u_offset_id, 1, (float *)&position);
+    glUniform2fv(state->program_a.u_offset_id, 1, (float *)&state->position);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
     sound_output->samples = &(((uint8_t *)state->audio_buffer_data)[state->audio_offset * 2 * sound_output->channels * sound_output->number_of_samples]);
