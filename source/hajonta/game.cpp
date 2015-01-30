@@ -5,7 +5,13 @@
 #if defined(_WIN32)
 #include <windows.h>
 #endif
+
+#if defined(NEEDS_EGL)
+#include <EGL/egl.h>
+#else
 #include <GL/gl.h>
+#endif
+
 
 #include "hajonta/platform/common.h"
 #include "hajonta/programs/a.h"
@@ -67,10 +73,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     float delta_t = input->delta_t;
 
+#if !defined(NEEDS_EGL)
     if (!glCreateProgram)
     {
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
     }
+#endif
     if (!memory->initialized)
     {
         state->velocity = {0, 0};

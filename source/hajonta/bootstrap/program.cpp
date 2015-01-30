@@ -45,18 +45,36 @@ main(int argc, char **argv)
 
     char vertexshader[MAX_PATH] = {};
     _snprintf(vertexshader, sizeof(vertexshader), "%s%s%s%s%s%svertex.glsl", argv[1], SLASH, argv[2], SLASH, argv[3], SLASH);
+    char eglvertexshader[MAX_PATH] = {};
+    _snprintf(eglvertexshader, sizeof(eglvertexshader), "%s%s%s%s%s%svertex.eglsl", argv[1], SLASH, argv[2], SLASH, argv[3], SLASH);
     char fragshader[MAX_PATH] = {};
     _snprintf(fragshader, sizeof(fragshader), "%s%s%s%s%s%sfragment.glsl", argv[1], SLASH, argv[2], SLASH, argv[3], SLASH);
+    char eglfragshader[MAX_PATH] = {};
+    _snprintf(eglfragshader, sizeof(eglfragshader), "%s%s%s%s%s%sfragment.eglsl", argv[1], SLASH, argv[2], SLASH, argv[3], SLASH);
 
     FILE *v = fopen(vertexshader, "r");
+    FILE *eglv = fopen(eglvertexshader, "r");
     FILE *f = fopen(fragshader, "r");
+    FILE *eglf = fopen(eglfragshader, "r");
     if (!v)
     {
         printf("Failed to open %s\n\n", vertexshader);
         return 1;
     }
 
+    if (!eglv)
+    {
+        printf("Failed to open %s\n\n", vertexshader);
+        return 1;
+    }
+
     if (!f)
+    {
+        printf("Failed to open %s\n\n", fragshader);
+        return 1;
+    }
+
+    if (!eglf)
     {
         printf("Failed to open %s\n\n", fragshader);
         return 1;
@@ -192,20 +210,63 @@ main(int argc, char **argv)
     strcpy(buffer, "\n)EOF\";\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
+    strcpy(buffer, "    char *egl_vertex_shader_source = R\"EOF(\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+    while (feof(eglv) == 0)
+    {
+        int size_read = fread(buffer, 1, sizeof(buffer), eglv);
+        int size_write = fwrite(buffer, 1, size_read, p);
+        if (size_read != size_write)
+        {
+            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            return 1;
+        }
+    }
+
+    strcpy(buffer, "\n)EOF\";\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+    strcpy(buffer, "    char *egl_fragment_shader_source = R\"EOF(\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+    while (feof(eglf) == 0)
+    {
+        int size_read = fread(buffer, 1, sizeof(buffer), eglf);
+        int size_write = fwrite(buffer, 1, size_read, p);
+        if (size_read != size_write)
+        {
+            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            return 1;
+        }
+    }
+    strcpy(buffer, "\n)EOF\";\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
     char midbuffer[] = R"EOF(
     uint32_t vertex_shader_id;
     uint32_t fragment_shader_id;
 
     {
         uint32_t shader = vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
+        if (!shader)
+        {
+            memory->platform_fail(ctx, "Failed to allocate shader");
+            return false;
+        }
         int compiled;
+#if defined(NEEDS_EGL)
+        glShaderSource(shader, 1, (const char **)&egl_vertex_shader_source, 0);
+#else
         glShaderSource(shader, 1, (const char **)&vertex_shader_source, 0);
+#endif
         glCompileShader(shader);
         glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
         if (!compiled)
         {
-            char info_log[1024];
-            glGetShaderInfoLog(shader, sizeof(info_log), 0, info_log);
+            char info_log[1024] = {};
+            strcpy(info_log, "vertex: ");
+            glGetShaderInfoLog(shader, sizeof(info_log) - strlen(info_log), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
         }
@@ -213,13 +274,18 @@ main(int argc, char **argv)
     {
         uint32_t shader = fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
         int compiled;
+#if defined(NEEDS_EGL)
+        glShaderSource(shader, 1, (const char**)&egl_fragment_shader_source, 0);
+#else
         glShaderSource(shader, 1, (const char**)&fragment_shader_source, 0);
+#endif
         glCompileShader(shader);
         glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
         if (!compiled)
         {
-            char info_log[1024];
-            glGetShaderInfoLog(shader, sizeof(info_log), 0, info_log);
+            char info_log[1024] = {};
+            strcpy(info_log, "fragment: ");
+            glGetShaderInfoLog(shader, sizeof(info_log) - strlen(info_log), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
         }

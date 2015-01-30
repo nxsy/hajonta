@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 
 #ifdef HAJONTA_DEBUG
@@ -16,6 +18,9 @@ struct hajonta_thread_context
 #define PLATFORM_FAIL(func_name) void func_name(hajonta_thread_context *ctx, char *failure_reason)
 typedef PLATFORM_FAIL(platform_fail_func);
 
+#define PLATFORM_DEBUG_MESSAGE(func_name) void func_name(hajonta_thread_context *ctx, char *message)
+typedef PLATFORM_DEBUG_MESSAGE(platform_debug_message_func);
+
 #define PLATFORM_GLGETPROCADDRESS(func_name) void* func_name(hajonta_thread_context *ctx, char *function_name)
 typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 
@@ -27,6 +32,7 @@ struct platform_memory
 
     platform_fail_func *platform_fail;
     platform_glgetprocaddress_func *platform_glgetprocaddress;
+    platform_debug_message_func *platform_debug_message;
 };
 
 struct game_button_state
@@ -99,7 +105,9 @@ typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 #define GL_LINK_STATUS                    0x8B82
 
 typedef char GLchar;
+#if !defined(NEEDS_EGL)
 typedef ptrdiff_t GLsizeiptr;
+#endif
 
 typedef void (APIENTRYP PFNGLCOMPILESHADERPROC) (GLuint shader);
 typedef GLuint (APIENTRYP PFNGLCREATEPROGRAMPROC) (void);
@@ -123,6 +131,7 @@ typedef void (APIENTRYP PFNGLBUFFERDATAPROC) (GLenum target, GLsizeiptr, const v
 typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC) (GLuint program, const GLchar *name);
 typedef void (APIENTRYP PFNGLUNIFORM2FVPROC) (GLint location, GLsizei count, const GLfloat *value);
 
+#if !defined(NEEDS_EGL)
 PFNGLCREATEPROGRAMPROC glCreateProgram;
 PFNGLCREATESHADERPROC glCreateShader;
 PFNGLLINKPROGRAMPROC glLinkProgram;
@@ -149,45 +158,46 @@ inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
 {
     glCreateProgram =
-        (PFNGLCREATEPROGRAMPROC)get_proc_address(ctx, "glCreateProgram");
+        (PFNGLCREATEPROGRAMPROC)get_proc_address(ctx, (char *)"glCreateProgram");
     glCreateShader =
-        (PFNGLCREATESHADERPROC)get_proc_address(ctx, "glCreateShader");
+        (PFNGLCREATESHADERPROC)get_proc_address(ctx, (char *)"glCreateShader");
     glLinkProgram =
-        (PFNGLLINKPROGRAMPROC)get_proc_address(ctx, "glLinkProgram");
+        (PFNGLLINKPROGRAMPROC)get_proc_address(ctx, (char *)"glLinkProgram");
     glShaderSource =
-        (PFNGLSHADERSOURCEPROC)get_proc_address(ctx, "glShaderSource");
+        (PFNGLSHADERSOURCEPROC)get_proc_address(ctx, (char *)"glShaderSource");
     glUseProgram =
-        (PFNGLUSEPROGRAMPROC)get_proc_address(ctx, "glUseProgram");
+        (PFNGLUSEPROGRAMPROC)get_proc_address(ctx, (char *)"glUseProgram");
     glGetShaderiv =
-        (PFNGLGETSHADERIVPROC)get_proc_address(ctx, "glGetShaderiv");
+        (PFNGLGETSHADERIVPROC)get_proc_address(ctx, (char *)"glGetShaderiv");
     glGetShaderInfoLog =
-        (PFNGLGETSHADERINFOLOGPROC)get_proc_address(ctx, "glGetShaderInfoLog");
+        (PFNGLGETSHADERINFOLOGPROC)get_proc_address(ctx, (char *)"glGetShaderInfoLog");
     glAttachShader =
-        (PFNGLATTACHSHADERPROC)get_proc_address(ctx, "glAttachShader");
+        (PFNGLATTACHSHADERPROC)get_proc_address(ctx, (char *)"glAttachShader");
     glGetProgramiv =
-        (PFNGLGETPROGRAMIVPROC)get_proc_address(ctx, "glGetProgramiv");
+        (PFNGLGETPROGRAMIVPROC)get_proc_address(ctx, (char *)"glGetProgramiv");
     glGetProgramInfoLog =
-        (PFNGLGETPROGRAMINFOLOGPROC)get_proc_address(ctx, "glGetProgramInfoLog");
+        (PFNGLGETPROGRAMINFOLOGPROC)get_proc_address(ctx, (char *)"glGetProgramInfoLog");
     glGetAttribLocation =
-        (PFNGLGETATTRIBLOCATIONPROC)get_proc_address(ctx, "glGetAttribLocation");
+        (PFNGLGETATTRIBLOCATIONPROC)get_proc_address(ctx, (char *)"glGetAttribLocation");
     glEnableVertexAttribArray =
-        (PFNGLENABLEVERTEXATTRIBARRAYPROC)get_proc_address(ctx, "glEnableVertexAttribArray");
+        (PFNGLENABLEVERTEXATTRIBARRAYPROC)get_proc_address(ctx, (char *)"glEnableVertexAttribArray");
     glCompileShader =
-        (PFNGLCOMPILESHADERPROC)get_proc_address(ctx, "glCompileShader");
+        (PFNGLCOMPILESHADERPROC)get_proc_address(ctx, (char *)"glCompileShader");
     glVertexAttribPointer =
-        (PFNGLVERTEXATTRIBPOINTERPROC)get_proc_address(ctx, "glVertexAttribPointer");
+        (PFNGLVERTEXATTRIBPOINTERPROC)get_proc_address(ctx, (char *)"glVertexAttribPointer");
     glGenVertexArrays =
-        (PFNGLGENVERTEXARRAYSPROC)get_proc_address(ctx, "glGenVertexArrays");
+        (PFNGLGENVERTEXARRAYSPROC)get_proc_address(ctx, (char *)"glGenVertexArrays");
     glBindVertexArray =
-        (PFNGLBINDVERTEXARRAYPROC)get_proc_address(ctx, "glBindVertexArray");
+        (PFNGLBINDVERTEXARRAYPROC)get_proc_address(ctx, (char *)"glBindVertexArray");
     glGenBuffers =
-        (PFNGLGENBUFFERSPROC)get_proc_address(ctx, "glGenBuffers");
+        (PFNGLGENBUFFERSPROC)get_proc_address(ctx, (char *)"glGenBuffers");
     glBindBuffer =
-        (PFNGLBINDBUFFERPROC)get_proc_address(ctx, "glBindBuffer");
+        (PFNGLBINDBUFFERPROC)get_proc_address(ctx, (char *)"glBindBuffer");
     glBufferData =
-        (PFNGLBUFFERDATAPROC)get_proc_address(ctx, "glBufferData");
+        (PFNGLBUFFERDATAPROC)get_proc_address(ctx, (char *)"glBufferData");
     glGetUniformLocation =
-        (PFNGLGETUNIFORMLOCATIONPROC)get_proc_address(ctx, "glGetUniformLocation");
+        (PFNGLGETUNIFORMLOCATIONPROC)get_proc_address(ctx, (char *)"glGetUniformLocation");
     glUniform2fv =
-        (PFNGLUNIFORM2FVPROC)get_proc_address(ctx, "glUniform2fv");
+        (PFNGLUNIFORM2FVPROC)get_proc_address(ctx, (char *)"glUniform2fv");
 }
+#endif
