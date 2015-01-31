@@ -39,6 +39,9 @@ struct xcb_state
     xcb_atom_t wm_protocols;
     xcb_atom_t wm_delete_window;
 
+    game_input *new_input;
+    game_input *old_input;
+
     char binary_name[PATH_MAX];
     char *last_slash;
 };

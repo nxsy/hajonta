@@ -183,9 +183,31 @@ unload_game(xcb_game_code *game_code)
     game_code->game_update_and_render = 0;
 }
 
+static void
+process_keyboard_message(game_button_state *new_state, bool is_down)
+{
+    if (new_state->ended_down != is_down)
+    {
+        new_state->ended_down = is_down;
+    }
+}
+
 void
 xcb_process_events(xcb_state *state)
 {
+    game_controller_state *old_keyboard_controller = get_controller(state->old_input, 0);
+    game_controller_state *new_keyboard_controller = get_controller(state->new_input, 0);
+    *new_keyboard_controller = {};
+    new_keyboard_controller->is_active = true;
+    for (
+            uint button_index = 0;
+            button_index < harray_count(new_keyboard_controller->_buttons);
+            ++button_index)
+    {
+        new_keyboard_controller->_buttons[button_index].ended_down =
+            old_keyboard_controller->_buttons[button_index].ended_down;
+    }
+
     xcb_generic_event_t *event;
     while ((event = xcb_poll_for_event(state->connection)))
     {
@@ -202,9 +224,28 @@ xcb_process_events(xcb_state *state)
                 bool is_down = (response_type == XCB_KEY_PRESS);
                 xcb_keysym_t keysym = xcb_key_symbols_get_keysym(state->key_symbols, e->detail, 0);
 
-                if (keysym == XK_Escape)
+                switch(keysym)
                 {
-                    state->stopping = true;
+                    case XK_Escape:
+                    {
+                        state->stopping = true;
+                    } break;
+                    case XK_w:
+                    {
+                        process_keyboard_message(&new_keyboard_controller->buttons.move_up, is_down);
+                    } break;
+                    case XK_a:
+                    {
+                        process_keyboard_message(&new_keyboard_controller->buttons.move_left, is_down);
+                    } break;
+                    case XK_s:
+                    {
+                        process_keyboard_message(&new_keyboard_controller->buttons.move_down, is_down);
+                    } break;
+                    case XK_d:
+                    {
+                        process_keyboard_message(&new_keyboard_controller->buttons.move_right, is_down);
+                    } break;
                 }
                 break;
             }
@@ -382,7 +423,7 @@ main()
         );
 
     /* Create window */
-    uint32_t eventmask = XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS;
+    uint32_t eventmask = XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE;
     uint32_t valuelist[] = { eventmask, colormap, 0 };
     uint32_t valuemask = XCB_CW_EVENT_MASK | XCB_CW_COLORMAP;
 
@@ -472,7 +513,9 @@ main()
     memory.platform_fail = xcb_fail;
     memory.platform_glgetprocaddress = xcb_glgetprocaddress;
 
-    game_input input = {};
+    game_input input[2] = {};
+    state.new_input = &input[0];
+    state.old_input = &input[1];
 
     while(!state.stopping)
     {
@@ -484,7 +527,7 @@ main()
             load_game(&game_code, source_game_code_library_path);
         }
 
-        input.delta_t = target_nanoseconds_per_frame / (1024.0 * 1024 * 1024);
+        state.new_input->delta_t = target_nanoseconds_per_frame / (1024.0 * 1024 * 1024);
 
         xcb_process_events(&state);
 
@@ -498,12 +541,16 @@ main()
         output.number_of_samples = sound_output.samples_per_second / 30;
         output.samples = sample_buffer;
 
-        game_code.game_update_and_render((hajonta_thread_context *)&state, &memory, &input, &output);
+        game_code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &output);
         glXSwapBuffers(display, drawable);
         timespec sleep_counter = {};
         sleep_counter.tv_nsec = 15 * 1024 * 1024;
         timespec remaining_sleep_counter = {};
         nanosleep(&sleep_counter, &remaining_sleep_counter);
+
+        game_input *temp_input = state.new_input;
+        state.new_input = state.old_input;
+        state.old_input = temp_input;
     }
 
     if (state.stop_reason)
