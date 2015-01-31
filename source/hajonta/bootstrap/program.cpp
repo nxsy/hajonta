@@ -94,6 +94,8 @@ main(int argc, char **argv)
 
     char buffer[1024];
 
+    strcpy(buffer, "#include <string.h>\n");
+    fwrite(buffer, 1, strlen(buffer), p);
     strcpy(buffer, "struct a_program_struct\n{\n    uint32_t program;\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
