@@ -11,6 +11,13 @@
 #define MAX_PATH PATH_MAX
 #define _snprintf snprintf
 #define SLASH "/"
+#elif defined(__APPLE__)
+#if defined(__MACH__)
+#include <sys/syslimits.h>
+#define MAX_PATH PATH_MAX
+#define _snprintf snprintf
+#define SLASH "/"
+#endif
 #endif
 
 int
@@ -257,7 +264,7 @@ main(int argc, char **argv)
             return false;
         }
         int compiled;
-#if defined(NEEDS_EGL)
+#if defined(NEEDS_EGL) || defined (__APPLE__)
         glShaderSource(shader, 1, (const char **)&egl_vertex_shader_source, 0);
 #else
         glShaderSource(shader, 1, (const char **)&vertex_shader_source, 0);
@@ -276,7 +283,7 @@ main(int argc, char **argv)
     {
         uint32_t shader = fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
         int compiled;
-#if defined(NEEDS_EGL)
+#if defined(NEEDS_EGL) || defined (__APPLE__)
         glShaderSource(shader, 1, (const char**)&egl_fragment_shader_source, 0);
 #else
         glShaderSource(shader, 1, (const char**)&fragment_shader_source, 0);

@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -8,6 +9,8 @@
 
 #if defined(NEEDS_EGL)
 #include <EGL/egl.h>
+#elif defined(__APPLE__)
+#include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
 #endif
@@ -73,7 +76,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     float delta_t = input->delta_t;
 
-#if !defined(NEEDS_EGL)
+#if !defined(NEEDS_EGL) && !defined(__APPLE__)
     if (!glCreateProgram)
     {
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
