@@ -9,6 +9,8 @@ pushd %BUILDDIR%
 cl /FC /nologo /Zi /I..\source ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\program.exe ..\source hajonta\programs a
 .\program.exe ..\source hajonta\programs debug_font
+cl /FC /nologo /Zi /I..\source ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
+.\unit.exe
 
 del *.pdb > NUL 2> NUL
 echo > game.dll.lock
