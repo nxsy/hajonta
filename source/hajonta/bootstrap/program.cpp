@@ -265,7 +265,7 @@ main(int argc, char **argv)
             return false;
         }
         int compiled;
-#if defined(NEEDS_EGL) || defined (__APPLE__)
+#if defined(NEEDS_EGL)
         glShaderSource(shader, 1, (const char **)&egl_vertex_shader_source, 0);
 #else
         glShaderSource(shader, 1, (const char **)&vertex_shader_source, 0);
@@ -284,7 +284,7 @@ main(int argc, char **argv)
     {
         uint32_t shader = fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
         int compiled;
-#if defined(NEEDS_EGL) || defined (__APPLE__)
+#if defined(NEEDS_EGL)
         glShaderSource(shader, 1, (const char**)&egl_fragment_shader_source, 0);
 #else
         glShaderSource(shader, 1, (const char**)&fragment_shader_source, 0);

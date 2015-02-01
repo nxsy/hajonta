@@ -6,7 +6,7 @@ set -u
 CC=clang
 WARNFLAGS="-Wall -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable"
 DEBUG_FLAGS="-DDEBUG -g"
-CPPFLAGS="-std=c++0x"
+CPPFLAGS="-std=c++0x -DHAJONTA_DEBUG=1"
 INCLUDES="-Isource -Ibuild/debug/generated"
 
 BASEDIR=`dirname $0`/../..

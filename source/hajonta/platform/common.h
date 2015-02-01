@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #ifdef HAJONTA_DEBUG
-#define hassert(expression) if(!(expression)) {*(int *)0 = 0;}
+#define hassert(expression) if(!(expression)) {*(volatile int *)0 = 0;}
 #else
 #define hassert(expression)
 #endif
@@ -114,6 +114,7 @@ typedef char GLchar;
 typedef ptrdiff_t GLsizeiptr;
 #endif
 
+#if !defined(__APPLE__)
 typedef void (APIENTRYP PFNGLCOMPILESHADERPROC) (GLuint shader);
 typedef GLuint (APIENTRYP PFNGLCREATEPROGRAMPROC) (void);
 typedef GLuint (APIENTRYP PFNGLCREATESHADERPROC) (GLenum type);
@@ -136,6 +137,7 @@ typedef void (APIENTRYP PFNGLBUFFERDATAPROC) (GLenum target, GLsizeiptr, const v
 typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC) (GLuint program, const GLchar *name);
 typedef void (APIENTRYP PFNGLUNIFORM2FVPROC) (GLint location, GLsizei count, const GLfloat *value);
 typedef void (APIENTRYP PFNGLUNIFORM1IPROC) (GLint location, GLint v0);
+#endif
 
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
 PFNGLCREATEPROGRAMPROC glCreateProgram;

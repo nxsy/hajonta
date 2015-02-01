@@ -6,6 +6,6 @@ out vec4 o_color;
 
 void main(void)
 {
-    vec4 texture_color = vec4(texture2D( tex, v_tex_coord ).bgra);
+    vec4 texture_color = vec4(texture( tex, v_tex_coord ).bgra);
     o_color = texture_color;
 }

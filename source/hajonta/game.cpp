@@ -11,7 +11,7 @@
 #if defined(NEEDS_EGL)
 #include <EGL/egl.h>
 #elif defined(__APPLE__)
-#include <OpenGL/gl.h>
+#include <OpenGL/gl3.h>
 #else
 #include <GL/gl.h>
 #endif
@@ -32,6 +32,53 @@ struct kenpixel_future_14
     font_data font;
 };
 
+inline void
+glErrorAssert()
+{
+    GLenum error = glGetError();
+    switch(error)
+    {
+        case GL_NO_ERROR:
+        {
+            return;
+        } break;
+        case GL_INVALID_ENUM:
+        {
+            hassert(!"Invalid enum");
+        } break;
+        case GL_INVALID_VALUE:
+        {
+            hassert(!"Invalid value");
+        } break;
+        case GL_INVALID_OPERATION:
+        {
+            hassert(!"Invalid operation");
+        } break;
+        case GL_INVALID_FRAMEBUFFER_OPERATION:
+        {
+            hassert(!"Invalid framebuffer operation");
+        } break;
+        case GL_OUT_OF_MEMORY:
+        {
+            hassert(!"Out of memory");
+        } break;
+#if !defined(__APPLE__)
+        case GL_STACK_UNDERFLOW:
+        {
+            hassert(!"Stack underflow");
+        } break;
+        case GL_STACK_OVERFLOW:
+        {
+            hassert(!"Stack overflow");
+        } break;
+#endif
+        default:
+        {
+            hassert(!"Unknown error");
+        } break;
+    }
+}
+
 #define fps_buffer_width 960
 #define fps_buffer_height 14
 
@@ -41,6 +88,7 @@ struct game_state
     debug_font_program_struct program_debug_font;
 
     uint32_t vbo;
+    uint32_t vao;
 
     v2 velocity;
     v2 position;
@@ -64,19 +112,28 @@ struct vertex
 
 void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
 {
+    glErrorAssert();
     game_state *state = (game_state *)memory->memory;
+
+    if (&glGenVertexArrays)
+    {
+        glGenVertexArrays(1, &state->vao);
+        glBindVertexArray(state->vao);
+    }
 
     bool loaded = a_program(&state->program_a, ctx, memory);
     if (!loaded)
     {
         return;
     }
+    glErrorAssert();
 
     loaded = debug_font_program(&state->program_debug_font, ctx, memory);
     if (!loaded)
     {
         return;
     }
+    glErrorAssert();
 
     glUseProgram(state->program_a.program);
     glGenBuffers(1, &state->vbo);
@@ -93,6 +150,8 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glEnableVertexAttribArray(state->program_a.a_color_id);
     glVertexAttribPointer(state->program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
     glVertexAttribPointer(state->program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+
+    glErrorAssert();
 
     glDepthFunc(GL_ALWAYS);
     glDisable(GL_DEPTH_TEST);
@@ -143,6 +202,7 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glErrorAssert();
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -226,6 +286,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     sprintf(msg + strlen(msg), "A: %+.2f, %+.2f", acceleration.x, acceleration.y);
     write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg, ctx, memory);
 
+    glErrorAssert();
     glClearColor(0.1f, 0.1f, 0.1f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -258,6 +319,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     glUniform1i(state->fps_sampler_id, 0);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    glErrorAssert();
 
     sound_output->samples = &(((uint8_t *)state->audio_buffer_data)[state->audio_offset * 2 * sound_output->channels * sound_output->number_of_samples]);
     state->audio_offset = (state->audio_offset + 1) % 60;
