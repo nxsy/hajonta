@@ -58,6 +58,7 @@ main(int argc, char **argv)
     _snprintf(fragshader, sizeof(fragshader), "%s%s%s%s%s%sfragment.glsl", argv[1], SLASH, argv[2], SLASH, argv[3], SLASH);
     char eglfragshader[MAX_PATH] = {};
     _snprintf(eglfragshader, sizeof(eglfragshader), "%s%s%s%s%s%sfragment.eglsl", argv[1], SLASH, argv[2], SLASH, argv[3], SLASH);
+    char *program_name = argv[3];
 
     FILE *v = fopen(vertexshader, "r");
     FILE *eglv = fopen(eglvertexshader, "r");
@@ -103,7 +104,7 @@ main(int argc, char **argv)
 
     strcpy(buffer, "#include <string.h>\n");
     fwrite(buffer, 1, strlen(buffer), p);
-    strcpy(buffer, "struct a_program_struct\n{\n    uint32_t program;\n");
+    sprintf(buffer, "struct %s_program_struct\n{\n    uint32_t program;\n", program_name);
     fwrite(buffer, 1, strlen(buffer), p);
 
     char structbuffer[1024] = {};
@@ -182,7 +183,7 @@ main(int argc, char **argv)
     strcpy(buffer, "};\n\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
-    strcpy(buffer, "bool a_program(a_program_struct *state, hajonta_thread_context *ctx, platform_memory *memory)\n{\n");
+    sprintf(buffer, "bool %s_program(%s_program_struct *state, hajonta_thread_context *ctx, platform_memory *memory)\n{\n", program_name, program_name);
     fwrite(buffer, 1, strlen(buffer), p);
     strcpy(buffer, "    state->program = glCreateProgram();\n");
     fwrite(buffer, 1, strlen(buffer), p);

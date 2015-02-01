@@ -16,10 +16,32 @@ struct platform_state
     HDC device_context;
 
     char binary_path[MAX_PATH];
+    char asset_path[MAX_PATH];
 
     game_input *new_input;
     game_input *old_input;
 };
+
+static bool
+find_asset_path(platform_state *state)
+{
+    char dir[sizeof(state->binary_path)];
+    strcpy(dir, state->binary_path);
+
+    while(char *location_of_last_slash = strrchr(dir, '\\')) {
+        *location_of_last_slash = 0;
+
+        strcpy(state->asset_path, dir);
+        strcat(state->asset_path, "\\data");
+        WIN32_FILE_ATTRIBUTE_DATA data;
+        if (!GetFileAttributesEx(state->asset_path, GetFileExInfoStandard, &data))
+        {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
 
 struct game_code
 {
@@ -264,9 +286,51 @@ PLATFORM_FAIL(platform_fail)
     state->stop_reason = strdup(failure_reason);
 }
 
+PLATFORM_DEBUG_MESSAGE(win32_debug_message)
+{
+    OutputDebugStringA(message);
+    OutputDebugStringA("\n");
+}
+
 PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 {
     return wglGetProcAddress(function_name);
+}
+
+PLATFORM_LOAD_ASSET(win32_load_asset)
+{
+    platform_state *state = (platform_state *)ctx;
+    char full_pathname[MAX_PATH];
+    _snprintf(full_pathname, sizeof(full_pathname), "%s\\%s", state->asset_path, asset_path);
+
+    HANDLE handle = CreateFile(full_pathname, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        MessageBoxA(0, "Failed", 0, MB_OK | MB_ICONSTOP);
+        return false;
+    }
+    LARGE_INTEGER _size;
+    GetFileSizeEx(handle, &_size);
+    if (_size.QuadPart != size)
+    {
+        char msg[1024];
+        sprintf(msg, "File size mismatch: Got %d, expected %d", _size.QuadPart, size);
+        MessageBoxA(0, msg, 0, MB_OK | MB_ICONSTOP);
+        return false;
+    }
+    DWORD bytes_read;
+    if (!ReadFile(handle, dest, size, &bytes_read, 0))
+    {
+        return false;
+    }
+    if (bytes_read != size)
+    {
+        char msg[1024];
+        sprintf(msg, "File read mismatch: Got %d, expected %d", bytes_read, size);
+        MessageBoxA(0, msg, 0, MB_OK | MB_ICONSTOP);
+        return false;
+    }
+    return true;
 }
 
 bool win32_load_game_code(game_code *code, char *filename)
@@ -372,12 +436,19 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     memory.memory = malloc(memory.size);
     memory.platform_fail = platform_fail;
     memory.platform_glgetprocaddress = platform_glgetprocaddress;
+    memory.platform_load_asset = win32_load_asset;
+    memory.platform_debug_message = win32_debug_message;
 
     GetModuleFileNameA(0, state.binary_path, sizeof(state.binary_path));
     char game_library_path[sizeof(state.binary_path)];
     char *location_of_last_slash = strrchr(state.binary_path, '\\');
     strncpy(game_library_path, state.binary_path, location_of_last_slash - state.binary_path);
     strcat(game_library_path, "\\game.dll");
+    if (!find_asset_path(&state))
+    {
+        MessageBoxA(0, "Failed to locate asset path", 0, MB_OK | MB_ICONSTOP);
+        return 1;
+    }
 
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
@@ -472,7 +543,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         audio_history[audio_offset].SamplesPlayed = voice_state.SamplesPlayed;
 
         audio_offset = (audio_offset + 1) % 60;
-        if (audio_offset == 0)
+        if (audio_offset == 0 && 0)
         {
             char longmsg[16384];
 #define BQ(x, y, z) audio_history[(x*y)+z].BuffersQueued

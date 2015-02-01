@@ -25,6 +25,9 @@ typedef PLATFORM_DEBUG_MESSAGE(platform_debug_message_func);
 #define PLATFORM_GLGETPROCADDRESS(func_name) void* func_name(hajonta_thread_context *ctx, char *function_name)
 typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 
+#define PLATFORM_LOAD_ASSET(func_name) bool func_name(hajonta_thread_context *ctx, char *asset_path, uint32_t size, uint8_t *dest)
+typedef PLATFORM_LOAD_ASSET(platform_load_asset_func);
+
 struct platform_memory
 {
     bool initialized;
@@ -34,6 +37,7 @@ struct platform_memory
     platform_fail_func *platform_fail;
     platform_glgetprocaddress_func *platform_glgetprocaddress;
     platform_debug_message_func *platform_debug_message;
+    platform_load_asset_func *platform_load_asset;
 };
 
 struct game_button_state
@@ -131,6 +135,7 @@ typedef void (APIENTRYP PFNGLBINDBUFFERPROC) (GLenum target, GLuint buffer);
 typedef void (APIENTRYP PFNGLBUFFERDATAPROC) (GLenum target, GLsizeiptr, const void *data, GLenum usage);
 typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC) (GLuint program, const GLchar *name);
 typedef void (APIENTRYP PFNGLUNIFORM2FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORM1IPROC) (GLint location, GLint v0);
 
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
 PFNGLCREATEPROGRAMPROC glCreateProgram;
@@ -154,6 +159,7 @@ PFNGLBINDBUFFERPROC glBindBuffer;
 PFNGLBUFFERDATAPROC glBufferData;
 PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
 PFNGLUNIFORM2FVPROC glUniform2fv;
+PFNGLUNIFORM1IPROC glUniform1i;
 
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
@@ -200,5 +206,7 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
         (PFNGLGETUNIFORMLOCATIONPROC)get_proc_address(ctx, (char *)"glGetUniformLocation");
     glUniform2fv =
         (PFNGLUNIFORM2FVPROC)get_proc_address(ctx, (char *)"glUniform2fv");
+    glUniform1i =
+        (PFNGLUNIFORM1IPROC)get_proc_address(ctx, (char *)"glUniform1i");
 }
 #endif
