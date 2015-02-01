@@ -54,15 +54,17 @@ glErrorAssert()
         {
             hassert(!"Invalid operation");
         } break;
+#if !defined(_WIN32)
         case GL_INVALID_FRAMEBUFFER_OPERATION:
         {
             hassert(!"Invalid framebuffer operation");
         } break;
+#endif
         case GL_OUT_OF_MEMORY:
         {
             hassert(!"Out of memory");
         } break;
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(NEEDS_EGL)
         case GL_STACK_UNDERFLOW:
         {
             hassert(!"Stack underflow");
@@ -115,11 +117,13 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glErrorAssert();
     game_state *state = (game_state *)memory->memory;
 
+#if !defined(NEEDS_EGL)
     if (&glGenVertexArrays)
     {
         glGenVertexArrays(1, &state->vao);
         glBindVertexArray(state->vao);
     }
+#endif
 
     bool loaded = a_program(&state->program_a, ctx, memory);
     if (!loaded)

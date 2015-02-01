@@ -23,6 +23,43 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    sourceSets { main { assets.srcDirs = ['../../../data'] } }
+
+    flavorDimensions "abi"
+    productFlavors {
+        arm64v8a {
+            flavorDimension "abi"
+            ndk {
+                abiFilter "arm64-v8a"
+            }
+        }
+        armeabiv7a {
+            flavorDimension "abi"
+            ndk {
+                abiFilter "armeabi-v7a"
+            }
+        }
+        armeabi {
+            flavorDimension "abi"
+            ndk {
+                abiFilter "armeabi"
+            }
+        }
+        x86_64 {
+            flavorDimension "abi"
+            ndk {
+                abiFilter "x86_64"
+            }
+        }
+        x86 {
+            flavorDimension "abi"
+            ndk {
+                abiFilter "x86"
+            }
+        }
+    }
+
 }
 
 dependencies {

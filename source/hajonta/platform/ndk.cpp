@@ -28,6 +28,7 @@ struct user_data {
     EGLDisplay display;
     EGLSurface surface;
     EGLContext context;
+    AAssetManager *asset_manager;
 
     bool drawable;
     bool stopping;
@@ -295,6 +296,32 @@ platform_process_events(android_app *app, game_input *new_input, game_input *old
     process_button((pan->stick.y < 0), &old_controller->buttons.move_down, &new_controller->buttons.move_down);
 }
 
+PLATFORM_LOAD_ASSET(ndk_load_asset)
+{
+    user_data *state = (user_data *)ctx;
+
+    AAsset *asset = AAssetManager_open(state->asset_manager, asset_path, AASSET_MODE_BUFFER);
+
+    if (asset == 0)
+    {
+        __android_log_print(ANDROID_LOG_INFO, "org.nxsy.ndk_handmade", "Failed to open file %s", asset_path);
+        return false;
+    }
+
+    uint64_t asset_size = AAsset_getLength64(asset);
+    if (asset_size != size)
+    {
+        __android_log_print(ANDROID_LOG_INFO, "org.nxsy.ndk_handmade", "File size mismatch: Got %d, expected %d", asset_size, size);
+        return false;
+    }
+
+    char *buf = (char *)malloc(asset_size + 1);
+    AAsset_read(asset, dest, size);
+    AAsset_close(asset);
+
+    return true;
+}
+
 PLATFORM_FAIL(platform_fail)
 {
     user_data *state = (user_data *)ctx;
@@ -315,6 +342,7 @@ void android_main(android_app *app) {
     user_data p = {};
     strcpy(p.app_name, "org.nxsy.hajonta.ndk");
     app->userData = &p;
+    p.asset_manager = app->activity->assetManager;
 
     app->onAppCmd = on_app_cmd;
     app->onInputEvent = on_input_event;
@@ -327,6 +355,7 @@ void android_main(android_app *app) {
     m.memory = calloc(m.size, sizeof(uint8_t));
     m.platform_fail = platform_fail;
     m.platform_debug_message = platform_debug_message;
+    m.platform_load_asset = ndk_load_asset;
 
     hajonta_thread_context t = {};
 
