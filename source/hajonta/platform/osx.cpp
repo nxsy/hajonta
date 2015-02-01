@@ -6,6 +6,8 @@
 #include <libproc.h>
 #include <dlfcn.h>
 
+#include <sys/syslimits.h>
+
 #include <OpenGL/gl.h>
 #include "hajonta/platform/common.h"
 #include "hajonta/platform/osx.h"
@@ -97,6 +99,20 @@ load_game(osx_game_code *game_code, char *path)
     }
 }
 
+PLATFORM_LOAD_ASSET(osx_load_asset)
+{
+    osx_state *state = (osx_state *)ctx;
+    char full_pathname[PATH_MAX];
+    snprintf(full_pathname, sizeof(full_pathname), "%s/%s", state->asset_path, asset_path);
+
+    FILE *asset = fopen(full_pathname, "r");
+    fseek(asset, 0, SEEK_END);
+    uint32_t file_size = ftell(asset);
+    fseek(asset, 0, SEEK_SET);
+    int size_read = fread(dest, 1, size, asset);
+    return true;
+}
+
 void
 osx_fail(hajonta_thread_context *ctx, char *message)
 {
@@ -104,11 +120,34 @@ osx_fail(hajonta_thread_context *ctx, char *message)
     _exit(1);
 }
 
+static bool
+find_asset_path(osx_state *state)
+{
+    char dir[sizeof(state->binary_name)];
+    strcpy(dir, state->binary_name);
+
+    while(char *location_of_last_slash = strrchr(dir, '/')) {
+        *location_of_last_slash = 0;
+
+        strcpy(state->asset_path, dir);
+        strcat(state->asset_path, "/data");
+        struct stat statbuf = {};
+        uint32_t stat_result = stat(state->asset_path, &statbuf);
+        if (stat_result != 0)
+        {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
+
 void
 osx_init(osx_state *state)
 {
     *state = {};
     get_binary_name(state);
+    find_asset_path(state);
 
     char *game_code_filename = (char *)"libgame.dylib";
     build_full_filename(state, game_code_filename,
@@ -120,7 +159,7 @@ osx_init(osx_state *state)
     state->memory.size = 64 * 1024 * 1024;
     state->memory.memory = calloc(state->memory.size, sizeof(uint8_t));
     state->memory.platform_fail = osx_fail;
-    //state->memory.platform_glgetprocaddress = xcb_glgetprocaddress;
+    state->memory.platform_load_asset = osx_load_asset;
 
     state->new_input = &state->inputs[0];
     state->old_input = &state->inputs[1];

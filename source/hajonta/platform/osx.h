@@ -20,6 +20,7 @@ struct osx_state
     char binary_name[PATH_MAX];
     char *last_slash;
     char library_path[PATH_MAX];
+    char asset_path[PATH_MAX];
 
     game_input inputs[2];
     game_input *new_input;
