@@ -61,6 +61,15 @@ v2dot(v2 left, v2 right)
     return result;
 }
 
+v2
+v2projection(v2 q, v2 p)
+{
+    /*
+     * Projection of vector p onto q
+     */
+    return v2mul(q, v2dot(p, q) / v2dot(q, q));
+}
+
 struct v3
 {
     float x;
@@ -144,11 +153,30 @@ assertEqual(v3 left, v3 right, char *msg, char *file, int line)
         (left.z == right.z) &&
         1))
     {
-#define _P(x, ...) printf("%s(%d) : "x, file, line, __VA_ARGS__)
-        _P("TEST FAILED: %s\n", msg);
-        _P("EQUAL: x: %d, y: %d, z: %d\n", left.x == right.x, left.y == right.y, left.z == right.z);
-        _P("EXPECT: x: %.8f, y: %.8f, z: %.8f\n", left.x, left.y, left.z);
-        _P("GOT: x: %.8f, y: %.8f, z: %.8f\n", right.x, right.y, right.z);
+#define _P(x, ...) printf("%s(%d) : "x"\n", file, line, __VA_ARGS__)
+        _P("TEST FAILED: %s", msg);
+        _P("EQUAL: x: %d, y: %d, z: %d", left.x == right.x, left.y == right.y, left.z == right.z);
+        _P("EXPECT: x: %.8f, y: %.8f, z: %.8f", left.x, left.y, left.z);
+        _P("GOT: x: %.8f, y: %.8f, z: %.8f", right.x, right.y, right.z);
+#undef _P
+        return false;
+    }
+    return true;
+}
+
+static bool
+assertEqual(v2 left, v2 right, char *msg, char *file, int line)
+{
+    if (!(
+        (left.x == right.x) &&
+        (left.y == right.y) &&
+        1))
+    {
+#define _P(x, ...) printf("%s(%d) : "x"\n", file, line, __VA_ARGS__)
+        _P("TEST FAILED: %s", msg);
+        _P("EQUAL: x: %d, y: %d", left.x == right.x, left.y == right.y);
+        _P("EXPECT: x: %.8f, y: %.8f", left.x, left.y);
+        _P("GOT: x: %.8f, y: %.8f", right.x, right.y);
 #undef _P
         return false;
     }
@@ -171,6 +199,35 @@ assertEqual(float left, float right, char *msg, char *file, int line)
 
 #define QUOTE(x) #x
 #define T(x,y) {bool _unit_result = assertEqual(x, y, QUOTE(x) "        " QUOTE(y), __FILE__, __LINE__); if (!_unit_result) return false;};
+
+bool
+v2unittests()
+{
+    {
+        v2 a = {0.5, 0.866};
+        v2 b = {1, 0};
+        v2 a1 = {0.5, 0};
+        T( a1, (v2projection(b, a)) );
+    }
+
+    {
+        v2 a = {-4, 1};
+        v2 b = {1, 2};
+        v2 p_of_a_onto_b = {-0.4, -0.8};
+        v2 p_of_b_onto_a = {8.0/17, -2.0/17};
+        T( p_of_a_onto_b, (v2projection(b, a)) );
+        T( p_of_b_onto_a, (v2projection(a, b)) );
+    }
+
+    {
+        v2 a = { 2, 1};
+        v2 b = {-3, 4};
+        v2 p_of_a_onto_b = {0.24, -0.32};
+        T( p_of_a_onto_b, (v2projection(b, a)) );
+    }
+
+    return true;
+}
 
 bool
 v3unittests()

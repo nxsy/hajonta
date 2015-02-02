@@ -14,5 +14,6 @@ fail(char *msg, char *file, int line)
 void
 main()
 {
+    UNITTEST(v2unittests);
     UNITTEST(v3unittests);
 }
