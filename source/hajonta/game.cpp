@@ -84,19 +84,30 @@ glErrorAssert()
 #define fps_buffer_width 960
 #define fps_buffer_height 14
 
-struct game_state
+enum struct top_level_demo {
+    MENU,
+    RAINBOW,
+};
+
+struct demo_rainbow_state
 {
     a_program_struct program_a;
-    debug_font_program_struct program_debug_font;
-
-    uint32_t vbo;
-    uint32_t vao;
-
     v2 velocity;
     v2 position;
 
+    uint32_t vbo;
+
     int audio_offset;
     void *audio_buffer_data;
+};
+
+struct game_state
+{
+    top_level_demo demo;
+    debug_font_program_struct program_debug_font;
+
+    demo_rainbow_state rainbow;
+    uint32_t vao;
 
     kenpixel_future_14 debug_font;
     uint8_t fps_buffer[4 * fps_buffer_width * fps_buffer_height];
@@ -125,42 +136,12 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     }
 #endif
 
-    bool loaded = a_program(&state->program_a, ctx, memory);
+    bool loaded = debug_font_program(&state->program_debug_font, ctx, memory);
     if (!loaded)
     {
         return;
     }
     glErrorAssert();
-
-    loaded = debug_font_program(&state->program_debug_font, ctx, memory);
-    if (!loaded)
-    {
-        return;
-    }
-    glErrorAssert();
-
-    glUseProgram(state->program_a.program);
-    glGenBuffers(1, &state->vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    vertex vertices[4] = {
-        {{-0.5, 0.5, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}},
-        {{ 0.5, 0.5, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
-        {{ 0.5,-0.5, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
-        {{-0.5,-0.5, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}},
-    };
-    glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), vertices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(state->program_a.a_pos_id);
-    glEnableVertexAttribArray(state->program_a.a_color_id);
-    glVertexAttribPointer(state->program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
-
-    glErrorAssert();
-
-    glDepthFunc(GL_ALWAYS);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_STENCIL_TEST);
-    glDisable(GL_CULL_FACE);
 
     glUseProgram(state->program_debug_font.program);
     glGenBuffers(1, &state->fps_vbo);
@@ -204,43 +185,121 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         fps_buffer_width, fps_buffer_height, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, state->fps_buffer);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glErrorAssert();
+
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glErrorAssert();
+    glDepthFunc(GL_ALWAYS);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
 }
 
-extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
+void debug_output(game_state *state)
+{
+    glUseProgram(state->program_debug_font.program);
+    glBindBuffer(GL_ARRAY_BUFFER, state->fps_vbo);
+    glEnableVertexAttribArray(state->program_debug_font.a_pos_id);
+    glEnableVertexAttribArray(state->program_debug_font.a_tex_coord_id);
+    glVertexAttribPointer(state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glVertexAttribPointer(state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+
+    glBindTexture(GL_TEXTURE_2D, state->fps_texture_id);
+    glTexSubImage2D(GL_TEXTURE_2D,
+        0,
+        0,
+        0,
+        fps_buffer_width,
+        fps_buffer_height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        state->fps_buffer);
+
+    glUniform1i(state->fps_sampler_id, 0);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+
+GAME_UPDATE_AND_RENDER(demo_menu)
 {
     game_state *state = (game_state *)memory->memory;
-
     float delta_t = input->delta_t;
 
-#if !defined(NEEDS_EGL) && !defined(__APPLE__)
-    if (!glCreateProgram)
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
     {
-        load_glfuncs(ctx, memory->platform_glgetprocaddress);
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+        game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.move_right.ended_down)
+        {
+            state->demo = top_level_demo::RAINBOW;
+        }
     }
-#endif
-    if (!memory->initialized)
+
+    memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
+    char msg[1024];
+    sprintf(msg, "MENU MENU MENU MENU");
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg, ctx, memory);
+
+    glClearColor(0.1f, 0.1f, 0.1f, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    sound_output->samples = 0;
+}
+
+GAME_UPDATE_AND_RENDER(demo_rainbow)
+{
+    game_state *state = (game_state *)memory->memory;
+    if (!state->rainbow.program_a.program)
     {
-        state->velocity = {0, 0};
-        state->position = {0, 0};
+        state->rainbow.velocity = {0, 0};
+        state->rainbow.position = {0, 0};
 
-        gl_setup(ctx, memory);
+        bool loaded = a_program(&state->rainbow.program_a, ctx, memory);
+        if (!loaded)
+        {
+            return;
+        }
+        glErrorAssert();
 
-        memory->initialized = 1;
+        glUseProgram(state->rainbow.program_a.program);
+        glGenBuffers(1, &state->rainbow.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, state->rainbow.vbo);
+        vertex vertices[4] = {
+            {{-0.5, 0.5, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}},
+            {{ 0.5, 0.5, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
+            {{ 0.5,-0.5, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
+            {{-0.5,-0.5, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}},
+        };
+        glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), vertices, GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(state->rainbow.program_a.a_pos_id);
+        glEnableVertexAttribArray(state->rainbow.program_a.a_color_id);
+        glVertexAttribPointer(state->rainbow.program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+        glVertexAttribPointer(state->rainbow.program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+
+        glErrorAssert();
+
 
         int volume = 3000;
         float pi = 3.14159265358979f;
-        state->audio_buffer_data = malloc(48000 * 2 * (16 / 8));
+        state->rainbow.audio_buffer_data = malloc(48000 * 2 * (16 / 8));
         for (int i = 0; i < 48000 * 2;)
         {
             volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
-            ((uint16_t *)state->audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
-            ((uint16_t *)state->audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            ((uint16_t *)state->rainbow.audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            ((uint16_t *)state->rainbow.audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
             i += 2;
         }
     }
+
+    float delta_t = input->delta_t;
+    glClearColor(0.1f, 0.1f, 0.1f, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
 
     v2 acceleration = {};
 
@@ -270,63 +329,86 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             acceleration.x += 1.0f;
         }
+        if (
+            controller->buttons.move_up.ended_down &&
+            controller->buttons.move_down.ended_down &&
+            controller->buttons.move_left.ended_down
+           )
+        {
+            state->demo = top_level_demo::MENU;
+        }
     }
 
     acceleration = v2normalize(acceleration);
-    acceleration = v2sub(acceleration, v2mul(state->velocity, 5.0f));
+    acceleration = v2sub(acceleration, v2mul(state->rainbow.velocity, 5.0f));
     v2 movement = v2add(
             v2mul(acceleration, 0.5f * (delta_t * delta_t)),
-            v2mul(state->velocity, delta_t)
+            v2mul(state->rainbow.velocity, delta_t)
     );
-    state->position = v2add(state->position, movement);
-    state->velocity = v2add(
+    state->rainbow.position = v2add(state->rainbow.position, movement);
+    state->rainbow.velocity = v2add(
             v2mul(acceleration, delta_t),
-            state->velocity
+            state->rainbow.velocity
     );
     memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
     char msg[1024];
-    sprintf(msg, "P: %+.2f, %+.2f", state->position.x, state->position.y);
-    sprintf(msg + strlen(msg), "V: %+.2f, %+.2f", state->velocity.x, state->velocity.y);
-    sprintf(msg + strlen(msg), "A: %+.2f, %+.2f", acceleration.x, acceleration.y);
+    sprintf(msg, "P: %+.2f, %+.2f", state->rainbow.position.x, state->rainbow.position.y);
+    sprintf(msg + strlen(msg), " V: %+.2f, %+.2f", state->rainbow.velocity.x, state->rainbow.velocity.y);
+    sprintf(msg + strlen(msg), " A: %+.2f, %+.2f", acceleration.x, acceleration.y);
     write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg, ctx, memory);
 
-    glErrorAssert();
-    glClearColor(0.1f, 0.1f, 0.1f, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glUseProgram(state->program_a.program);
-    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    glEnableVertexAttribArray(state->program_a.a_pos_id);
-    glEnableVertexAttribArray(state->program_a.a_color_id);
-    glVertexAttribPointer(state->program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
-    glUniform2fv(state->program_a.u_offset_id, 1, (float *)&state->position);
+    glUseProgram(state->rainbow.program_a.program);
+    glBindBuffer(GL_ARRAY_BUFFER, state->rainbow.vbo);
+    glEnableVertexAttribArray(state->rainbow.program_a.a_pos_id);
+    glEnableVertexAttribArray(state->rainbow.program_a.a_color_id);
+    glVertexAttribPointer(state->rainbow.program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glVertexAttribPointer(state->rainbow.program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    glUniform2fv(state->rainbow.program_a.u_offset_id, 1, (float *)&state->rainbow.position);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-    glUseProgram(state->program_debug_font.program);
-    glBindBuffer(GL_ARRAY_BUFFER, state->fps_vbo);
-    glEnableVertexAttribArray(state->program_debug_font.a_pos_id);
-    glEnableVertexAttribArray(state->program_debug_font.a_tex_coord_id);
-    glVertexAttribPointer(state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
 
-    glBindTexture(GL_TEXTURE_2D, state->fps_texture_id);
-    glTexSubImage2D(GL_TEXTURE_2D,
-        0,
-        0,
-        0,
-        fps_buffer_width,
-        fps_buffer_height,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        state->fps_buffer);
+    sound_output->samples = &(((uint8_t *)state->rainbow.audio_buffer_data)[state->rainbow.audio_offset * 2 * sound_output->channels * sound_output->number_of_samples]);
+    state->rainbow.audio_offset = (state->rainbow.audio_offset + 1) % 60;
+}
 
-    glUniform1i(state->fps_sampler_id, 0);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
+{
+    game_state *state = (game_state *)memory->memory;
+
+#if !defined(NEEDS_EGL) && !defined(__APPLE__)
+    if (!glCreateProgram)
+    {
+        load_glfuncs(ctx, memory->platform_glgetprocaddress);
+    }
+#endif
+    if (!memory->initialized)
+    {
+        state->demo = top_level_demo::MENU;
+        gl_setup(ctx, memory);
+        memory->initialized = 1;
+    }
 
     glErrorAssert();
-
-    sound_output->samples = &(((uint8_t *)state->audio_buffer_data)[state->audio_offset * 2 * sound_output->channels * sound_output->number_of_samples]);
-    state->audio_offset = (state->audio_offset + 1) % 60;
+    game_update_and_render_func *demo;
+    switch (state->demo)
+    {
+        case top_level_demo::MENU:
+        {
+            demo = demo_menu;
+        } break;
+        case top_level_demo::RAINBOW:
+        {
+            demo = demo_rainbow;
+        } break;
+        default:
+        {
+            memory->platform_fail(ctx, "Woah!?");
+            return;
+        } break;
+    }
+    demo(ctx, memory, input, sound_output);
+    glErrorAssert();
+    debug_output(state);
+    glErrorAssert();
 }
 
