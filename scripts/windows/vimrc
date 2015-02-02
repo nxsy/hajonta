@@ -22,3 +22,6 @@ command! Lookup call s:lookup()
 map <silent> <F1> :Lookup<CR>
 
 set switchbuf=useopen,split
+
+let NERDTreeShowHidden=0
+let NERDTreeDirArrows=1

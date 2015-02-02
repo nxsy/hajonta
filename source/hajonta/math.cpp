@@ -186,6 +186,22 @@ v3unittests()
     T( cross_result, (v3cross(cross_a, cross_b)) );
     T( -13, (v3dot(cross_a, cross_b)) );
     T( 5 * sqrt(70.0) , v3length(cross_result) );
+    T( 0, (v3dot(cross_result, cross_a)));
+    T( 0, (v3dot(cross_result, cross_b)));
+
+    v3 i = {1, 0, 0};
+    v3 j = {0, 1, 0};
+    v3 k = {0, 0, 1};
+
+    T( k, (v3cross(i, j)) );
+    T( i, (v3cross(j, k)) );
+    T( j, (v3cross(k, i)) );
+
+    T( (v3mul(k,-1)), (v3cross(j, i)) );
+    T( (v3mul(i,-1)), (v3cross(k, j)) );
+    T( (v3mul(j,-1)), (v3cross(i, k)) );
+
+    T( (v3{0,0,0}), (v3cross(i, i)) );
 
     return true;
 }
