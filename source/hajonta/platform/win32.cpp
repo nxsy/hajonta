@@ -400,18 +400,32 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         return 1;
     }
 
+    DWORD style;
+    style = WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+
     int width = 960;
     int height = 540;
+    RECT window_rect = {};
+    window_rect.left = 0;
+    window_rect.top = 0;
+    window_rect.right = window_rect.left + width;
+    window_rect.bottom = window_rect.top + height;
+    BOOL result = AdjustWindowRect(&window_rect, style, 0);
+    if (!result)
+    {
+        MessageBoxA(0, "Unable to determine window size", 0, MB_OK | MB_ICONSTOP);
+        return 1;
+    }
 
     HWND window = CreateWindowExA(
         0,
         "HajontaMainWindow",
         "Hajonta",
-        WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
-        0,
-        0,
-        width,
-        height,
+        style,
+        window_rect.left,
+        window_rect.right,
+        window_rect.right - window_rect.left,
+        window_rect.bottom - window_rect.top,
         0,
         0,
         hInstance,
