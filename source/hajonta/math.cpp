@@ -204,7 +204,7 @@ bool
 v2unittests()
 {
     {
-        v2 a = {0.5, 0.866};
+        v2 a = {0.5f, 0.866f};
         v2 b = {1, 0};
         v2 a1 = {0.5, 0};
         T( a1, (v2projection(b, a)) );
@@ -213,8 +213,8 @@ v2unittests()
     {
         v2 a = {-4, 1};
         v2 b = {1, 2};
-        v2 p_of_a_onto_b = {-0.4, -0.8};
-        v2 p_of_b_onto_a = {8.0/17, -2.0/17};
+        v2 p_of_a_onto_b = {-0.4f, -0.8f};
+        v2 p_of_b_onto_a = {8.0f/17, -2.0f/17};
         T( p_of_a_onto_b, (v2projection(b, a)) );
         T( p_of_b_onto_a, (v2projection(a, b)) );
     }
@@ -222,7 +222,7 @@ v2unittests()
     {
         v2 a = { 2, 1};
         v2 b = {-3, 4};
-        v2 p_of_a_onto_b = {0.24, -0.32};
+        v2 p_of_a_onto_b = {0.24f, -0.32f};
         T( p_of_a_onto_b, (v2projection(b, a)) );
     }
 
@@ -242,7 +242,7 @@ v3unittests()
     T( (v3{ 2, 4.5, 1}), (v3div(cross_b, 2)) );
     T( cross_result, (v3cross(cross_a, cross_b)) );
     T( -13, (v3dot(cross_a, cross_b)) );
-    T( 5 * sqrt(70.0) , v3length(cross_result) );
+    T( 5 * sqrtf(70.0f) , v3length(cross_result) );
     T( 0, (v3dot(cross_result, cross_a)));
     T( 0, (v3dot(cross_result, cross_b)));
 

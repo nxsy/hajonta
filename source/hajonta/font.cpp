@@ -23,7 +23,7 @@ struct zfi_header
   int32_t max_shift_y;
   uint8_t padding[4];
 
-  zfi_symbol symbols[0];
+  zfi_symbol symbols[1];
 };
 #pragma pack(pop)
 
@@ -63,7 +63,7 @@ load_font(uint8_t *zfi, uint8_t *bmp, font_data *font, hajonta_thread_context *c
 }
 
 bool
-write_to_buffer(draw_buffer *buffer, font_data *font, char *message, hajonta_thread_context *ctx, platform_memory *memory)
+write_to_buffer(draw_buffer *buffer, font_data *font, char *message)
 {
     int buffer_x = 0;
     int buffer_y = 0;

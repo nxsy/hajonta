@@ -84,7 +84,7 @@ bool bmp_open(bmp_data *data)
     data->width = info->biWidth;
     data->height = info->biHeight;
     data->top_to_bottom = info->biHeight < 0;
-    data->bits_per_pixel = info->biBitCount;
+    data->bits_per_pixel = (uint8_t)info->biBitCount;
 
     if (info->biCompression == 3)
     {
@@ -118,16 +118,14 @@ struct draw_buffer {
 static void
 draw_bmp(draw_buffer *buffer, bmp_data *data, int buffer_x, int buffer_y, int bmp_x, int bmp_y, int bmp_width, int bmp_height)
 {
-    int buffer_max_x = buffer_x + bmp_width;
     int buffer_max_y = buffer_y + bmp_height;
 
-    if (buffer_max_y > buffer->height)
+    if (buffer_max_y > (int32_t)buffer->height)
     {
         buffer_max_y = buffer->height;
     }
 
-    uint16_t bmp_pitch = data->width * (data->bits_per_pixel / 8);
-    uint16_t row_length = bmp_width * (data->bits_per_pixel / 8);
+    uint32_t bmp_pitch = data->width * (data->bits_per_pixel / 8);
 
     uint8_t *bmp_first_row = data->bmp_memory;
     uint8_t *bmp_final_row = bmp_first_row + (bmp_pitch * (data->height - 1));

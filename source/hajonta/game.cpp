@@ -223,7 +223,6 @@ void debug_output(game_state *state)
 GAME_UPDATE_AND_RENDER(demo_menu)
 {
     game_state *state = (game_state *)memory->memory;
-    float delta_t = input->delta_t;
 
     for (uint32_t i = 0;
             i < harray_count(input->controllers);
@@ -243,7 +242,7 @@ GAME_UPDATE_AND_RENDER(demo_menu)
     memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
     char msg[1024];
     sprintf(msg, "MENU MENU MENU MENU");
-    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg, ctx, memory);
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
 
     glClearColor(0.1f, 0.1f, 0.1f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -291,8 +290,8 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
         for (int i = 0; i < 48000 * 2;)
         {
             volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
-            ((uint16_t *)state->rainbow.audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
-            ((uint16_t *)state->rainbow.audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565 / 48000.0));
+            ((uint16_t *)state->rainbow.audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565f / 48000.0f));
+            ((uint16_t *)state->rainbow.audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565f / 48000.0f));
             i += 2;
         }
     }
@@ -355,7 +354,7 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
     sprintf(msg, "P: %+.2f, %+.2f", state->rainbow.position.x, state->rainbow.position.y);
     sprintf(msg + strlen(msg), " V: %+.2f, %+.2f", state->rainbow.velocity.x, state->rainbow.velocity.y);
     sprintf(msg + strlen(msg), " A: %+.2f, %+.2f", acceleration.x, acceleration.y);
-    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg, ctx, memory);
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
 
     glUseProgram(state->rainbow.program_a.program);
     glBindBuffer(GL_ARRAY_BUFFER, state->rainbow.vbo);

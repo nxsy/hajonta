@@ -182,11 +182,11 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             float ratio = 960.0f / 540.0f;
             if (height > width / ratio)
             {
-                height = width / ratio;
+                height = (int32_t)(width / ratio);
             }
             else if (width > height * ratio)
             {
-                width = height * ratio;
+                width = (int32_t)(height * ratio);
             }
             glViewport((window_width - width) / 2, (window_height - height) / 2, width, height);
         } break;
@@ -219,7 +219,6 @@ win32_process_keypress(game_button_state *new_button_state, bool was_down, bool 
 static void
 handle_win32_messages(platform_state *state)
 {
-    game_controller_state *old_keyboard_controller = get_controller(state->old_input, 0);
     game_controller_state *new_keyboard_controller = get_controller(state->new_input, 0);
 
     MSG message;
@@ -237,14 +236,14 @@ handle_win32_messages(platform_state *state)
             case WM_KEYDOWN:
             case WM_KEYUP:
             {
-                uint32_t vkcode = message.wParam;
+                WPARAM vkcode = message.wParam;
                 /*
                     30 The previous key state. The value is 1 if the key is
                        down before the message is sent, or it is zero if the
                        key is up.
                     31 The transition state. The value is always 0 for a WM_KEYDOWN message.
                 */
-                bool was_down = (message.lParam & (1 << 30));
+                bool was_down = ((message.lParam & (1 << 30)) != 0);
                 bool is_down = ((message.lParam & (1 << 31)) == 0);
                 switch(vkcode)
                 {

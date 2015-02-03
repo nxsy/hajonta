@@ -23,7 +23,7 @@
 int
 mkdir_recursively(char *path)
 {
-    int path_offset = 0;
+    int64_t path_offset = 0;
     while(char *next_slash = strstr(path + path_offset, SLASH))
     {
         path_offset = next_slash - path + 1;
@@ -119,7 +119,7 @@ main(int argc, char **argv)
 
     while (feof(v) == 0)
     {
-        int size_read = fread(start_of_next_write, 1, structbuffer + sizeof(structbuffer) - start_of_next_write - 1, v);
+        fread(start_of_next_write, 1, structbuffer + sizeof(structbuffer) - start_of_next_write - 1, v);
         char *line = structbuffer;
         do {
             char *next_line_ending = strchr(line, '\n');
@@ -187,13 +187,17 @@ main(int argc, char **argv)
     fwrite(buffer, 1, strlen(buffer), p);
     strcpy(buffer, "    state->program = glCreateProgram();\n");
     fwrite(buffer, 1, strlen(buffer), p);
+
+    strcpy(buffer, "#if !defined(NEEDS_EGL)\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
     strcpy(buffer, "    char *vertex_shader_source = R\"EOF(\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     while (feof(v) == 0)
     {
-        int size_read = fread(buffer, 1, sizeof(buffer), v);
-        int size_write = fwrite(buffer, 1, size_read, p);
+        size_t size_read = fread(buffer, 1, sizeof(buffer), v);
+        size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
             printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
@@ -201,23 +205,7 @@ main(int argc, char **argv)
         }
     }
 
-    strcpy(buffer, "\n)EOF\";\n");
-    fwrite(buffer, 1, strlen(buffer), p);
-
-    strcpy(buffer, "    char *fragment_shader_source = R\"EOF(\n");
-    fwrite(buffer, 1, strlen(buffer), p);
-
-    while (feof(f) == 0)
-    {
-        int size_read = fread(buffer, 1, sizeof(buffer), f);
-        int size_write = fwrite(buffer, 1, size_read, p);
-        if (size_read != size_write)
-        {
-            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
-            return 1;
-        }
-    }
-    strcpy(buffer, "\n)EOF\";\n");
+    strcpy(buffer, "\n)EOF\";\n#else\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     strcpy(buffer, "    char *egl_vertex_shader_source = R\"EOF(\n");
@@ -225,8 +213,8 @@ main(int argc, char **argv)
 
     while (feof(eglv) == 0)
     {
-        int size_read = fread(buffer, 1, sizeof(buffer), eglv);
-        int size_write = fwrite(buffer, 1, size_read, p);
+        size_t size_read = fread(buffer, 1, sizeof(buffer), eglv);
+        size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
             printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
@@ -234,7 +222,27 @@ main(int argc, char **argv)
         }
     }
 
-    strcpy(buffer, "\n)EOF\";\n");
+    strcpy(buffer, "\n)EOF\";\n#endif\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+
+    strcpy(buffer, "#if !defined(NEEDS_EGL)\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+    strcpy(buffer, "    char *fragment_shader_source = R\"EOF(\n");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+    while (feof(f) == 0)
+    {
+        size_t size_read = fread(buffer, 1, sizeof(buffer), f);
+        size_t size_write = fwrite(buffer, 1, size_read, p);
+        if (size_read != size_write)
+        {
+            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            return 1;
+        }
+    }
+    strcpy(buffer, "\n)EOF\";\n#else\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     strcpy(buffer, "    char *egl_fragment_shader_source = R\"EOF(\n");
@@ -242,15 +250,15 @@ main(int argc, char **argv)
 
     while (feof(eglf) == 0)
     {
-        int size_read = fread(buffer, 1, sizeof(buffer), eglf);
-        int size_write = fwrite(buffer, 1, size_read, p);
+        size_t size_read = fread(buffer, 1, sizeof(buffer), eglf);
+        size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
             printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
             return 1;
         }
     }
-    strcpy(buffer, "\n)EOF\";\n");
+    strcpy(buffer, "\n)EOF\";\n#endif\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     char midbuffer[] = R"EOF(
@@ -276,7 +284,7 @@ main(int argc, char **argv)
         {
             char info_log[1024] = {};
             strcpy(info_log, "vertex: ");
-            glGetShaderInfoLog(shader, sizeof(info_log) - strlen(info_log), 0, info_log + strlen(info_log));
+            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
         }
@@ -295,7 +303,7 @@ main(int argc, char **argv)
         {
             char info_log[1024] = {};
             strcpy(info_log, "fragment: ");
-            glGetShaderInfoLog(shader, sizeof(info_log) - strlen(info_log), 0, info_log + strlen(info_log));
+            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
         }
