@@ -455,7 +455,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     GetModuleFileNameA(0, state.binary_path, sizeof(state.binary_path));
     char game_library_path[sizeof(state.binary_path)];
     char *location_of_last_slash = strrchr(state.binary_path, '\\');
-    strncpy(game_library_path, state.binary_path, location_of_last_slash - state.binary_path);
+    strncpy(game_library_path, state.binary_path, (size_t)(location_of_last_slash - state.binary_path));
     strcat(game_library_path, "\\game.dll");
     if (!find_asset_path(&state))
     {

@@ -104,7 +104,7 @@ main(int argc, char **argv)
 
     strcpy(buffer, "#include <string.h>\n");
     fwrite(buffer, 1, strlen(buffer), p);
-    sprintf(buffer, "struct %s_program_struct\n{\n    uint32_t program;\n", program_name);
+    sprintf(buffer, "struct %s_program_struct\n{\n    GLuint program;\n", program_name);
     fwrite(buffer, 1, strlen(buffer), p);
 
     char structbuffer[1024] = {};
@@ -119,7 +119,7 @@ main(int argc, char **argv)
 
     while (feof(v) == 0)
     {
-        fread(start_of_next_write, 1, structbuffer + sizeof(structbuffer) - start_of_next_write - 1, v);
+        fread(start_of_next_write, 1, structbuffer + sizeof(structbuffer) - start_of_next_write - (size_t)1, v);
         char *line = structbuffer;
         do {
             char *next_line_ending = strchr(line, '\n');
@@ -144,11 +144,11 @@ main(int argc, char **argv)
                 char *next_semicolon = strchr(line, ';');
                 if (next_space && next_space < next_line_ending && next_semicolon && next_semicolon < next_line_ending)
                 {
-                    fwrite("    int32_t ", 1, 12, p);
-                    strncpy(buffer, next_space, next_semicolon - next_space);
+                    fwrite("    GLint ", 1, 12, p);
+                    strncpy(buffer, next_space, (size_t)(next_semicolon - next_space));
                     if (in_uniform == IN_LENGTH)
                     {
-                        strncpy(attribs[attribute_index++], next_space, next_semicolon - next_space);
+                        strncpy(attribs[attribute_index++], next_space, (size_t)(next_semicolon - next_space));
                         if (attribute_index == num_attribs)
                         {
                             printf("Only support %d attributes\n", num_attribs);
@@ -157,14 +157,14 @@ main(int argc, char **argv)
                     }
                     else if (in_uniform == UNIFORM_LENGTH)
                     {
-                        strncpy(uniforms[uniform_index++], next_space, next_semicolon - next_space);
+                        strncpy(uniforms[uniform_index++], next_space, (size_t)(next_semicolon - next_space));
                         if (uniform_index == num_uniforms)
                         {
                             printf("Only support %d uniforms\n", num_uniforms);
                             return 1;
                         }
                     }
-                    fwrite(buffer, 1, next_semicolon - next_space, p);
+                    fwrite(buffer, 1, (size_t)(next_semicolon - next_space), p);
                     fwrite("_id;\n", 1, 5, p);
                 }
             }

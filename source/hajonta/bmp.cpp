@@ -42,7 +42,7 @@ struct bmp_data {
 inline int32_t
 leading_zero_count(uint32_t mask)
 {
-    for(uint32_t bit = 0;
+    for(int32_t bit = 0;
         bit < 32;
         ++bit)
     {
@@ -81,8 +81,8 @@ bool bmp_open(bmp_data *data)
         return false;
     }
 
-    data->width = info->biWidth;
-    data->height = info->biHeight;
+    data->width = (uint32_t)info->biWidth;
+    data->height = (uint32_t)abs(info->biHeight);
     data->top_to_bottom = info->biHeight < 0;
     data->bits_per_pixel = (uint8_t)info->biBitCount;
 
@@ -122,10 +122,10 @@ draw_bmp(draw_buffer *buffer, bmp_data *data, int buffer_x, int buffer_y, int bm
 
     if (buffer_max_y > (int32_t)buffer->height)
     {
-        buffer_max_y = buffer->height;
+        buffer_max_y = (int32_t)buffer->height;
     }
 
-    int32_t bmp_pitch = data->width * (data->bits_per_pixel / 8);
+    int32_t bmp_pitch = (int32_t)(data->width * (data->bits_per_pixel / 8));
 
     uint8_t *bmp_first_row = data->bmp_memory;
     uint8_t *bmp_final_row = bmp_first_row + (bmp_pitch * (data->height - 1));

@@ -156,10 +156,10 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         {{-1.0,-1.0, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
     };
     glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(state->program_debug_font.a_pos_id);
-    glEnableVertexAttribArray(state->program_debug_font.a_tex_coord_id);
-    glVertexAttribPointer(state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    glEnableVertexAttribArray((GLuint)state->program_debug_font.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_debug_font.a_tex_coord_id);
+    glVertexAttribPointer((GLuint)state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glVertexAttribPointer((GLuint)state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
 
     if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.zfi", sizeof(state->debug_font.zfi), state->debug_font.zfi))
     {
@@ -200,10 +200,10 @@ void debug_output(game_state *state)
 {
     glUseProgram(state->program_debug_font.program);
     glBindBuffer(GL_ARRAY_BUFFER, state->fps_vbo);
-    glEnableVertexAttribArray(state->program_debug_font.a_pos_id);
-    glEnableVertexAttribArray(state->program_debug_font.a_tex_coord_id);
-    glVertexAttribPointer(state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    glEnableVertexAttribArray((GLuint)state->program_debug_font.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_debug_font.a_tex_coord_id);
+    glVertexAttribPointer((GLuint)state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glVertexAttribPointer((GLuint)state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
 
     glBindTexture(GL_TEXTURE_2D, state->fps_texture_id);
     glTexSubImage2D(GL_TEXTURE_2D,
@@ -276,10 +276,10 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
         };
         glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), vertices, GL_STATIC_DRAW);
 
-        glEnableVertexAttribArray(state->rainbow.program_a.a_pos_id);
-        glEnableVertexAttribArray(state->rainbow.program_a.a_color_id);
-        glVertexAttribPointer(state->rainbow.program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-        glVertexAttribPointer(state->rainbow.program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+        glEnableVertexAttribArray((GLuint)state->rainbow.program_a.a_pos_id);
+        glEnableVertexAttribArray((GLuint)state->rainbow.program_a.a_color_id);
+        glVertexAttribPointer((GLuint)state->rainbow.program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+        glVertexAttribPointer((GLuint)state->rainbow.program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
 
         glErrorAssert();
 
@@ -290,8 +290,8 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
         for (int i = 0; i < 48000 * 2;)
         {
             volume = i < 48000 ? i / 16 : abs(96000 - i) / 16;
-            ((uint16_t *)state->rainbow.audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565f / 48000.0f));
-            ((uint16_t *)state->rainbow.audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565f / 48000.0f));
+            ((int16_t *)state->rainbow.audio_buffer_data)[i] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565f / 48000.0f));
+            ((int16_t *)state->rainbow.audio_buffer_data)[i+1] = (int16_t)(volume * sinf(i * 2 * pi * 261.625565f / 48000.0f));
             i += 2;
         }
     }
@@ -358,10 +358,10 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
 
     glUseProgram(state->rainbow.program_a.program);
     glBindBuffer(GL_ARRAY_BUFFER, state->rainbow.vbo);
-    glEnableVertexAttribArray(state->rainbow.program_a.a_pos_id);
-    glEnableVertexAttribArray(state->rainbow.program_a.a_color_id);
-    glVertexAttribPointer(state->rainbow.program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer(state->rainbow.program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    glEnableVertexAttribArray((GLuint)state->rainbow.program_a.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->rainbow.program_a.a_color_id);
+    glVertexAttribPointer((GLuint)state->rainbow.program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glVertexAttribPointer((GLuint)state->rainbow.program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
     glUniform2fv(state->rainbow.program_a.u_offset_id, 1, (float *)&state->rainbow.position);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
