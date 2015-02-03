@@ -125,7 +125,7 @@ draw_bmp(draw_buffer *buffer, bmp_data *data, int buffer_x, int buffer_y, int bm
         buffer_max_y = buffer->height;
     }
 
-    uint32_t bmp_pitch = data->width * (data->bits_per_pixel / 8);
+    int32_t bmp_pitch = data->width * (data->bits_per_pixel / 8);
 
     uint8_t *bmp_first_row = data->bmp_memory;
     uint8_t *bmp_final_row = bmp_first_row + (bmp_pitch * (data->height - 1));
