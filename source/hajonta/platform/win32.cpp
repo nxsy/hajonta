@@ -213,6 +213,7 @@ win32_process_keypress(game_button_state *new_button_state, bool was_down, bool 
     if(new_button_state->ended_down != is_down)
     {
         new_button_state->ended_down = is_down;
+        new_button_state->repeat = false;
     }
 }
 
@@ -247,9 +248,13 @@ handle_win32_messages(platform_state *state)
                 bool is_down = ((message.lParam & (1 << 31)) == 0);
                 switch(vkcode)
                 {
+                    case VK_RETURN:
+                    {
+                        win32_process_keypress(&new_keyboard_controller->buttons.start, was_down, is_down);
+                    } break;
                     case VK_ESCAPE:
                     {
-                        state->stopping = true;
+                        win32_process_keypress(&new_keyboard_controller->buttons.back, was_down, is_down);
                     } break;
                     case 'W':
                     {
@@ -538,6 +543,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         {
             new_keyboard_controller->_buttons[button_index].ended_down =
                 old_keyboard_controller->_buttons[button_index].ended_down;
+            new_keyboard_controller->_buttons[button_index].repeat = true;
         }
 
         handle_win32_messages(&state);
@@ -613,6 +619,11 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         game_input *temp_input = state.new_input;
         state.new_input = state.old_input;
         state.old_input = temp_input;
+
+        if (memory.quit)
+        {
+            state.stopping = 1;
+        }
     }
 
     if (state.stop_reason)

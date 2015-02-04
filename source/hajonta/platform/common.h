@@ -19,6 +19,9 @@ struct hajonta_thread_context
 #define PLATFORM_FAIL(func_name) void func_name(hajonta_thread_context *ctx, char *failure_reason)
 typedef PLATFORM_FAIL(platform_fail_func);
 
+#define PLATFORM_QUIT(func_name) void func_name(hajonta_thread_context *ctx)
+typedef PLATFORM_QUIT(platform_quit_func);
+
 #define PLATFORM_DEBUG_MESSAGE(func_name) void func_name(hajonta_thread_context *ctx, char *message)
 typedef PLATFORM_DEBUG_MESSAGE(platform_debug_message_func);
 
@@ -33,6 +36,7 @@ struct platform_memory
     bool initialized;
     uint64_t size;
     void *memory;
+    bool quit;
 
     platform_fail_func *platform_fail;
     platform_glgetprocaddress_func *platform_glgetprocaddress;
@@ -43,6 +47,7 @@ struct platform_memory
 struct game_button_state
 {
     bool ended_down;
+    bool repeat;
 };
 
 struct game_buttons
@@ -51,6 +56,8 @@ struct game_buttons
     game_button_state move_down;
     game_button_state move_left;
     game_button_state move_right;
+    game_button_state back;
+    game_button_state start;
 };
 
 struct game_controller_state

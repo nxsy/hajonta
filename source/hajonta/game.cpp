@@ -233,6 +233,14 @@ GAME_UPDATE_AND_RENDER(demo_menu)
             continue;
         }
         game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.back.ended_down && !controller->buttons.back.repeat)
+        {
+            memory->quit = true;
+        }
+        if (controller->buttons.start.ended_down)
+        {
+            state->demo = top_level_demo::RAINBOW;
+        }
         if (controller->buttons.move_right.ended_down)
         {
             state->demo = top_level_demo::RAINBOW;
@@ -328,11 +336,7 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
         {
             acceleration.x += 1.0f;
         }
-        if (
-            controller->buttons.move_up.ended_down &&
-            controller->buttons.move_down.ended_down &&
-            controller->buttons.move_left.ended_down
-           )
+        if (controller->buttons.back.ended_down)
         {
             state->demo = top_level_demo::MENU;
         }
