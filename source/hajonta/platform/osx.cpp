@@ -66,6 +66,7 @@ process_keyboard_message(game_button_state *new_state, bool is_down)
     if (new_state->ended_down != is_down)
     {
         new_state->ended_down = is_down;
+        new_state->repeat = false;
     }
 }
 
@@ -197,6 +198,12 @@ loop_cycle(osx_state *state)
     {
         new_keyboard_controller->_buttons[button_index].ended_down =
             old_keyboard_controller->_buttons[button_index].ended_down;
+        new_keyboard_controller->_buttons[button_index].repeat = true;
+    }
+
+    if (state->memory.quit)
+    {
+        state->stopping = true;
     }
 }
 
@@ -224,7 +231,11 @@ osx_process_key_event(osx_state *state, int key_code, bool is_down)
         } break;
         case 53:
         {
-            state->stopping = 1;
+            process_keyboard_message(&keyboard->buttons.back, is_down);
+        } break;
+        case 36:
+        {
+            process_keyboard_message(&keyboard->buttons.start, is_down);
         } break;
         default:
         {
