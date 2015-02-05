@@ -72,7 +72,7 @@ write_to_buffer(draw_buffer *buffer, font_data *font, char *message)
             message[i];
             ++i)
     {
-        zfi_symbol *s = font->symbols[message[i]];
+        zfi_symbol *s = font->symbols[(uint8_t)message[i]];
 
         v2 min = s->tex_coords[0];
         v2 max = s->tex_coords[2];

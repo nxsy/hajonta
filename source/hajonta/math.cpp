@@ -153,7 +153,7 @@ assertEqual(v3 left, v3 right, char *msg, char *file, int line)
         (left.z == right.z) &&
         1))
     {
-#define _P(x, ...) printf("%s(%d) : "x"\n", file, line, __VA_ARGS__)
+#define _P(x, ...) printf("%s(%d) : " x "\n", file, line, __VA_ARGS__)
         _P("TEST FAILED: %s", msg);
         _P("EQUAL: x: %d, y: %d, z: %d", left.x == right.x, left.y == right.y, left.z == right.z);
         _P("EXPECT: x: %.8f, y: %.8f, z: %.8f", left.x, left.y, left.z);
@@ -172,7 +172,7 @@ assertEqual(v2 left, v2 right, char *msg, char *file, int line)
         (left.y == right.y) &&
         1))
     {
-#define _P(x, ...) printf("%s(%d) : "x"\n", file, line, __VA_ARGS__)
+#define _P(x, ...) printf("%s(%d) : " x "\n", file, line, __VA_ARGS__)
         _P("TEST FAILED: %s", msg);
         _P("EQUAL: x: %d, y: %d", left.x == right.x, left.y == right.y);
         _P("EXPECT: x: %.8f, y: %.8f", left.x, left.y);
@@ -186,7 +186,7 @@ assertEqual(v2 left, v2 right, char *msg, char *file, int line)
 static bool
 assertEqual(float left, float right, char *msg, char *file, int line)
 {
-#define _P(x, ...) printf("%s(%d) : "x"\n", file, line, __VA_ARGS__)
+#define _P(x, ...) printf("%s(%d) : " x "\n", file, line, __VA_ARGS__)
     if (left != right)
     {
         _P("TEST FAILED: %s", msg);

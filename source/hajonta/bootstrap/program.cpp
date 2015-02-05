@@ -144,7 +144,8 @@ main(int argc, char **argv)
                 char *next_semicolon = strchr(line, ';');
                 if (next_space && next_space < next_line_ending && next_semicolon && next_semicolon < next_line_ending)
                 {
-                    fwrite("    GLint ", 1, 12, p);
+                    strcpy(buffer, "    GLint ");
+                    fwrite(buffer, 1, strlen(buffer), p);
                     strncpy(buffer, next_space, (size_t)(next_semicolon - next_space));
                     if (in_uniform == IN_LENGTH)
                     {
@@ -200,7 +201,7 @@ main(int argc, char **argv)
         size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
-            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            printf("size_read (%zu) != size_write(%zu)\n", size_read, size_write);
             return 1;
         }
     }
@@ -217,7 +218,7 @@ main(int argc, char **argv)
         size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
-            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            printf("size_read (%zu) != size_write(%zu)\n", size_read, size_write);
             return 1;
         }
     }
@@ -238,7 +239,7 @@ main(int argc, char **argv)
         size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
-            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            printf("size_read (%zu) != size_write(%zu)\n", size_read, size_write);
             return 1;
         }
     }
@@ -254,7 +255,7 @@ main(int argc, char **argv)
         size_t size_write = fwrite(buffer, 1, size_read, p);
         if (size_read != size_write)
         {
-            printf("size_read (%d) != size_write(%d)\n", size_read, size_write);
+            printf("size_read (%zu) != size_write(%zu)\n", size_read, size_write);
             return 1;
         }
     }
