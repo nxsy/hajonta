@@ -89,6 +89,11 @@ enum struct top_level_demo {
     RAINBOW,
 };
 
+struct demo_data {
+    char *name;
+    void *func;
+};
+
 struct demo_rainbow_state
 {
     a_program_struct program_a;
@@ -101,13 +106,29 @@ struct demo_rainbow_state
     void *audio_buffer_data;
 };
 
+#define menu_buffer_width 300
+#define menu_buffer_height 14
+struct demo_menu_state
+{
+    uint8_t menu_buffer[4 * menu_buffer_width * menu_buffer_height];
+    draw_buffer menu_draw_buffer;
+    uint32_t texture_id;
+    uint32_t vbo;
+
+    uint32_t selected_index;
+};
+
 struct game_state
 {
-    top_level_demo demo;
+    top_level_demo active_demo;
+    demo_data *demos;
+    uint32_t number_of_demos;
     debug_font_program_struct program_debug_font;
 
-    demo_rainbow_state rainbow;
     uint32_t vao;
+
+    demo_menu_state menu;
+    demo_rainbow_state rainbow;
 
     kenpixel_future_14 debug_font;
     uint8_t fps_buffer[4 * fps_buffer_width * fps_buffer_height];
@@ -144,22 +165,34 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glErrorAssert();
 
     glUseProgram(state->program_debug_font.program);
-    glGenBuffers(1, &state->fps_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, state->fps_vbo);
 
-    float height = 14.0f / (540.0f / 2.0f);
-    float top = -(1-height);
-    vertex font_vertices[4] = {
-        {{-1.0, top, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
-        {{ 1.0, top, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
-        {{ 1.0,-1.0, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}},
-        {{-1.0,-1.0, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
-    };
-    glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray((GLuint)state->program_debug_font.a_pos_id);
-    glEnableVertexAttribArray((GLuint)state->program_debug_font.a_tex_coord_id);
-    glVertexAttribPointer((GLuint)state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer((GLuint)state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    {
+        glGenBuffers(1, &state->fps_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, state->fps_vbo);
+        float height = 14.0f / (540.0f / 2.0f);
+        float top = -(1-height);
+        vertex font_vertices[4] = {
+            {{-1.0, top, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
+            {{ 1.0, top, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
+            {{ 1.0,-1.0, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}},
+            {{-1.0,-1.0, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
+        };
+        glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
+    }
+
+    {
+        glGenBuffers(1, &state->menu.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, state->menu.vbo);
+        float height = 14.0f / (540.0f / 2.0f);
+        float width = 300.0f / (960.0f / 2.0f);
+        vertex font_vertices[4] = {
+            {{-width/2.0f, 0, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
+            {{ width/2.0f, 0, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
+            {{ width/2.0f,-height, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}},
+            {{-width/2.0f,-height, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
+        };
+        glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
+    }
 
     if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.zfi", sizeof(state->debug_font.zfi), state->debug_font.zfi))
     {
@@ -185,8 +218,20 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         fps_buffer_width, fps_buffer_height, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, state->fps_buffer);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glErrorAssert();
 
+    state->menu.menu_draw_buffer.memory = state->menu.menu_buffer;
+    state->menu.menu_draw_buffer.width = menu_buffer_width;
+    state->menu.menu_draw_buffer.height = menu_buffer_height;
+    state->menu.menu_draw_buffer.pitch = 4 * state->menu.menu_draw_buffer.width;
+
+    glGenTextures(1, &state->menu.texture_id);
+    glBindTexture(GL_TEXTURE_2D, state->menu.texture_id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+        (GLsizei)state->menu.menu_draw_buffer.width, (GLsizei)state->menu.menu_draw_buffer.height, 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, state->menu.menu_buffer);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glErrorAssert();
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -196,28 +241,32 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glDisable(GL_CULL_FACE);
 }
 
-void debug_output(game_state *state)
+void font_output(game_state *state, draw_buffer b, uint32_t vbo, uint32_t texture_id)
 {
     glUseProgram(state->program_debug_font.program);
-    glBindBuffer(GL_ARRAY_BUFFER, state->fps_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glEnableVertexAttribArray((GLuint)state->program_debug_font.a_pos_id);
     glEnableVertexAttribArray((GLuint)state->program_debug_font.a_tex_coord_id);
     glVertexAttribPointer((GLuint)state->program_debug_font.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
     glVertexAttribPointer((GLuint)state->program_debug_font.a_tex_coord_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
 
-    glBindTexture(GL_TEXTURE_2D, state->fps_texture_id);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
     glTexSubImage2D(GL_TEXTURE_2D,
         0,
         0,
         0,
-        fps_buffer_width,
-        fps_buffer_height,
+        (GLsizei)b.width,
+        (GLsizei)b.height,
         GL_RGBA,
         GL_UNSIGNED_BYTE,
-        state->fps_buffer);
-
+        b.memory);
     glUniform1i(state->fps_sampler_id, 0);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+
+void debug_output(game_state *state)
+{
+    font_output(state, state->fps_draw_buffer, state->fps_vbo, state->fps_texture_id);
 }
 
 GAME_UPDATE_AND_RENDER(demo_menu)
@@ -237,23 +286,70 @@ GAME_UPDATE_AND_RENDER(demo_menu)
         {
             memory->quit = true;
         }
-        if (controller->buttons.start.ended_down)
+        if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
-            state->demo = top_level_demo::RAINBOW;
+            state->menu.selected_index++;
+            state->menu.selected_index %= state->number_of_demos;
+        }
+        if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
+        {
+            if (state->menu.selected_index == 0)
+            {
+                state->menu.selected_index = state->number_of_demos - 1;
+            }
+            else
+            {
+                state->menu.selected_index--;
+            }
         }
         if (controller->buttons.move_right.ended_down)
         {
-            state->demo = top_level_demo::RAINBOW;
+            state->active_demo = (top_level_demo)state->menu.selected_index;
+        }
+        if (controller->buttons.start.ended_down)
+        {
+            state->active_demo = (top_level_demo)state->menu.selected_index;
         }
     }
 
-    memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
-    char msg[1024];
-    sprintf(msg, "MENU MENU MENU MENU");
-    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
-
     glClearColor(0.1f, 0.1f, 0.1f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->menu.vbo);
+    float height = 14.0f / (540.0f / 2.0f);
+    float width = 300.0f / (960.0f / 2.0f);
+    for (uint32_t menu_index = 0;
+            menu_index < state->number_of_demos;
+            ++menu_index)
+    {
+        float offset = -height * 2 * menu_index;
+        vertex font_vertices[4] = {
+            {{-width/2.0f, offset, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
+            {{ width/2.0f, offset, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
+            {{ width/2.0f,offset-height, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}},
+            {{-width/2.0f,offset-height, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
+        };
+        glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
+        memset(state->menu.menu_buffer, 0, sizeof(state->menu.menu_buffer));
+        write_to_buffer(&state->menu.menu_draw_buffer, &state->debug_font.font, state->demos[menu_index].name);
+        if (menu_index == state->menu.selected_index)
+        {
+            for (uint32_t *b = (uint32_t *)state->menu.menu_buffer;
+                    b < (uint32_t*)(state->menu.menu_buffer + sizeof(state->menu.menu_buffer));
+                    ++b)
+            {
+                uint8_t *subpixel = (uint8_t *)b;
+                uint8_t *alpha = subpixel + 3;
+                if (*alpha)
+                {
+                    *b = 0xffff00ff;
+                }
+            }
+        }
+        font_output(state, state->menu.menu_draw_buffer, state->menu.vbo, state->menu.texture_id);
+    }
+    memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, "MENU");
 
     sound_output->samples = 0;
 }
@@ -338,7 +434,7 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
         }
         if (controller->buttons.back.ended_down)
         {
-            state->demo = top_level_demo::MENU;
+            state->active_demo = top_level_demo::MENU;
         }
     }
 
@@ -374,6 +470,11 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
     state->rainbow.audio_offset = (state->rainbow.audio_offset + 1) % 60;
 }
 
+static const demo_data menu_items[] = {
+    {"Menu", demo_menu},
+    {"Rainbow", demo_rainbow},
+};
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -386,29 +487,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 #endif
     if (!memory->initialized)
     {
-        state->demo = top_level_demo::MENU;
+        state->active_demo = top_level_demo::MENU;
+        state->demos = (demo_data *)menu_items;
+        state->number_of_demos = harray_count(menu_items);
         gl_setup(ctx, memory);
         memory->initialized = 1;
     }
 
     glErrorAssert();
-    game_update_and_render_func *demo;
-    switch (state->demo)
-    {
-        case top_level_demo::MENU:
-        {
-            demo = demo_menu;
-        } break;
-        case top_level_demo::RAINBOW:
-        {
-            demo = demo_rainbow;
-        } break;
-        default:
-        {
-            memory->platform_fail(ctx, "Woah!?");
-            return;
-        } break;
-    }
+    game_update_and_render_func *demo = (game_update_and_render_func *)state->demos[(uint32_t)state->active_demo].func;
     demo(ctx, memory, input, sound_output);
     glErrorAssert();
     debug_output(state);
