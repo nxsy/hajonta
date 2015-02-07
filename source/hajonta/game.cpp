@@ -482,10 +482,10 @@ GAME_UPDATE_AND_RENDER(demo_collision)
     line2 line = {*lv, {-lvn.x,-lvn.y}};
 
     v2 i = {};
-    line_intersect(line, x_axis, &i);
+    bool x_intercepts = line_intersect(line, x_axis, &i);
 
     v2 j = {};
-    line_intersect(line, y_axis, &j);
+    bool y_intercepts = line_intersect(line, y_axis, &j);
 
     v2 x_axis_reflection = v2sub(v2add(line.position, line.direction), i);
     x_axis_reflection.y *= -1;
@@ -524,12 +524,12 @@ GAME_UPDATE_AND_RENDER(demo_collision)
         { { { j.x, j.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0} }, { 0.02f,0.007f,0,1.0}, },
 
         // reflection of x axis
-        { { { i.x, i.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}, }, { 0.02f,0.014f,0,0}, },
-        { { { x_axis_reflection.x, x_axis_reflection.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0} }, { 0.02f,0.014f,0,1.0}, },
+        { { { i.x, i.y, 0.0, 1.0}, {1.0, 0.0, 0.0, x_intercepts ? 1.0 : 0.0}, }, { 0.02f,0.014f,0,0}, },
+        { { { x_axis_reflection.x, x_axis_reflection.y, 0.0, 1.0}, {1.0, 0.0, 0.0, x_intercepts ? 1.0  : 0.0} }, { 0.02f,0.014f,0,1.0}, },
 
         // reflection of y axis
-        { { { j.x, j.y, 0.0, 1.0}, {1.0, 0.5, 0.0, 1.0}, }, { 0.02f,0.014f,0,0}, },
-        { { { y_axis_reflection.x, y_axis_reflection.y, 0.0, 1.0}, {1.0, 0.5, 0.0, 1.0} }, { 0.02f,0.014f,0,1.0}, },
+        { { { j.x, j.y, 0.0, 1.0}, {1.0, 0.5, 0.0, y_intercepts ? 1.0  : 0.0}, }, { 0.02f,0.014f,0,0}, },
+        { { { y_axis_reflection.x, y_axis_reflection.y, 0.0, 1.0}, {1.0, 0.5, 0.0, y_intercepts ? 1.0  : 0.0} }, { 0.02f,0.014f,0,1.0}, },
     };
 
     float ratio = 960.0f / 540.0f;

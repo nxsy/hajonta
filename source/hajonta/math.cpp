@@ -293,5 +293,9 @@ line_intersect(line2 ppr, line2 qqs, v2 *intersect_point)
     //float u = v2cross(q_minus_p, r) / r_cross_s;
 
     *intersect_point = v2add(p, v2mul(r, t));
-    return true;
+    if ((t >= 0) && (t <= 1))
+    {
+        return true;
+    }
+    return false;
 }
