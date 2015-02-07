@@ -425,15 +425,15 @@ GAME_UPDATE_AND_RENDER(demo_normals)
 
     float delta_t = input->delta_t;
     acceleration = v2normalize(acceleration);
-    acceleration = v2sub(acceleration, v2mul(state->normals.line_velocity, 5.0f));
+    acceleration = v2sub(acceleration, v2mul(demo_state->line_velocity, 5.0f));
     v2 movement = v2add(
             v2mul(acceleration, 0.5f * (delta_t * delta_t)),
-            v2mul(state->normals.line_velocity, delta_t)
+            v2mul(demo_state->line_velocity, delta_t)
     );
-    state->normals.line_ending = v2add(state->normals.line_ending, movement);
-    state->normals.line_velocity = v2add(
+    demo_state->line_ending = v2add(demo_state->line_ending, movement);
+    demo_state->line_velocity = v2add(
             v2mul(acceleration, delta_t),
-            state->normals.line_velocity
+            demo_state->line_velocity
     );
 
     glUseProgram(state->program_a.program);
@@ -474,7 +474,7 @@ GAME_UPDATE_AND_RENDER(demo_normals)
     };
 
     char msg[1024];
-    sprintf(msg, "L: %+.2f, %+.2f", state->normals.line_ending.x, state->normals.line_ending.y);
+    sprintf(msg, "L: %+.2f, %+.2f", demo_state->line_ending.x, demo_state->line_ending.y);
     sprintf(msg + strlen(msg), "NL: %+.2f, %+.2f", nlv.x, nlv.y);
     sprintf(msg + strlen(msg), "RHN: %+.2f, %+.2f", rhn.x, rhn.y);
     sprintf(msg + strlen(msg), "LHN: %+.2f, %+.2f", lhn.x, lhn.y);
