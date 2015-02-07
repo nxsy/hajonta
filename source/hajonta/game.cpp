@@ -20,6 +20,7 @@
 #include "hajonta/platform/common.h"
 #include "hajonta/programs/a.h"
 #include "hajonta/programs/debug_font.h"
+#include "hajonta/programs/b.h"
 
 #include "hajonta/math.cpp"
 #include "hajonta/bmp.cpp"
@@ -88,6 +89,7 @@ enum struct top_level_demo {
     MENU,
     RAINBOW,
     NORMALS,
+    COLLISION,
 };
 
 struct demo_data {
@@ -113,6 +115,13 @@ struct demo_normals_state
     v2 line_velocity;
 };
 
+struct demo_collision_state
+{
+    uint32_t vbo;
+    v2 line_starting;
+    v2 line_velocity;
+};
+
 #define menu_buffer_width 300
 #define menu_buffer_height 14
 struct demo_menu_state
@@ -132,6 +141,7 @@ struct game_state
     uint32_t number_of_demos;
 
     a_program_struct program_a;
+    b_program_struct program_b;
     debug_font_program_struct program_debug_font;
 
     uint32_t vao;
@@ -139,6 +149,7 @@ struct game_state
     demo_menu_state menu;
     demo_rainbow_state rainbow;
     demo_normals_state normals;
+    demo_collision_state collision;
 
     kenpixel_future_14 debug_font;
     uint8_t fps_buffer[4 * fps_buffer_width * fps_buffer_height];
@@ -154,7 +165,14 @@ struct vertex
     float color[4];
 };
 
-void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
+struct vertex_with_style
+{
+    vertex v;
+    float style[4];
+};
+
+bool
+gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
 {
     glErrorAssert();
     game_state *state = (game_state *)memory->memory;
@@ -172,13 +190,19 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     loaded = a_program(&state->program_a, ctx, memory);
     if (!loaded)
     {
-        return;
+        return loaded;
+    }
+
+    loaded = b_program(&state->program_b, ctx, memory);
+    if (!loaded)
+    {
+        return loaded;
     }
 
     loaded = debug_font_program(&state->program_debug_font, ctx, memory);
     if (!loaded)
     {
-        return;
+        return loaded;
     }
     glErrorAssert();
 
@@ -215,12 +239,12 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.zfi", sizeof(state->debug_font.zfi), state->debug_font.zfi))
     {
         memory->platform_fail(ctx, "Failed to open zfi file");
-        return;
+        return false;
     }
     if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.bmp", sizeof(state->debug_font.bmp), state->debug_font.bmp))
     {
         memory->platform_fail(ctx, "Failed to open bmp file");
-        return;
+        return false;
     }
     load_font(state->debug_font.zfi, state->debug_font.bmp, &state->debug_font.font, ctx, memory);
     state->fps_draw_buffer.memory = state->fps_buffer;
@@ -257,6 +281,8 @@ void gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_CULL_FACE);
+
+    return true;
 }
 
 void font_output(game_state *state, draw_buffer b, uint32_t vbo, uint32_t texture_id)
@@ -372,6 +398,157 @@ GAME_UPDATE_AND_RENDER(demo_menu)
     sound_output->samples = 0;
 }
 
+
+GAME_UPDATE_AND_RENDER(demo_collision)
+{
+    game_state *state = (game_state *)memory->memory;
+    demo_collision_state *demo_state = &state->collision;
+
+    glClearColor(0.1f, 0.0f, 0.0f, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!demo_state->vbo)
+    {
+        glErrorAssert();
+        glGenBuffers(1, &demo_state->vbo);
+        glErrorAssert();
+
+        demo_state->line_starting = {-0.5f, -0.5f};
+    }
+
+    v2 acceleration = {};
+
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
+    {
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+
+        game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.back.ended_down)
+        {
+            state->active_demo = top_level_demo::MENU;
+        }
+        if (controller->buttons.move_up.ended_down)
+        {
+            acceleration.y += 1.0f;
+        }
+        if (controller->buttons.move_down.ended_down)
+        {
+            acceleration.y -= 1.0f;
+        }
+        if (controller->buttons.move_left.ended_down)
+        {
+            acceleration.x -= 1.0f;
+        }
+        if (controller->buttons.move_right.ended_down)
+        {
+            acceleration.x += 1.0f;
+        }
+    }
+
+    float delta_t = input->delta_t;
+    acceleration = v2normalize(acceleration);
+    acceleration = v2sub(acceleration, v2mul(demo_state->line_velocity, 5.0f));
+    v2 movement = v2add(
+            v2mul(acceleration, 0.5f * (delta_t * delta_t)),
+            v2mul(demo_state->line_velocity, delta_t)
+    );
+    demo_state->line_starting = v2add(demo_state->line_starting, movement);
+    demo_state->line_velocity = v2add(
+            v2mul(acceleration, delta_t),
+            demo_state->line_velocity
+    );
+
+    glUseProgram(state->program_b.program);
+    glBindBuffer(GL_ARRAY_BUFFER, demo_state->vbo);
+
+    glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
+    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), 0);
+    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
+    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
+
+    v2 *lv = &demo_state->line_starting;
+    v2 lvn = v2normalize({lv->x-0.1f, lv->y + 0.1f});
+    v2 lve = v2sub(*lv, lvn);
+
+    line2 x_axis = { {-2, 0}, {4, 0} };
+    line2 y_axis = { {0, -2}, {0, 4} };
+    line2 line = {*lv, {-lvn.x,-lvn.y}};
+
+    v2 i = {};
+    line_intersect(line, x_axis, &i);
+
+    v2 j = {};
+    line_intersect(line, y_axis, &j);
+
+    v2 x_axis_reflection = v2sub(v2add(line.position, line.direction), i);
+    x_axis_reflection.y *= -1;
+    x_axis_reflection = v2add(i, x_axis_reflection);
+
+    v2 y_axis_reflection = v2sub(v2add(line.position, line.direction), j);
+    y_axis_reflection.x *= -1;
+    y_axis_reflection = v2add(j, y_axis_reflection);
+
+    vertex_with_style vertices[] = {
+        // dotted y axis +
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { 0, 2, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
+        // dotted y axis -
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { 0, -2, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
+        // dotted x axis -
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { -2, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+        // dotted x axis +
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { 2, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
+        // line
+        { { { lv->x, lv->y, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}, }, { 0,0,0,0}, },
+        { { { lve.x, lve.y, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0} }, { 0,0,0,0}, },
+
+        // line to x axis
+        { { { lv->x, lv->y, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}, }, { 0.02f,0.014f,0,0}, },
+        { { { i.x, i.y, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0} }, { 0.02f,0.014f,0,1.0}, },
+
+        // line to y axis
+        { { { lv->x, lv->y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}, }, { 0.02f,0.007f,0,0}, },
+        { { { j.x, j.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0} }, { 0.02f,0.007f,0,1.0}, },
+
+        // reflection of x axis
+        { { { i.x, i.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}, }, { 0.02f,0.014f,0,0}, },
+        { { { x_axis_reflection.x, x_axis_reflection.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0} }, { 0.02f,0.014f,0,1.0}, },
+
+        // reflection of y axis
+        { { { j.x, j.y, 0.0, 1.0}, {1.0, 0.5, 0.0, 1.0}, }, { 0.02f,0.014f,0,0}, },
+        { { { y_axis_reflection.x, y_axis_reflection.y, 0.0, 1.0}, {1.0, 0.5, 0.0, 1.0} }, { 0.02f,0.014f,0,1.0}, },
+    };
+
+    float ratio = 960.0f / 540.0f;
+    for (uint32_t vi = 0;
+            vi < harray_count(vertices);
+            ++vi)
+    {
+        vertex_with_style *v = vertices + vi;
+        v->v.position[0] = v->v.position[0] / ratio * 1.5f;
+        v->v.position[1] = v->v.position[1] * 1.5f;
+    }
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    float position[] = {0,0};
+    glUniform2fv(state->program_b.u_offset_id, 1, (float *)position);
+    glDrawArrays(GL_LINES, 0, harray_count(vertices));
+}
+
+
 GAME_UPDATE_AND_RENDER(demo_normals)
 {
     game_state *state = (game_state *)memory->memory;
@@ -436,13 +613,15 @@ GAME_UPDATE_AND_RENDER(demo_normals)
             demo_state->line_velocity
     );
 
-    glUseProgram(state->program_a.program);
+    glUseProgram(state->program_b.program);
     glBindBuffer(GL_ARRAY_BUFFER, demo_state->vbo);
 
-    glEnableVertexAttribArray((GLuint)state->program_a.a_pos_id);
-    glEnableVertexAttribArray((GLuint)state->program_a.a_color_id);
-    glVertexAttribPointer((GLuint)state->program_a.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-    glVertexAttribPointer((GLuint)state->program_a.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, color));
+    glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
+    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), 0);
+    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
+    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
 
     v2 *lv = &demo_state->line_ending;
 
@@ -452,25 +631,42 @@ GAME_UPDATE_AND_RENDER(demo_normals)
     v2 lhn = v2normalize({ lv->y, -lv->x});
 
     v2 nlv = v2normalize(*lv);
-    v2 nlvrh = v2add(nlv, v2mul(rhn, 0.1f));
-    v2 nlvlh = v2add(nlv, v2mul(lhn, 0.1f));
+    v2 nlvrh = v2add(nlv, v2mul(rhn, 0.05f));
+    v2 nlvlh = v2add(nlv, v2mul(lhn, 0.05f));
 
     v2 xproj = v2projection(v2{1,0}, *lv);
     v2 yproj = v2projection(v2{0,1}, *lv);
 
-    vertex vertices[] = {
-        {{ 0.0, 0.0, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
-        {{ rhn.x, rhn.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
-        {{ 0.0, 0.0, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
-        {{ lhn.x, lhn.y, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
-        {{ nlvrh.x, nlvrh.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}},
-        {{ nlvlh.x, nlvlh.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}},
-        {{ 0.0, 0.0, 0.0, 1.0}, {0.0, 1.0, 1.0, 1.0}},
-        {{ xproj.x, xproj.y, 0.0, 1.0}, {0.0, 1.0, 1.0, 1.0}},
-        {{ 0.0, 0.0, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
-        {{ yproj.x, yproj.y, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
-        {{ 0.0, 0.0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}},
-        {{ lv->x, lv->y, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}},
+    vertex_with_style vertices[] = {
+        {{{ 0, 0.0, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 0.0f}},
+        {{{ -10, 0, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 1.0f} },
+
+        {{{ 0, 0.0, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 0.0f}},
+        {{{ 10, 0, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 1.0f} },
+
+        {{{ 0, 0, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 0.0f}},
+        {{{ 0, 10, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 1.0f} },
+
+        {{{ 0, 0, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 0.0f}},
+        {{{ 0, -10, 0.0, 1.0}, {0.5, 0.5, 0.5, 0.5}}, { 0.02f, 0.003f, 0.0f, 1.0f} },
+
+        {{{ 0.0, 0.0, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}}},
+        {{{ rhn.x, rhn.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}}},
+
+        {{{ 0.0, 0.0, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}}},
+        {{{ lhn.x, lhn.y, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}}},
+
+        {{{ nlvrh.x, nlvrh.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}}},
+        {{{ nlvlh.x, nlvlh.y, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0}}},
+
+        {{{ 0.0, 0.0, 0.0, 1.0}, {0.0, 1.0, 1.0, 1.0}}},
+        {{{ xproj.x, xproj.y, 0.0, 1.0}, {0.0, 1.0, 1.0, 1.0}}},
+
+        {{{ 0.0, 0.0, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}}},
+        {{{ yproj.x, yproj.y, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}}},
+
+        {{{ 0.0, 0.0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}}},
+        {{{ lv->x, lv->y, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}}},
     };
 
     char msg[1024];
@@ -484,14 +680,14 @@ GAME_UPDATE_AND_RENDER(demo_normals)
             vi < harray_count(vertices);
             ++vi)
     {
-        vertex *v = vertices + vi;
-        v->position[0] = v->position[0] / ratio * 0.3f;
-        v->position[1] = v->position[1] * 0.3f;
+        vertex_with_style *v = vertices + vi;
+        v->v.position[0] = v->v.position[0] / ratio * 0.3f;
+        v->v.position[1] = v->v.position[1] * 0.3f;
     }
 
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     float position[] = {0,0};
-    glUniform2fv(state->program_a.u_offset_id, 1, (float *)position);
+    glUniform2fv(state->program_b.u_offset_id, 1, (float *)position);
     glDrawArrays(GL_LINES, 0, harray_count(vertices));
 }
 
@@ -610,6 +806,7 @@ static const demo_data menu_items[] = {
     {"Menu", demo_menu},
     {"Rainbow", demo_rainbow},
     {"Normals", demo_normals},
+    {"Collision", demo_collision},
 };
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -627,7 +824,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->active_demo = top_level_demo::MENU;
         state->demos = (demo_data *)menu_items;
         state->number_of_demos = harray_count(menu_items);
-        gl_setup(ctx, memory);
+        if(!gl_setup(ctx, memory))
+        {
+            return;
+        }
         memory->initialized = 1;
     }
 

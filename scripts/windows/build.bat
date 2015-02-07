@@ -12,6 +12,7 @@ set CPPFLAGS=%includes% /FC /nologo /Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd451
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\program.exe ..\source hajonta\programs a
 .\program.exe ..\source hajonta\programs debug_font
+.\program.exe ..\source hajonta\programs b
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\unit.exe
 

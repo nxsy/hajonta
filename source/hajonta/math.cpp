@@ -61,6 +61,12 @@ v2dot(v2 left, v2 right)
     return result;
 }
 
+float
+v2cross(v2 p, v2 q)
+{
+    return p.x * q.y - p.y * q.x;
+}
+
 v2
 v2projection(v2 q, v2 p)
 {
@@ -260,5 +266,32 @@ v3unittests()
 
     T( (v3{0,0,0}), (v3cross(i, i)) );
 
+    return true;
+}
+
+struct line2
+{
+    v2 position;
+    v2 direction;
+};
+
+bool
+line_intersect(line2 ppr, line2 qqs, v2 *intersect_point)
+{
+    /*
+    t = (q − p) × s / (r × s)
+    u = (q − p) × r / (r × s)
+    */
+    v2 p = ppr.position;
+    v2 r = ppr.direction;
+    v2 q = qqs.position;
+    v2 s = qqs.direction;
+
+    v2 q_minus_p = v2sub(q, p);
+    float r_cross_s = v2cross(r, s);
+    float t = v2cross(q_minus_p, s) / r_cross_s;
+    //float u = v2cross(q_minus_p, r) / r_cross_s;
+
+    *intersect_point = v2add(p, v2mul(r, t));
     return true;
 }
