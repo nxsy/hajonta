@@ -85,13 +85,6 @@ glErrorAssert()
 #define fps_buffer_width 960
 #define fps_buffer_height 14
 
-enum struct top_level_demo {
-    MENU,
-    RAINBOW,
-    NORMALS,
-    COLLISION,
-};
-
 struct demo_data {
     char *name;
     void *func;
@@ -122,6 +115,14 @@ struct demo_collision_state
     v2 line_velocity;
 };
 
+struct demo_bounce_state
+{
+    uint32_t vbo;
+    v2 velocity;
+    v2 position;
+    line2 l;
+};
+
 #define menu_buffer_width 300
 #define menu_buffer_height 14
 struct demo_menu_state
@@ -136,7 +137,7 @@ struct demo_menu_state
 
 struct game_state
 {
-    top_level_demo active_demo;
+    uint32_t active_demo;
     demo_data *demos;
     uint32_t number_of_demos;
 
@@ -150,6 +151,7 @@ struct game_state
     demo_rainbow_state rainbow;
     demo_normals_state normals;
     demo_collision_state collision;
+    demo_bounce_state bounce;
 
     kenpixel_future_14 debug_font;
     uint8_t fps_buffer[4 * fps_buffer_width * fps_buffer_height];
@@ -348,11 +350,11 @@ GAME_UPDATE_AND_RENDER(demo_menu)
         }
         if (controller->buttons.move_right.ended_down)
         {
-            state->active_demo = (top_level_demo)state->menu.selected_index;
+            state->active_demo = state->menu.selected_index;
         }
         if (controller->buttons.start.ended_down)
         {
-            state->active_demo = (top_level_demo)state->menu.selected_index;
+            state->active_demo = state->menu.selected_index;
         }
     }
 
@@ -398,6 +400,173 @@ GAME_UPDATE_AND_RENDER(demo_menu)
     sound_output->samples = 0;
 }
 
+GAME_UPDATE_AND_RENDER(demo_bounce)
+{
+    glPointSize(5.0f);
+    game_state *state = (game_state *)memory->memory;
+    demo_bounce_state *demo_state = &state->bounce;
+
+    glClearColor(0.1f, 0.0f, 0.0f, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!demo_state->vbo)
+    {
+        glErrorAssert();
+        glGenBuffers(1, &demo_state->vbo);
+        glErrorAssert();
+
+        demo_state->position = {-5,10};
+        demo_state->velocity = {0.5f,0};
+        demo_state->l = { {-10,10},{20,-20} };
+    }
+
+    float delta_t = input->delta_t;
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
+    {
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+
+        game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.back.ended_down)
+        {
+            state->active_demo = 0;
+        }
+        if (controller->buttons.move_up.ended_down)
+        {
+            demo_state->l.position.y += 1.0f * delta_t;
+            demo_state->l.direction.y -= 2.0f * delta_t;
+        }
+        if (controller->buttons.move_down.ended_down)
+        {
+            demo_state->l.position.y -= 1.0f * delta_t;
+            demo_state->l.direction.y += 2.0f * delta_t;
+        }
+    }
+
+
+    v2 acceleration = {0,-9.8f};
+    acceleration = v2normalize(acceleration);
+    acceleration = v2sub(acceleration, v2mul(demo_state->velocity, 0.05f));
+    v2 movement = v2add(
+            v2mul(acceleration, 0.5f * (delta_t * delta_t)),
+            v2mul(demo_state->velocity, delta_t)
+    );
+    demo_state->velocity = v2add(
+            v2mul(acceleration, delta_t),
+            demo_state->velocity
+    );
+
+    int num_intersects = 0;
+    while (v2length(movement) > 0)
+    {
+        if (num_intersects++ > 1)
+        {
+            hassert(!"Two intersects!");
+        }
+        line2 movement_line = {demo_state->position, movement};
+        v2 intersect_point;
+        if (!line_intersect(movement_line, demo_state->l, &intersect_point))
+        {
+            demo_state->position = v2add(demo_state->position, movement);
+            break;
+        }
+        else
+        {
+            v2 k = intersect_point;
+            v2 used_movement = v2sub(intersect_point, demo_state->position);
+            demo_state->position = v2add(demo_state->position, used_movement);
+
+            v2 bounce_unused_direction = v2sub(v2add(movement_line.position, movement_line.direction), k);
+            v2 bouncing_projection = v2projection(demo_state->l.direction, bounce_unused_direction);
+
+            v2 bouncing_reflection = v2sub(bouncing_projection, bounce_unused_direction);
+            bouncing_reflection = v2add(bouncing_projection, bouncing_reflection);
+            bouncing_reflection = v2normalize(bouncing_reflection);
+
+            movement = v2mul(bouncing_reflection, v2length(bounce_unused_direction));
+            v2 epsilon_movement = v2mul(bouncing_reflection, 0.0001f);
+            demo_state->velocity = v2mul(bouncing_reflection, v2length(demo_state->velocity));
+
+            demo_state->position = v2add(demo_state->position, epsilon_movement);
+        }
+    }
+
+    glUseProgram(state->program_b.program);
+    glBindBuffer(GL_ARRAY_BUFFER, demo_state->vbo);
+
+    glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
+    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), 0);
+    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
+    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
+
+    vertex_with_style vertices[] = {
+        // dotted y axis +
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { 0, 2, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
+        // dotted y axis -
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { 0, -2, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
+        // dotted x axis -
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { -2, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+        // dotted x axis +
+        { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
+        { { { 2, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
+        // line
+        { { { demo_state->l.position.x / 10, demo_state->l.position.y / 10, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}, }, { 0,0,0,0}, },
+        { { { (demo_state->l.position.x + demo_state->l.direction.x) / 10, (demo_state->l.position.y + demo_state->l.direction.y) / 10, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0} }, { 0,0,0,0}, },
+    };
+
+    float ratio = 960.0f / 540.0f;
+    for (uint32_t vi = 0;
+            vi < harray_count(vertices);
+            ++vi)
+    {
+        vertex_with_style *v = vertices + vi;
+        v->v.position[0] = v->v.position[0] / ratio * 1.5f;
+        v->v.position[1] = v->v.position[1] * 1.5f;
+    }
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    float position[] = {0,0};
+    glUniform2fv(state->program_b.u_offset_id, 1, (float *)position);
+    glDrawArrays(GL_LINES, 0, harray_count(vertices));
+
+    vertex_with_style point_vertices[] = {
+        { { { demo_state->position.x/10.0f, demo_state->position.y/10.0f, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0, 0, 0, 0}, },
+    };
+    for (uint32_t vi = 0;
+            vi < harray_count(point_vertices);
+            ++vi)
+    {
+        vertex_with_style *v = point_vertices + vi;
+        v->v.position[0] = v->v.position[0] / ratio;
+    }
+    glBufferData(GL_ARRAY_BUFFER, sizeof(point_vertices), point_vertices, GL_STATIC_DRAW);
+    glDrawArrays(GL_POINTS, 0, harray_count(vertices));
+
+    memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
+    char msg[1024];
+    sprintf(msg, "P: %+.2f, %+.2f", demo_state->position.x, demo_state->position.y);
+    sprintf(msg + strlen(msg), " V: %+.2f, %+.2f", demo_state->velocity.x, demo_state->velocity.y);
+    sprintf(msg + strlen(msg), " A: %+.2f, %+.2f", acceleration.x, acceleration.y);
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
+
+    if (demo_state->position.y < -10)
+    {
+        demo_state->position = {-5,10};
+        demo_state->velocity = {0.5f,0};
+    }
+}
 
 GAME_UPDATE_AND_RENDER(demo_collision)
 {
@@ -430,7 +599,7 @@ GAME_UPDATE_AND_RENDER(demo_collision)
         game_controller_state *controller = &input->controllers[i];
         if (controller->buttons.back.ended_down)
         {
-            state->active_demo = top_level_demo::MENU;
+            state->active_demo = 0;
         }
         if (controller->buttons.move_up.ended_down)
         {
@@ -481,11 +650,17 @@ GAME_UPDATE_AND_RENDER(demo_collision)
     line2 y_axis = { {0, -2}, {0, 4} };
     line2 line = {*lv, {-lvn.x,-lvn.y}};
 
+    line2 bouncing_line = { {-1, -2}, {2, 4} };
+
     v2 i = {};
     bool x_intercepts = line_intersect(line, x_axis, &i);
 
     v2 j = {};
     bool y_intercepts = line_intersect(line, y_axis, &j);
+
+    v2 k = {};
+    bool bouncing_intercepts = line_intersect(line, bouncing_line, &k);
+    bouncing_intercepts = bouncing_intercepts;
 
     v2 x_axis_reflection = v2sub(v2add(line.position, line.direction), i);
     x_axis_reflection.y *= -1;
@@ -494,6 +669,14 @@ GAME_UPDATE_AND_RENDER(demo_collision)
     v2 y_axis_reflection = v2sub(v2add(line.position, line.direction), j);
     y_axis_reflection.x *= -1;
     y_axis_reflection = v2add(j, y_axis_reflection);
+
+    v2 bounce_unused_direction = v2sub(v2add(line.position, line.direction), k);
+    v2 bouncing_projection = v2projection(bouncing_line.direction, bounce_unused_direction);
+
+    v2 bouncing_reflection = v2sub(bouncing_projection, v2add(line.position, line.direction));
+    bouncing_reflection = v2add(bouncing_projection, bouncing_reflection);
+    bouncing_reflection = v2normalize(bouncing_reflection);
+    bouncing_reflection = v2mul(bouncing_reflection, v2length(bounce_unused_direction));
 
     vertex_with_style vertices[] = {
         // dotted y axis +
@@ -524,12 +707,24 @@ GAME_UPDATE_AND_RENDER(demo_collision)
         { { { j.x, j.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0} }, { 0.02f,0.007f,0,1.0}, },
 
         // reflection of x axis
-        { { { i.x, i.y, 0.0, 1.0}, {1.0, 0.0, 0.0, x_intercepts ? 1.0 : 0.0}, }, { 0.02f,0.014f,0,0}, },
-        { { { x_axis_reflection.x, x_axis_reflection.y, 0.0, 1.0}, {1.0, 0.0, 0.0, x_intercepts ? 1.0  : 0.0} }, { 0.02f,0.014f,0,1.0}, },
+        { { { i.x, i.y, 0.0, 1.0}, {1.0, 0.0, 0.0, x_intercepts ? 1.0f : 0.0f}, }, { 0.02f,0.014f,0,0}, },
+        { { { x_axis_reflection.x, x_axis_reflection.y, 0.0, 1.0}, {1.0, 0.0, 0.0, x_intercepts ? 1.0f : 0.0f} }, { 0.02f,0.014f,0,1.0}, },
 
         // reflection of y axis
-        { { { j.x, j.y, 0.0, 1.0}, {1.0, 0.5, 0.0, y_intercepts ? 1.0  : 0.0}, }, { 0.02f,0.014f,0,0}, },
-        { { { y_axis_reflection.x, y_axis_reflection.y, 0.0, 1.0}, {1.0, 0.5, 0.0, y_intercepts ? 1.0  : 0.0} }, { 0.02f,0.014f,0,1.0}, },
+        { { { j.x, j.y, 0.0, 1.0}, {1.0, 0.5, 0.0, y_intercepts ? 1.0f : 0.0f}, }, { 0.02f,0.014f,0,0}, },
+        { { { y_axis_reflection.x, y_axis_reflection.y, 0.0, 1.0}, {1.0, 0.5, 0.0, y_intercepts ? 1.0f : 0.0f} }, { 0.02f,0.014f,0,1.0}, },
+
+        // bouncing_line
+        { { { bouncing_line.position.x, bouncing_line.position.y, 0.0, 1.0}, {1.0, 0.5, 0.5, 1.0f}, }, { 0.02f,0.014f,0,0}, },
+        { { { bouncing_line.position.x + bouncing_line.direction.x, bouncing_line.position.y + bouncing_line.direction.y, 0.0, 1.0}, {1.0, 0.5, 0.5, 1.0f} }, { 0.02f,0.014f,0,1.0}, },
+
+        // bouncing_line projection
+        { { { k.x, k.y, 0.0, 1.0}, {0.5, 0.5, 1.0, 1.0f}, }, { 0.02f,0.014f,0,0}, },
+        { { { k.x+bouncing_projection.x, k.y+bouncing_projection.y, 0.0, 1.0}, {0.5, 0.5, 1.0, 1.0f} }, { 0.02f,0.014f,0,1.0}, },
+
+        // bouncing_line projection
+        { { { k.x, k.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0f}, }, { 0.02f,0.014f,0,0}, },
+        { { { k.x+bouncing_reflection.x, k.y+bouncing_reflection.y, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0f} }, { 0.02f,0.014f,0,1.0}, },
     };
 
     float ratio = 960.0f / 540.0f;
@@ -580,7 +775,7 @@ GAME_UPDATE_AND_RENDER(demo_normals)
         game_controller_state *controller = &input->controllers[i];
         if (controller->buttons.back.ended_down)
         {
-            state->active_demo = top_level_demo::MENU;
+            state->active_demo = 0;
         }
         if (controller->buttons.move_up.ended_down)
         {
@@ -766,7 +961,7 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
         }
         if (controller->buttons.back.ended_down)
         {
-            state->active_demo = top_level_demo::MENU;
+            state->active_demo = 0;
         }
     }
 
@@ -807,6 +1002,7 @@ static const demo_data menu_items[] = {
     {"Rainbow", demo_rainbow},
     {"Normals", demo_normals},
     {"Collision", demo_collision},
+    {"Bounce", demo_bounce},
 };
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -821,7 +1017,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 #endif
     if (!memory->initialized)
     {
-        state->active_demo = top_level_demo::MENU;
+        state->active_demo = 0;
         state->demos = (demo_data *)menu_items;
         state->number_of_demos = harray_count(menu_items);
         if(!gl_setup(ctx, memory))
