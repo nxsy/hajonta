@@ -329,6 +329,62 @@ union v4
     float E[4];
 };
 
+v4
+v4add(v4 left, v4 right)
+{
+    v4 result = {left.x + right.x, left.y + right.y, left.z + right.z, left.w + right.w};
+    return result;
+}
+
+v4
+v4sub(v4 left, v4 right)
+{
+    v4 result = {left.x - right.x, left.y - right.y, left.z - right.z, left.w - right.w};
+    return result;
+}
+
+v4
+v4mul(v4 v, float multiplier)
+{
+    v4 result = {v.x * multiplier, v.y * multiplier, v.z * multiplier, v.w * multiplier};
+    return result;
+}
+
+v4
+v4div(v4 v, float divisor)
+{
+    v4 result = {v.x / divisor, v.y / divisor, v.z / divisor, v.w / divisor};
+    return result;
+}
+
+float
+v4length(v4 v)
+{
+    float result = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+    return result;
+}
+
+v4
+v4normalize(v4 v)
+{
+    float length = v4length(v);
+    if (length == 0)
+    {
+        return v;
+    }
+
+    v4 result = {v.x / length, v.y / length, v.z / length, v.w / length};
+    return result;
+}
+
+float
+v4dot(v4 left, v4 right)
+{
+    float result = (left.x * right.x + left.y * right.y + left.z * right.z + left.w * right.w);
+    return result;
+}
+
+
 struct m4
 {
     v4 cols[4];
@@ -424,6 +480,72 @@ m4identical(const m4 left, const m4 right)
     return true;
 }
 
+m4
+m4add(const m4 left, const m4 right)
+{
+    m4 result = {};
+
+    for (uint32_t col = 0;
+            col < harray_count(left.cols);
+            ++col)
+    {
+        for (uint32_t row = 0;
+                row < harray_count(left.cols[0].E);
+                ++row)
+        {
+            result.cols[col].E[row] = left.cols[col].E[row] + right.cols[col].E[row];
+        }
+    }
+
+    return result;
+}
+
+m4
+m4sub(const m4 left, const m4 right)
+{
+    m4 result = {};
+
+    for (uint32_t col = 0;
+            col < harray_count(left.cols);
+            ++col)
+    {
+        for (uint32_t row = 0;
+                row < harray_count(left.cols[0].E);
+                ++row)
+        {
+            result.cols[col].E[row] = left.cols[col].E[row] - right.cols[col].E[row];
+        }
+    }
+
+    return result;
+}
+
+m4
+m4mul(const m4 left, const m4 right)
+{
+    m4 result = {};
+    uint32_t ncols = harray_count(left.cols);
+    uint32_t nrows = harray_count(left.cols[0].E);
+    for (uint32_t col = 0;
+            col < ncols;
+            ++col)
+    {
+        for (uint32_t row = 0;
+                row < nrows;
+                ++row)
+        {
+            v4 lrow = {
+                left.cols[0].E[row],
+                left.cols[1].E[row],
+                left.cols[2].E[row],
+                left.cols[3].E[row],
+            };
+            result.cols[col].E[row] = v4dot(lrow, right.cols[col]);
+        }
+    }
+    return result;
+}
+
 void
 m4sprint(char *msg, uint32_t msg_size, const m4 left)
 {
@@ -488,5 +610,43 @@ m4unittests()
     T( (dic.cols[0].E[0]), 2.0f );
     m4 dic2 = m4mul(dic, 2.0f);
     T( (dic2.cols[0].E[0]), 4.0f );
+    m4 ii = m4add(i, i);
+    T( ii, dic );
+    m4 iiminusi = m4sub(ii, i);
+    T( iiminusi, i );
+
+    m4 m4mul1 = {};
+    m4mul1.cols[0] = {1,4,2,3};
+    m4mul1.cols[1] = {2,3,1,2};
+    m4mul1.cols[2] = {3,2,4,1};
+    m4mul1.cols[3] = {4,1,3,4};
+    m4 m4mule = {};
+    m4mule.cols[0] = {27,23,23,25};
+    m4mule.cols[1] = {19,21,17,21};
+    m4mule.cols[2] = {23,27,27,21};
+    m4mule.cols[3] = {31,29,33,33};
+    m4 m4mulgot = m4mul(m4mul1, m4mul1);
+    T( m4mule, m4mulgot );
+
+    m4 m4mul2 = {};
+    m4mul2.cols[0] = {4,1,3,2};
+    m4mul2.cols[1] = {3,2,4,3};
+    m4mul2.cols[2] = {2,3,1,4};
+    m4mul2.cols[3] = {1,4,2,1};
+
+    m4 m4mule2 = {};
+    m4mule2.cols[0] = {23,27,27,25};
+    m4mule2.cols[1] = {21,19,23,19};
+    m4mule2.cols[2] = {27,23,23,29};
+    m4mule2.cols[3] = {29,31,27,27};
+    m4 m4mulgot2 = m4mul(m4mul2, m4mul1);
+    T( m4mule2, m4mulgot2 );
+
+    m4 ixi = m4mul(i, i);
+    T ( i, ixi );
+
+    m4 m4mul1xi = m4mul(m4mul1, i);
+    T ( m4mul1, m4mul1xi );
+
     return true;
 }
