@@ -416,11 +416,11 @@ void
 m4transpose(m4 *matrix)
 {
     for (uint32_t col = 0;
-            col < harray_count(matrix[0].cols);
+            col < 4;
             ++col)
     {
         for (uint32_t row = 0;
-                row < harray_count(matrix[0].cols[0].E);
+                row < col+1;
                 ++row)
         {
             float t = matrix->cols[col].E[row];
@@ -602,8 +602,8 @@ m4unittests()
     T( i, itransposed );
 
     ic.cols[0].E[1] = 2.0;
-    itransposed = m4transposed(i);
-    T( (itransposed.cols[1].E[0]), (i.cols[0].E[1]) );
+    itransposed = m4transposed(ic);
+    T( (itransposed.cols[1].E[0]), (ic.cols[0].E[1]) );
 
     m4copy(&ic, i);
     m4 dic = m4mul(i, 2.0f);
@@ -641,6 +641,21 @@ m4unittests()
     m4mule2.cols[3] = {29,31,27,27};
     m4 m4mulgot2 = m4mul(m4mul2, m4mul1);
     T( m4mule2, m4mulgot2 );
+
+    m4 m4mul1t = m4transposed(m4mul1);
+
+    m4 m4mul1et = {};
+    m4mul1et.cols[0] = {1,2,3,4};
+    m4mul1et.cols[1] = {4,3,2,1};
+    m4mul1et.cols[2] = {2,1,4,3};
+    m4mul1et.cols[3] = {3,2,1,4};
+    T (m4mul1et, m4mul1t );
+
+    // (FG)ᵀ = GᵀFᵀ
+    m4 m4mul2t = m4transposed(m4mul2);
+    m4 m4mule2t = m4transposed(m4mule2);
+    m4 m4mulgot2t = m4mul(m4mul1t, m4mul2t);
+    T ( m4mule2t, m4mulgot2t );
 
     m4 ixi = m4mul(i, i);
     T ( i, ixi );
