@@ -186,6 +186,10 @@ main(int argc, char **argv)
 
     sprintf(buffer, "bool %s_program(%s_program_struct *state, hajonta_thread_context *ctx, platform_memory *memory)\n{\n", program_name, program_name);
     fwrite(buffer, 1, strlen(buffer), p);
+
+    sprintf(buffer, "    #define PROGRAM_NAME \"%s\"\n", program_name);
+    fwrite(buffer, 1, strlen(buffer), p);
+
     strcpy(buffer, "    state->program = glCreateProgram();\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
@@ -284,7 +288,7 @@ main(int argc, char **argv)
         if (!compiled)
         {
             char info_log[1024] = {};
-            strcpy(info_log, "vertex: ");
+            strcpy(info_log, PROGRAM_NAME " vertex: ");
             glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
@@ -303,7 +307,7 @@ main(int argc, char **argv)
         if (!compiled)
         {
             char info_log[1024] = {};
-            strcpy(info_log, "fragment: ");
+            strcpy(info_log, PROGRAM_NAME " fragment: ");
             glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
@@ -363,6 +367,7 @@ main(int argc, char **argv)
     char midbuffer2[] = R"EOF(
     return true;
 }
+#undef PROGRAM_NAME
 )EOF";
     fwrite(midbuffer2, 1, strlen(midbuffer2), p);
     fclose(p);

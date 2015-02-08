@@ -659,8 +659,7 @@ GAME_UPDATE_AND_RENDER(demo_collision)
     bool y_intercepts = line_intersect(line, y_axis, &j);
 
     v2 k = {};
-    bool bouncing_intercepts = line_intersect(line, bouncing_line, &k);
-    bouncing_intercepts = bouncing_intercepts;
+    line_intersect(line, bouncing_line, &k);
 
     v2 x_axis_reflection = v2sub(v2add(line.position, line.direction), i);
     x_axis_reflection.y *= -1;
@@ -998,11 +997,11 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
 }
 
 static const demo_data menu_items[] = {
-    {"Menu", demo_menu},
-    {"Rainbow", demo_rainbow},
-    {"Normals", demo_normals},
-    {"Collision", demo_collision},
-    {"Bounce", demo_bounce},
+    {"Menu", (void *)demo_menu},
+    {"Rainbow", (void *)demo_rainbow},
+    {"Normals", (void *)demo_normals},
+    {"Collision", (void *)demo_collision},
+    {"Bounce", (void *)demo_bounce},
 };
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)

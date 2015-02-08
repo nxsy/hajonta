@@ -6,7 +6,7 @@ out vec4 o_color;
 
 void main(void)
 {
-    if (v_style.x)
+    if (v_style.x != 0)
     {
         if (v_style.w != 0)
         {
