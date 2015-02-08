@@ -16,4 +16,5 @@ main()
 {
     UNITTEST(v2unittests);
     UNITTEST(v3unittests);
+    UNITTEST(m4unittests);
 }

@@ -1,4 +1,10 @@
 #include <math.h>
+#include <stdint.h>
+#include <string.h>
+
+#ifndef harray_count
+#define harray_count(array) (sizeof(array) / sizeof((array)[0]))
+#endif
 
 struct v2
 {
@@ -298,4 +304,189 @@ line_intersect(line2 ppr, line2 qqs, v2 *intersect_point)
         return true;
     }
     return false;
+}
+
+union v4
+{
+    struct {
+        union {
+            float x;
+            float r;
+        };
+        union {
+            float y;
+            float g;
+        };
+        union {
+            float z;
+            float b;
+        };
+        union {
+            float w;
+            float a;
+        };
+    };
+    float E[4];
+};
+
+struct m4
+{
+    v4 cols[4];
+};
+
+m4
+m4identity()
+{
+    m4 result = {};
+    result.cols[0].E[0] = 1;
+    result.cols[1].E[1] = 1;
+    result.cols[2].E[2] = 1;
+    result.cols[3].E[3] = 1;
+    return result;
+};
+
+void
+m4copy(m4 *dest, const m4 source)
+{
+    for (uint32_t col = 0;
+            col < harray_count(dest[0].cols);
+            ++col)
+    {
+        *(dest->cols + col) = source.cols[col];
+    }
+};
+
+void
+m4transpose(m4 *matrix)
+{
+    for (uint32_t col = 0;
+            col < harray_count(matrix[0].cols);
+            ++col)
+    {
+        for (uint32_t row = 0;
+                row < harray_count(matrix[0].cols[0].E);
+                ++row)
+        {
+            float t = matrix->cols[col].E[row];
+            matrix->cols[col].E[row] = matrix->cols[row].E[col];
+            matrix->cols[row].E[col] = t;
+        }
+    }
+};
+
+m4
+m4transposed(const m4 matrix)
+{
+    m4 result;
+    m4copy(&result, matrix);
+    m4transpose(&result);
+    return result;
+}
+
+m4
+m4mul(const m4 matrix, float multiplier)
+{
+    m4 result = {};
+
+    for (uint32_t col = 0;
+            col < harray_count(matrix.cols);
+            ++col)
+    {
+        for (uint32_t row = 0;
+                row < harray_count(matrix.cols[0].E);
+                ++row)
+        {
+            result.cols[col].E[row] = matrix.cols[col].E[row] * multiplier;
+        }
+    }
+    return result;
+}
+
+bool
+m4identical(const m4 left, const m4 right)
+{
+    for (uint32_t col = 0;
+            col < harray_count(left.cols);
+            ++col)
+    {
+        const v4 *lc = left.cols + col;
+        const v4 *rc = right.cols + col;
+        for (uint32_t row = 0;
+                row < harray_count(left.cols[0].E);
+                ++row)
+        {
+            if(lc->E[row] != rc->E[row])
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void
+m4sprint(char *msg, uint32_t msg_size, const m4 left)
+{
+    sprintf(msg, "{");
+    uint32_t ncols = harray_count(left.cols);
+    uint32_t nrows = harray_count(left.cols[0].E);
+
+    for (uint32_t col = 0;
+            col < ncols;
+            ++col)
+    {
+        sprintf(msg+strlen(msg), "{");
+
+        const v4 *lc = left.cols + col;
+        for (uint32_t row = 0;
+                row < nrows;
+                ++row)
+        {
+            sprintf(msg+strlen(msg), "%0.4f,", lc->E[row]);
+        }
+
+        sprintf(msg+strlen(msg), "},");
+    }
+    sprintf(msg+strlen(msg), "}");
+}
+
+static bool
+assertEqual(m4 left, m4 right, char *msg, char *file, int line)
+{
+    if (!m4identical(left, right))
+    {
+#define _P(x, ...) printf("%s(%d) : " x "\n", file, line, __VA_ARGS__)
+        _P("TEST FAILED: %s", msg);
+        char m4msg[10240];
+        m4sprint(m4msg, sizeof(m4msg), left);
+        _P("EXPECTED: %s", m4msg);
+        m4sprint(m4msg, sizeof(m4msg), right);
+        _P("GOT     : %s", m4msg);
+#undef _P
+        return false;
+    }
+    return true;
+}
+
+bool
+m4unittests()
+{
+    m4 i = m4identity();
+    m4 ic;
+    m4copy(&ic, i);
+    m4 itransposed;
+    itransposed = m4transposed(i);
+    T( i, ic );
+    T( i, itransposed );
+
+    ic.cols[0].E[1] = 2.0;
+    itransposed = m4transposed(i);
+    T( (itransposed.cols[1].E[0]), (i.cols[0].E[1]) );
+
+    m4copy(&ic, i);
+    m4 dic = m4mul(i, 2.0f);
+    T( (dic.cols[0].E[0]), 2.0f );
+    m4 dic2 = m4mul(dic, 2.0f);
+    T( (dic2.cols[0].E[0]), 4.0f );
+    return true;
 }
