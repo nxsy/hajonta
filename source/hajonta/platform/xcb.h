@@ -44,6 +44,7 @@ struct xcb_state
 
     char binary_name[PATH_MAX];
     char *last_slash;
+    char asset_path[PATH_MAX];
 };
 
 struct xcb_game_code

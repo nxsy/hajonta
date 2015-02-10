@@ -189,6 +189,7 @@ process_keyboard_message(game_button_state *new_state, bool is_down)
     if (new_state->ended_down != is_down)
     {
         new_state->ended_down = is_down;
+        new_state->repeat = false;
     }
 }
 
@@ -206,6 +207,7 @@ xcb_process_events(xcb_state *state)
     {
         new_keyboard_controller->_buttons[button_index].ended_down =
             old_keyboard_controller->_buttons[button_index].ended_down;
+        new_keyboard_controller->_buttons[button_index].repeat = true;
     }
 
     xcb_generic_event_t *event;
@@ -228,7 +230,11 @@ xcb_process_events(xcb_state *state)
                 {
                     case XK_Escape:
                     {
-                        state->stopping = true;
+                        process_keyboard_message(&new_keyboard_controller->buttons.back, is_down);
+                    } break;
+                    case XK_Return:
+                    {
+                        process_keyboard_message(&new_keyboard_controller->buttons.start, is_down);
                     } break;
                     case XK_w:
                     {
@@ -289,6 +295,42 @@ PLATFORM_GLGETPROCADDRESS(xcb_glgetprocaddress)
     return (void *)glXGetProcAddress(function_name);
 }
 
+PLATFORM_LOAD_ASSET(xcb_load_asset)
+{
+    xcb_state *state = (xcb_state *)ctx;
+    char full_pathname[PATH_MAX];
+    snprintf(full_pathname, sizeof(full_pathname), "%s/%s", state->asset_path, asset_path);
+
+    FILE *asset = fopen(full_pathname, "r");
+    fseek(asset, 0, SEEK_END);
+    uint32_t file_size = ftell(asset);
+    fseek(asset, 0, SEEK_SET);
+    int size_read = fread(dest, 1, size, asset);
+    return true;
+}
+
+static bool
+find_asset_path(xcb_state *state)
+{
+    char dir[sizeof(state->binary_name)];
+    strcpy(dir, state->binary_name);
+
+    while(char *location_of_last_slash = strrchr(dir, '/')) {
+        *location_of_last_slash = 0;
+
+        strcpy(state->asset_path, dir);
+        strcat(state->asset_path, "/data");
+        struct stat statbuf = {};
+        uint32_t stat_result = stat(state->asset_path, &statbuf);
+        if (stat_result != 0)
+        {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
+
 // From glxinfo.cpp - This apparently unsticks mesa's glxChooseVisual for some
 // unknown reason.
 static void
@@ -323,6 +365,7 @@ main()
 
     xcb_state state = {};
     get_binary_name(&state);
+    find_asset_path(&state);
 
     char source_game_code_library_path[PATH_MAX];
     char *game_code_filename = (char *)"libgame.so";
@@ -512,6 +555,8 @@ main()
     memory.memory = calloc(memory.size, sizeof(uint8_t));
     memory.platform_fail = xcb_fail;
     memory.platform_glgetprocaddress = xcb_glgetprocaddress;
+    memory.platform_load_asset = xcb_load_asset;
+
 
     game_input input[2] = {};
     state.new_input = &input[0];
@@ -551,6 +596,11 @@ main()
         game_input *temp_input = state.new_input;
         state.new_input = state.old_input;
         state.old_input = temp_input;
+
+        if (memory.quit)
+        {
+            state.stopping = true;
+        }
     }
 
     if (state.stop_reason)
