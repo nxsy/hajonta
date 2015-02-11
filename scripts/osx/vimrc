@@ -1,0 +1,18 @@
+let hajonta_loaded=1
+function! s:build()
+  exe "lcd" g:hajonta_base_dir
+  let &makeprg=g:hajonta_build
+  silent make
+  botright copen
+  wincmd p
+endfunction
+
+command! Build call s:build()
+map <Leader>b :Build<cr>
+
+set switchbuf=useopen,split
+
+let NERDTreeShowHidden=0
+let NERDTreeDirArrows=1
+set noautochdir
+set errorformat+=%f(%l)\ :\ %m 

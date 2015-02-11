@@ -1,0 +1,10 @@
+#!/bin/sh
+
+DIRNAME=`dirname $0`
+BASEDIR=`( cd $DIRNAME/../..  && python -c "import os.path; print os.path.realpath('./')" )`
+
+vi \
+    +"let hajonta_base_dir=\"$BASEDIR\"" \
+    +"let hajonta_build=\"$BASEDIR/scripts/osx/build.sh\"" \
+    +"source $DIRNAME/vimrc" \
+    "$@"

@@ -667,17 +667,17 @@ GAME_UPDATE_AND_RENDER(demo_bounce)
         if (demo_state->position[ball_index].y < -5)
         {
             demo_state->position[ball_index] = {0, 5+0.5f*(float)ball_index};
-            demo_state->velocity[ball_index] = {0+sin(demo_state->t + ball_index),-1};
+            demo_state->velocity[ball_index] = {0+sinf(demo_state->t + ball_index),-1};
         }
         if (demo_state->position[ball_index].x < -5)
         {
             demo_state->position[ball_index] = {0, 5+0.5f*(float)ball_index};
-            demo_state->velocity[ball_index] = {0+sin(demo_state->t + ball_index),-1};
+            demo_state->velocity[ball_index] = {0+sinf(demo_state->t + ball_index),-1};
         }
         if (demo_state->position[ball_index].x > 5)
         {
             demo_state->position[ball_index] = {0, 5+0.5f*(float)ball_index};
-            demo_state->velocity[ball_index] = {0+sin(demo_state->t + ball_index),-1};
+            demo_state->velocity[ball_index] = {0+sinf(demo_state->t + ball_index),-1};
         }
     }
 }
