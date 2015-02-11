@@ -275,6 +275,32 @@ v3unittests()
     return true;
 }
 
+struct triangle2
+{
+    v2 p0;
+    v2 p1;
+    v2 p2;
+};
+
+bool
+point_in_triangle(v2 point, triangle2 tri)
+{
+    float s = tri.p0.y * tri.p2.x - tri.p0.x * tri.p2.y + (tri.p2.y - tri.p0.y) * point.x + (tri.p0.x - tri.p2.x) * point.y;
+    float t = tri.p0.x * tri.p1.y - tri.p0.y * tri.p1.x + (tri.p0.y - tri.p1.y) * point.x + (tri.p1.x - tri.p0.x) * point.y;
+
+    if ((s < 0) != (t < 0))
+        return false;
+
+    float a = -tri.p1.y * tri.p2.x + tri.p0.y * (tri.p2.x - tri.p1.x) + tri.p0.x * (tri.p1.y - tri.p2.y) + tri.p1.x * tri.p2.y;
+    if (a < 0.0)
+    {
+        s = -s;
+        t = -t;
+        a = -a;
+    }
+    return (s > 0) && (t > 0) && ((s + t) < a);
+}
+
 struct line2
 {
     v2 position;
@@ -296,10 +322,10 @@ line_intersect(line2 ppr, line2 qqs, v2 *intersect_point)
     v2 q_minus_p = v2sub(q, p);
     float r_cross_s = v2cross(r, s);
     float t = v2cross(q_minus_p, s) / r_cross_s;
-    //float u = v2cross(q_minus_p, r) / r_cross_s;
+    float u = v2cross(q_minus_p, r) / r_cross_s;
 
     *intersect_point = v2add(p, v2mul(r, t));
-    if ((t >= 0) && (t <= 1))
+    if ((t >= 0) && (t <= 1) && (u >= 0) && (u <= 1))
     {
         return true;
     }

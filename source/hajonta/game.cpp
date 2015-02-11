@@ -26,6 +26,8 @@
 #include "hajonta/bmp.cpp"
 #include "hajonta/font.cpp"
 
+static float pi = 3.14159265358979f;
+
 struct kenpixel_future_14
 {
     uint8_t zfi[5159];
@@ -118,9 +120,10 @@ struct demo_collision_state
 struct demo_bounce_state
 {
     uint32_t vbo;
-    v2 velocity;
-    v2 position;
-    line2 l;
+    v2 velocity[10];
+    v2 position[10];
+    float t;
+    uint32_t num_collisions;
 };
 
 #define menu_buffer_width 300
@@ -415,9 +418,13 @@ GAME_UPDATE_AND_RENDER(demo_bounce)
         glGenBuffers(1, &demo_state->vbo);
         glErrorAssert();
 
-        demo_state->position = {-5,10};
-        demo_state->velocity = {0.5f,0};
-        demo_state->l = { {-10,10},{20,-20} };
+        for (uint32_t ball_index = 0;
+                ball_index < harray_count(demo_state->position);
+                ++ball_index)
+        {
+            demo_state->position[ball_index] = {0.f,4.0f+1.5f*(float)ball_index};
+            demo_state->velocity[ball_index] = {0,-1.0f};
+        }
     }
 
     float delta_t = input->delta_t;
@@ -435,63 +442,141 @@ GAME_UPDATE_AND_RENDER(demo_bounce)
         {
             state->active_demo = 0;
         }
-        if (controller->buttons.move_up.ended_down)
-        {
-            demo_state->l.position.y += 1.0f * delta_t;
-            demo_state->l.direction.y -= 2.0f * delta_t;
-        }
-        if (controller->buttons.move_down.ended_down)
-        {
-            demo_state->l.position.y -= 1.0f * delta_t;
-            demo_state->l.direction.y += 2.0f * delta_t;
-        }
+    }
+
+    float old_t = demo_state->t;
+
+    v2 old_rotated_line_location = {cosf(old_t * (pi/4)), sinf(old_t * (pi/4))};
+    old_rotated_line_location = v2normalize(old_rotated_line_location);
+    old_rotated_line_location = v2mul(old_rotated_line_location, 0.75f);
+
+    demo_state->t += delta_t;
+    if (demo_state->t > 60)
+    {
+        demo_state->t -= 60;
+    }
+
+    v2 rotated_line_location = {cosf(demo_state->t * (pi/4)), sinf(demo_state->t * (pi/4))};
+    rotated_line_location = v2normalize(rotated_line_location);
+    rotated_line_location = v2mul(rotated_line_location, 0.75f);
+
+    v2 line_centers[] =
+    {
+        { 2.0f, 2.0f},
+        { 2.0f, 0.0f},
+        { 2.0f,-2.0f},
+        { 1.0f, 1.0f},
+        { 1.0f,-1.0f},
+        //{ 0.0f, 2.0f},
+        { 0.0f, 0.0f},
+        { 0.0f,-2.0f},
+        {-1.0f, 1.0f},
+        {-1.0f,-1.0f},
+        {-2.0f, 2.0f},
+        {-2.0f, 0.0f},
+        {-2.0f,-2.0f},
+    };
+
+    struct line_pair {
+        line2 old_line;
+        line2 new_line;
+    };
+
+    line_pair lines[harray_count(line_centers)];
+    for (uint32_t line_index = 0;
+            line_index < harray_count(line_centers);
+            ++line_index)
+    {
+        v2 l2c = line_centers[line_index];
+        lines[line_index] = {
+            {v2add(l2c, rotated_line_location), v2mul(rotated_line_location, -2)},
+            {v2add(l2c, old_rotated_line_location), v2mul(old_rotated_line_location, -2)},
+        };
     }
 
 
-    v2 acceleration = {0,-9.8f};
-    acceleration = v2normalize(acceleration);
-    acceleration = v2sub(acceleration, v2mul(demo_state->velocity, 0.05f));
-    v2 movement = v2add(
-            v2mul(acceleration, 0.5f * (delta_t * delta_t)),
-            v2mul(demo_state->velocity, delta_t)
-    );
-    demo_state->velocity = v2add(
-            v2mul(acceleration, delta_t),
-            demo_state->velocity
-    );
-
-    int num_intersects = 0;
-    while (v2length(movement) > 0)
+    for (uint32_t ball_index = 0;
+            ball_index < harray_count(demo_state->position);
+            ++ball_index)
     {
-        if (num_intersects++ > 1)
+        v2 acceleration = {0,-9.8f};
+        acceleration = v2normalize(acceleration);
+        acceleration = v2sub(acceleration, v2mul(demo_state->velocity[ball_index], 0.05f));
+        v2 movement = v2add(
+                v2mul(acceleration, 0.5f * (delta_t * delta_t)),
+                v2mul(demo_state->velocity[ball_index], delta_t)
+        );
+        demo_state->velocity[ball_index] = v2add(
+                v2mul(acceleration, delta_t),
+                demo_state->velocity[ball_index]
+        );
+
+        int num_intersects = 0;
+        while (v2length(movement) > 0)
         {
-            hassert(!"Two intersects!");
-        }
-        line2 movement_line = {demo_state->position, movement};
-        v2 intersect_point;
-        if (!line_intersect(movement_line, demo_state->l, &intersect_point))
-        {
-            demo_state->position = v2add(demo_state->position, movement);
-            break;
-        }
-        else
-        {
-            v2 k = intersect_point;
-            v2 used_movement = v2sub(intersect_point, demo_state->position);
-            demo_state->position = v2add(demo_state->position, used_movement);
+            if (num_intersects++ > 8)
+            {
+                // give up after trying for so long
+                demo_state->position[ball_index] = v2add(demo_state->position[ball_index], movement);
+                break;
+            }
+            line2 movement_line = {demo_state->position[ball_index], movement};
+            line2 *intersecting_line = {};
+            v2 closest_intersect_point = {};
+            float closest_length = -1;
+            for (uint32_t i = 0;
+                    i < harray_count(lines);
+                    ++i)
+            {
+                v2 intersect_point;
+                line_pair *lp = lines + i;
+                if (line_intersect(movement_line, lp->old_line, &intersect_point)) {
+                    float distance_to = v2length(v2sub(intersect_point, demo_state->position[ball_index]));
+                    if ((closest_length < 0) || (closest_length > distance_to))
+                    {
+                        closest_intersect_point = intersect_point;
+                        closest_length = distance_to;
+                        intersecting_line = &lp->old_line;
+                    }
+                }
+                if (line_intersect(movement_line, lp->new_line, &intersect_point)) {
+                    float distance_to = v2length(v2sub(intersect_point, demo_state->position[ball_index]));
+                    if ((closest_length < 0) || (closest_length > distance_to))
+                    {
+                        closest_intersect_point = intersect_point;
+                        closest_length = distance_to;
+                        intersecting_line = &lp->new_line;
+                    }
+                }
+            }
 
-            v2 bounce_unused_direction = v2sub(v2add(movement_line.position, movement_line.direction), k);
-            v2 bouncing_projection = v2projection(demo_state->l.direction, bounce_unused_direction);
+            if (!intersecting_line)
+            {
+                demo_state->position[ball_index] = v2add(demo_state->position[ball_index], movement);
+                break;
+            }
+            else
+            {
+                demo_state->num_collisions += 1;
+                v2 k = closest_intersect_point;
+                v2 used_movement = v2sub(k, demo_state->position[ball_index]);
+                demo_state->position[ball_index] = v2add(demo_state->position[ball_index], used_movement);
 
-            v2 bouncing_reflection = v2sub(bouncing_projection, bounce_unused_direction);
-            bouncing_reflection = v2add(bouncing_projection, bouncing_reflection);
-            bouncing_reflection = v2normalize(bouncing_reflection);
+                v2 bounce_unused_direction = v2sub(v2add(movement_line.position, movement_line.direction), k);
+                v2 bouncing_projection = v2projection(intersecting_line->direction, bounce_unused_direction);
 
-            movement = v2mul(bouncing_reflection, v2length(bounce_unused_direction));
-            v2 epsilon_movement = v2mul(bouncing_reflection, 0.0001f);
-            demo_state->velocity = v2mul(bouncing_reflection, v2length(demo_state->velocity));
+                v2 bouncing_reflection = v2sub(bouncing_projection, bounce_unused_direction);
+                bouncing_reflection = v2add(bouncing_projection, bouncing_reflection);
+                bouncing_reflection = v2normalize(bouncing_reflection);
 
-            demo_state->position = v2add(demo_state->position, epsilon_movement);
+                movement = v2mul(bouncing_reflection, v2length(bounce_unused_direction));
+                v2 epsilon_movement = v2mul(bouncing_reflection, 0.0001f);
+                demo_state->velocity[ball_index] = v2mul(bouncing_reflection, v2length(demo_state->velocity[ball_index]));
+
+                demo_state->position[ball_index] = v2add(demo_state->position[ball_index], epsilon_movement);
+                demo_state->position[ball_index] = v2add(demo_state->position[ball_index], movement);
+                break;
+            }
         }
     }
 
@@ -505,35 +590,46 @@ GAME_UPDATE_AND_RENDER(demo_bounce)
     glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
     glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
 
-    vertex_with_style vertices[] = {
+    vertex_with_style vertices[8 + 4*harray_count(lines)] = {
         // dotted y axis +
         { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
-        { { { 0, 2, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+        { { { 0, 20, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
 
         // dotted y axis -
         { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
-        { { { 0, -2, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+        { { { 0, -20, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
 
         // dotted x axis -
         { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
-        { { { -2, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+        { { { -20, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
+
         // dotted x axis +
         { { { 0, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0.02f, 0.002f, 0.0f, 0.0f,}, },
-        { { { 2, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
-
-        // line
-        { { { demo_state->l.position.x / 10, demo_state->l.position.y / 10, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}, }, { 0,0,0,0}, },
-        { { { (demo_state->l.position.x + demo_state->l.direction.x) / 10, (demo_state->l.position.y + demo_state->l.direction.y) / 10, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0} }, { 0,0,0,0}, },
+        { { { 20, 0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0} }, { 0.02f, 0.002f, 0.0f, 1.0f}, },
     };
 
+    for (uint32_t line_index = 0;
+            line_index < harray_count(lines);
+            ++line_index)
+    {
+        line_pair *lp = lines + line_index;
+        line2 *l = &lp->new_line;
+        vertices[8+4*line_index] = { { { l->position.x, l->position.y, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}, }, { 0,0,0,0}, };
+        vertices[8+4*line_index+1] =
+            { { { l->position.x + l->direction.x, l->position.y + l->direction.y, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0} }, { 0,0,0,0}, };
+        l = &lp->old_line;
+        vertices[8+4*line_index+2] = { { { l->position.x, l->position.y, 0.0, 1.0}, {0.0, 0.0, 1.0, 0.5}, }, { 0,0,0,0}, };
+        vertices[8+4*line_index+3] =
+            { { { l->position.x + l->direction.x, l->position.y + l->direction.y, 0.0, 1.0}, {0.0, 0.0, 1.0, 0.5} }, { 0,0,0,0}, };
+    }
     float ratio = 960.0f / 540.0f;
     for (uint32_t vi = 0;
             vi < harray_count(vertices);
             ++vi)
     {
         vertex_with_style *v = vertices + vi;
-        v->v.position[0] = v->v.position[0] / ratio * 1.5f;
-        v->v.position[1] = v->v.position[1] * 1.5f;
+        v->v.position[0] = v->v.position[0] / 5.0f / ratio * 1.5f;
+        v->v.position[1] = v->v.position[1] / 5.0f * 1.5f;
     }
 
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -541,30 +637,48 @@ GAME_UPDATE_AND_RENDER(demo_bounce)
     glUniform2fv(state->program_b.u_offset_id, 1, (float *)position);
     glDrawArrays(GL_LINES, 0, harray_count(vertices));
 
-    vertex_with_style point_vertices[] = {
-        { { { demo_state->position.x/10.0f, demo_state->position.y/10.0f, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0, 0, 0, 0}, },
-    };
+    vertex_with_style point_vertices[harray_count(demo_state->position)];
+    for (uint32_t ball_index = 0;
+            ball_index < harray_count(demo_state->position);
+            ++ball_index)
+    {
+        point_vertices[ball_index] = { { { demo_state->position[ball_index].x, demo_state->position[ball_index].y, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, }, { 0, 0, 0, 0}, };
+    }
     for (uint32_t vi = 0;
             vi < harray_count(point_vertices);
             ++vi)
     {
         vertex_with_style *v = point_vertices + vi;
-        v->v.position[0] = v->v.position[0] / ratio;
+        v->v.position[0] = v->v.position[0] / 5.0f / ratio * 1.5f;
+        v->v.position[1] = v->v.position[1] / 5.0f * 1.5f;
     }
     glBufferData(GL_ARRAY_BUFFER, sizeof(point_vertices), point_vertices, GL_STATIC_DRAW);
     glDrawArrays(GL_POINTS, 0, harray_count(vertices));
 
     memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
     char msg[1024];
-    sprintf(msg, "P: %+.2f, %+.2f", demo_state->position.x, demo_state->position.y);
-    sprintf(msg + strlen(msg), " V: %+.2f, %+.2f", demo_state->velocity.x, demo_state->velocity.y);
-    sprintf(msg + strlen(msg), " A: %+.2f, %+.2f", acceleration.x, acceleration.y);
+    sprintf(msg, "C: %d", demo_state->num_collisions);
     write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
 
-    if (demo_state->position.y < -10)
+    for (uint32_t ball_index = 0;
+            ball_index < harray_count(demo_state->position);
+            ++ball_index)
     {
-        demo_state->position = {-5,10};
-        demo_state->velocity = {0.5f,0};
+        if (demo_state->position[ball_index].y < -5)
+        {
+            demo_state->position[ball_index] = {0, 5+0.5f*(float)ball_index};
+            demo_state->velocity[ball_index] = {0+sin(demo_state->t + ball_index),-1};
+        }
+        if (demo_state->position[ball_index].x < -5)
+        {
+            demo_state->position[ball_index] = {0, 5+0.5f*(float)ball_index};
+            demo_state->velocity[ball_index] = {0+sin(demo_state->t + ball_index),-1};
+        }
+        if (demo_state->position[ball_index].x > 5)
+        {
+            demo_state->position[ball_index] = {0, 5+0.5f*(float)ball_index};
+            demo_state->velocity[ball_index] = {0+sin(demo_state->t + ball_index),-1};
+        }
     }
 }
 
@@ -915,7 +1029,6 @@ GAME_UPDATE_AND_RENDER(demo_rainbow)
 
 
         int volume = 3000;
-        float pi = 3.14159265358979f;
         state->rainbow.audio_buffer_data = malloc(48000 * 2 * (16 / 8));
         for (int i = 0; i < 48000 * 2;)
         {
