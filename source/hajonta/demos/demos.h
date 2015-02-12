@@ -1,0 +1,5 @@
+#include "hajonta/demos/rainbow.h"
+#include "hajonta/demos/bounce.h"
+#include "hajonta/demos/normals.h"
+#include "hajonta/demos/collision.h"
+#include "hajonta/demos/menu.h"
