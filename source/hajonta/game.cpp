@@ -183,20 +183,6 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
     }
 
-    {
-        glGenBuffers(1, &state->menu.vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, state->menu.vbo);
-        float height = 14.0f / (540.0f / 2.0f);
-        float width = 300.0f / (960.0f / 2.0f);
-        vertex font_vertices[4] = {
-            {{-width/2.0f, 0, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}},
-            {{ width/2.0f, 0, 0.0, 1.0}, {1.0, 1.0, 0.0, 1.0}},
-            {{ width/2.0f,-height, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}},
-            {{-width/2.0f,-height, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
-        };
-        glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
-    }
-
     if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.zfi", sizeof(state->debug_font.zfi), state->debug_font.zfi))
     {
         memory->platform_fail(ctx, "Failed to open zfi file");
@@ -220,18 +206,6 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
         fps_buffer_width, fps_buffer_height, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, state->fps_buffer);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-    state->menu.menu_draw_buffer.memory = state->menu.menu_buffer;
-    state->menu.menu_draw_buffer.width = menu_buffer_width;
-    state->menu.menu_draw_buffer.height = menu_buffer_height;
-    state->menu.menu_draw_buffer.pitch = 4 * state->menu.menu_draw_buffer.width;
-
-    glGenTextures(1, &state->menu.texture_id);
-    glBindTexture(GL_TEXTURE_2D, state->menu.texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-        (GLsizei)state->menu.menu_draw_buffer.width, (GLsizei)state->menu.menu_draw_buffer.height, 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, state->menu.menu_buffer);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     glErrorAssert();
