@@ -6,6 +6,7 @@ static const demo_data menu_items[] = {
     {"Normals", (void *)demo_normals},
     {"Collision", (void *)demo_collision},
     {"Bounce", (void *)demo_bounce},
+    {"Rotate", (void *)demo_rotate},
 };
 
 #include "hajonta/demos/rainbow.cpp"

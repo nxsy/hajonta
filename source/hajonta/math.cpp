@@ -691,3 +691,34 @@ m4unittests()
 
     return true;
 }
+
+m4
+m4rotation(v3 axis, float angle)
+{
+    float cosa = cosf(angle);
+    float sina = sinf(angle);
+    axis = v3normalize(axis);
+
+    m4 result;
+    result.cols[0] = {
+        cosa + ((1.0f - cosa) * axis.x * axis.x),
+        (1.0f - cosa) * axis.y * axis.x - sina * axis.z,
+        (1.0f - cosa) * axis.z * axis.x + sina * axis.y,
+        0.0f,
+    };
+    result.cols[1] = {
+        ((1.0f - cosa) * axis.x * axis.y) + (sina * axis.z),
+        cosa + ((1.0f - cosa) * axis.y * axis.y),
+        ((1.0f - cosa) * axis.z * axis.y) - (sina * axis.x),
+        0.0f,
+    };
+    result.cols[2] = {
+        (1.0f - cosa) * axis.x * axis.z - sina * axis.y,
+        (1.0f - cosa) * axis.y * axis.z + sina * axis.x,
+        cosa + (1.0f - cosa) * axis.z * axis.z,
+        0.0f,
+    };
+    result.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    return result;
+}

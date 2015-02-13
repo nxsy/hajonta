@@ -94,6 +94,13 @@ struct demo_data {
     void *func;
 };
 
+struct demo_rotate_state {
+    triangle2 t;
+    v2 rotation_point;
+    uint32_t vbo;
+    float delta_t;
+};
+
 struct game_state
 {
     uint32_t active_demo;
@@ -111,6 +118,7 @@ struct game_state
     demo_normals_state normals;
     demo_collision_state collision;
     demo_bounce_state bounce;
+    demo_rotate_state rotate;
 
     kenpixel_future_14 debug_font;
     uint8_t fps_buffer[4 * fps_buffer_width * fps_buffer_height];
@@ -246,6 +254,95 @@ void font_output(game_state *state, draw_buffer b, uint32_t vbo, uint32_t textur
 void debug_output(game_state *state)
 {
     font_output(state, state->fps_draw_buffer, state->fps_vbo, state->fps_texture_id);
+}
+
+GAME_UPDATE_AND_RENDER(demo_rotate)
+{
+    game_state *state = (game_state *)memory->memory;
+    demo_rotate_state *demo_state = &state->rotate;
+
+    glClearColor(0.0f, 0.0f, 0.1f, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!demo_state->vbo)
+    {
+        glErrorAssert();
+        glGenBuffers(1, &demo_state->vbo);
+        glErrorAssert();
+        demo_state->rotation_point = {0.0f, 0.0f};
+        demo_state->t = {
+            { 0.0f, 6.0f},
+            {-5.2f,-3.0f},
+            { 5.2f,-3.0f},
+        };
+    }
+
+    demo_state->delta_t += input->delta_t;
+
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
+    {
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+
+        game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.back.ended_down)
+        {
+            state->active_demo = 0;
+        }
+    }
+
+    glUseProgram(state->program_b.program);
+    glBindBuffer(GL_ARRAY_BUFFER, demo_state->vbo);
+
+    glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
+    glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
+    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), 0);
+    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
+    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
+
+    triangle2 *t = &demo_state->t;
+
+    vertex_with_style vertices[] = {
+        { { { t->p0.x, t->p0.y, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+        { { { t->p1.x, t->p1.y, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+        { { { t->p2.x, t->p2.y, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+    };
+
+    float ratio = 960.0f / 540.0f;
+    for (uint32_t vi = 0;
+            vi < harray_count(vertices);
+            ++vi)
+    {
+        vertex_with_style *v = vertices + vi;
+        v->v.position[0] = v->v.position[0] / 10.0f;
+        v->v.position[1] = v->v.position[1] / 10.0f;
+    }
+
+    glErrorAssert();
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glErrorAssert();
+    v2 position = {0,0};
+    glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
+    glErrorAssert();
+    v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
+    glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+    glErrorAssert();
+    v3 axis = {0.0f, 0.0f, -1.0f};
+    m4 u_model = m4rotation(axis, demo_state->delta_t);
+    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
+    m4 u_view = m4identity();
+    glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
+    m4 u_perspective = m4identity();
+    u_perspective.cols[0].E[0] = 1 / ratio;
+    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
+    glErrorAssert();
+    glDrawArrays(GL_TRIANGLES, 0, harray_count(vertices));
+    glErrorAssert();
 }
 
 #include "hajonta/demos/demos.cpp"

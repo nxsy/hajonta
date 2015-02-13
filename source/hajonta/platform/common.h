@@ -142,8 +142,25 @@ typedef void (APIENTRYP PFNGLGENBUFFERSPROC) (GLsizei n, GLuint *buffers);
 typedef void (APIENTRYP PFNGLBINDBUFFERPROC) (GLenum target, GLuint buffer);
 typedef void (APIENTRYP PFNGLBUFFERDATAPROC) (GLenum target, GLsizeiptr, const void *data, GLenum usage);
 typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC) (GLuint program, const GLchar *name);
-typedef void (APIENTRYP PFNGLUNIFORM2FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORM1FPROC) (GLint location, GLfloat v0);
+typedef void (APIENTRYP PFNGLUNIFORM2FPROC) (GLint location, GLfloat v0, GLfloat v1);
+typedef void (APIENTRYP PFNGLUNIFORM3FPROC) (GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
+typedef void (APIENTRYP PFNGLUNIFORM4FPROC) (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 typedef void (APIENTRYP PFNGLUNIFORM1IPROC) (GLint location, GLint v0);
+typedef void (APIENTRYP PFNGLUNIFORM2IPROC) (GLint location, GLint v0, GLint v1);
+typedef void (APIENTRYP PFNGLUNIFORM3IPROC) (GLint location, GLint v0, GLint v1, GLint v2);
+typedef void (APIENTRYP PFNGLUNIFORM4IPROC) (GLint location, GLint v0, GLint v1, GLint v2, GLint v3);
+typedef void (APIENTRYP PFNGLUNIFORM1FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORM2FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORM3FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORM4FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORM1IVPROC) (GLint location, GLsizei count, const GLint *value);
+typedef void (APIENTRYP PFNGLUNIFORM2IVPROC) (GLint location, GLsizei count, const GLint *value);
+typedef void (APIENTRYP PFNGLUNIFORM3IVPROC) (GLint location, GLsizei count, const GLint *value);
+typedef void (APIENTRYP PFNGLUNIFORM4IVPROC) (GLint location, GLsizei count, const GLint *value);
+typedef void (APIENTRYP PFNGLUNIFORMMATRIX2FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORMMATRIX3FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 #endif
 
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
@@ -167,8 +184,26 @@ PFNGLGENBUFFERSPROC glGenBuffers;
 PFNGLBINDBUFFERPROC glBindBuffer;
 PFNGLBUFFERDATAPROC glBufferData;
 PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
-PFNGLUNIFORM2FVPROC glUniform2fv;
+
+PFNGLUNIFORM1FPROC glUniform1f;
+PFNGLUNIFORM2FPROC glUniform2f;
+PFNGLUNIFORM3FPROC glUniform3f;
+PFNGLUNIFORM4FPROC glUniform4f;
 PFNGLUNIFORM1IPROC glUniform1i;
+PFNGLUNIFORM2IPROC glUniform2i;
+PFNGLUNIFORM3IPROC glUniform3i;
+PFNGLUNIFORM4IPROC glUniform4i;
+PFNGLUNIFORM1FVPROC glUniform1fv;
+PFNGLUNIFORM2FVPROC glUniform2fv;
+PFNGLUNIFORM3FVPROC glUniform3fv;
+PFNGLUNIFORM4FVPROC glUniform4fv;
+PFNGLUNIFORM1IVPROC glUniform1iv;
+PFNGLUNIFORM2IVPROC glUniform2iv;
+PFNGLUNIFORM3IVPROC glUniform3iv;
+PFNGLUNIFORM4IVPROC glUniform4iv;
+PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
+PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;
+PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
@@ -213,9 +248,24 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
         (PFNGLBUFFERDATAPROC)get_proc_address(ctx, (char *)"glBufferData");
     glGetUniformLocation =
         (PFNGLGETUNIFORMLOCATIONPROC)get_proc_address(ctx, (char *)"glGetUniformLocation");
-    glUniform2fv =
-        (PFNGLUNIFORM2FVPROC)get_proc_address(ctx, (char *)"glUniform2fv");
-    glUniform1i =
-        (PFNGLUNIFORM1IPROC)get_proc_address(ctx, (char *)"glUniform1i");
+    glUniform1f = (PFNGLUNIFORM1FPROC)get_proc_address(ctx, (char *)"glUniform1f");
+    glUniform2f = (PFNGLUNIFORM2FPROC)get_proc_address(ctx, (char *)"glUniform2f");
+    glUniform3f = (PFNGLUNIFORM3FPROC)get_proc_address(ctx, (char *)"glUniform3f");
+    glUniform4f = (PFNGLUNIFORM4FPROC)get_proc_address(ctx, (char *)"glUniform4f");
+    glUniform1i = (PFNGLUNIFORM1IPROC)get_proc_address(ctx, (char *)"glUniform1i");
+    glUniform2i = (PFNGLUNIFORM2IPROC)get_proc_address(ctx, (char *)"glUniform2i");
+    glUniform3i = (PFNGLUNIFORM3IPROC)get_proc_address(ctx, (char *)"glUniform3i");
+    glUniform4i = (PFNGLUNIFORM4IPROC)get_proc_address(ctx, (char *)"glUniform4i");
+    glUniform1fv = (PFNGLUNIFORM1FVPROC)get_proc_address(ctx, (char *)"glUniform1fv");
+    glUniform2fv = (PFNGLUNIFORM2FVPROC)get_proc_address(ctx, (char *)"glUniform2fv");
+    glUniform3fv = (PFNGLUNIFORM3FVPROC)get_proc_address(ctx, (char *)"glUniform3fv");
+    glUniform4fv = (PFNGLUNIFORM4FVPROC)get_proc_address(ctx, (char *)"glUniform4fv");
+    glUniform1iv = (PFNGLUNIFORM1IVPROC)get_proc_address(ctx, (char *)"glUniform1iv");
+    glUniform2iv = (PFNGLUNIFORM2IVPROC)get_proc_address(ctx, (char *)"glUniform2iv");
+    glUniform3iv = (PFNGLUNIFORM3IVPROC)get_proc_address(ctx, (char *)"glUniform3iv");
+    glUniform4iv = (PFNGLUNIFORM4IVPROC)get_proc_address(ctx, (char *)"glUniform4iv");
+    glUniformMatrix2fv = (PFNGLUNIFORMMATRIX2FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix2fv");
+    glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix3fv");
+    glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix4fv");
 }
 #endif
