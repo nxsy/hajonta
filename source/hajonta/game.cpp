@@ -99,6 +99,7 @@ struct demo_rotate_state {
     v2 rotation_point;
     uint32_t vbo;
     float delta_t;
+    bool paused;
 };
 
 struct game_state
@@ -277,7 +278,6 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
         };
     }
 
-    demo_state->delta_t += input->delta_t;
 
     for (uint32_t i = 0;
             i < harray_count(input->controllers);
@@ -293,6 +293,15 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
         {
             state->active_demo = 0;
         }
+        if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+        {
+            demo_state->paused ^= true;
+        }
+    }
+
+    if (!demo_state->paused)
+    {
+        demo_state->delta_t += input->delta_t;
     }
 
     glUseProgram(state->program_b.program);
@@ -308,9 +317,10 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
     triangle2 *t = &demo_state->t;
 
     vertex_with_style vertices[] = {
-        { { { t->p0.x, t->p0.y, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-        { { { t->p1.x, t->p1.y, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-        { { { t->p2.x, t->p2.y, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+        { { {-3.0f, 3.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+        { { { 3.0f, 3.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+        { { { 3.0f,-3.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+        { { {-3.0f,-3.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
     };
 
     float ratio = 960.0f / 540.0f;
@@ -341,8 +351,31 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
     u_perspective.cols[0].E[0] = 1 / ratio;
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
     glErrorAssert();
-    glDrawArrays(GL_TRIANGLES, 0, harray_count(vertices));
+    glDrawArrays(GL_TRIANGLE_FAN, 0, harray_count(vertices));
     glErrorAssert();
+
+    // circle
+    vertex_with_style circle_vertices[64+1];
+    for (uint32_t idx = 0;
+            idx < harray_count(circle_vertices);
+            ++idx)
+    {
+        vertex_with_style *v = circle_vertices + idx;
+        float a = idx * (2.0f * pi) / (harray_count(circle_vertices) - 1);
+        *v = {
+            {
+                {sinf(a) * 0.3f, cosf(a) * 0.3f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f, 0.5f},
+            },
+            {0.0f, 0.0f, 0.0f, 0.0f},
+        };
+    }
+    u_model = m4identity();
+    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
+    glErrorAssert();
+    glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
+    glErrorAssert();
+    glDrawArrays(GL_LINE_STRIP, 0, harray_count(circle_vertices));
 }
 
 #include "hajonta/demos/demos.cpp"
