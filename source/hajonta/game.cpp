@@ -316,66 +316,78 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
 
     triangle2 *t = &demo_state->t;
 
-    vertex_with_style vertices[] = {
-        { { {-3.0f, 3.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-        { { { 3.0f, 3.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-        { { { 3.0f,-3.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-        { { {-3.0f,-3.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+    struct mdtm{
+        float s; // size_multiplier;
+        float t; // time_multiplier;
     };
-
+    mdtm multipliers[] = {
+        {0.99f, 1.0f},
+        {0.66f,-0.5f},
+        {0.33f, 0.5f},
+    };
     float ratio = 960.0f / 540.0f;
-    for (uint32_t vi = 0;
-            vi < harray_count(vertices);
-            ++vi)
+    for (uint32_t circle_idx = 0;
+            circle_idx < harray_count(multipliers);
+            ++circle_idx)
     {
-        vertex_with_style *v = vertices + vi;
-        v->v.position[0] = v->v.position[0] / 10.0f;
-        v->v.position[1] = v->v.position[1] / 10.0f;
-    }
-
-    glErrorAssert();
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glErrorAssert();
-    v2 position = {0,0};
-    glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
-    glErrorAssert();
-    v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
-    glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-    glErrorAssert();
-    v3 axis = {0.0f, 0.0f, -1.0f};
-    m4 u_model = m4rotation(axis, demo_state->delta_t);
-    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
-    m4 u_view = m4identity();
-    glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
-    m4 u_perspective = m4identity();
-    u_perspective.cols[0].E[0] = 1 / ratio;
-    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
-    glErrorAssert();
-    glDrawArrays(GL_TRIANGLE_FAN, 0, harray_count(vertices));
-    glErrorAssert();
-
-    // circle
-    vertex_with_style circle_vertices[64+1];
-    for (uint32_t idx = 0;
-            idx < harray_count(circle_vertices);
-            ++idx)
-    {
-        vertex_with_style *v = circle_vertices + idx;
-        float a = idx * (2.0f * pi) / (harray_count(circle_vertices) - 1);
-        *v = {
-            {
-                {sinf(a) * 0.3f, cosf(a) * 0.3f, 0.0f, 1.0f},
-                {1.0f, 1.0f, 1.0f, 0.5f},
-            },
-            {0.0f, 0.0f, 0.0f, 0.0f},
+        mdtm *m = multipliers + circle_idx;
+        vertex_with_style vertices[] = {
+            { { {-m->s, m->s, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { { m->s, m->s, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { { m->s,-m->s, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { {-m->s,-m->s, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
         };
+
+        glErrorAssert();
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glErrorAssert();
+        v2 position = {0,0};
+        glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
+        glErrorAssert();
+        v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
+        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+        glErrorAssert();
+        v3 axis = {0.0f, 0.0f, -1.0f};
+        m4 u_model = m4rotation(axis, demo_state->delta_t * m->t);
+        glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
+        m4 u_view = m4identity();
+        glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
+        m4 u_perspective = m4identity();
+        u_perspective.cols[0].E[0] = 1 / ratio;
+        glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
+        glErrorAssert();
+        glDrawArrays(GL_TRIANGLE_FAN, 0, harray_count(vertices));
+        glErrorAssert();
     }
-    u_model = m4identity();
-    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
-    glErrorAssert();
-    glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
-    glErrorAssert();
-    glDrawArrays(GL_LINE_STRIP, 0, harray_count(circle_vertices));
+
+    for (uint32_t circle_idx = 0;
+            circle_idx < harray_count(multipliers);
+            ++circle_idx)
+    {
+        mdtm *m = multipliers + circle_idx;
+        // circle
+        vertex_with_style circle_vertices[128+1];
+        for (uint32_t idx = 0;
+                idx < harray_count(circle_vertices);
+                ++idx)
+        {
+            vertex_with_style *v = circle_vertices + idx;
+            float a = idx * (2.0f * pi) / (harray_count(circle_vertices) - 1);
+            *v = {
+                {
+                    {sinf(a) * m->s, cosf(a) * m->s, 0.0f, 1.0f},
+                    {1.0f, 1.0f, 1.0f, 0.5f},
+                },
+                {0.0f, 0.0f, 0.0f, 0.0f},
+            };
+        }
+        m4 u_model = m4identity();
+        glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
+        glErrorAssert();
+        glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
+        glErrorAssert();
+        glDrawArrays(GL_LINE_STRIP, 0, harray_count(circle_vertices));
+    }
 }
 
 #include "hajonta/demos/demos.cpp"

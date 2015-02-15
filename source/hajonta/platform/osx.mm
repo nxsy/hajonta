@@ -317,7 +317,7 @@ int main(int argc, const char * argv[])  {
 
     // Window bounds (x, y, width, height) 
     NSRect screenRect = [[NSScreen mainScreen] frame];
-    NSRect viewRect = NSMakeRect(0, 0, 800, 600); 
+    NSRect viewRect = NSMakeRect(0, 0, 960, 540);
     NSRect windowRect = NSMakeRect(NSMidX(screenRect) - NSMidX(viewRect),
                                  NSMidY(screenRect) - NSMidY(viewRect),
                                  viewRect.size.width, 
