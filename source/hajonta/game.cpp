@@ -95,11 +95,11 @@ struct demo_data {
 };
 
 struct demo_rotate_state {
-    triangle2 t;
-    v2 rotation_point;
     uint32_t vbo;
     float delta_t;
     bool paused;
+    float near_;
+    float spacing;
 };
 
 struct game_state
@@ -270,12 +270,8 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
         glErrorAssert();
         glGenBuffers(1, &demo_state->vbo);
         glErrorAssert();
-        demo_state->rotation_point = {0.0f, 0.0f};
-        demo_state->t = {
-            { 0.0f, 6.0f},
-            {-5.2f,-3.0f},
-            { 5.2f,-3.0f},
-        };
+        demo_state->near_ = {1.0f};
+        demo_state->spacing = {0.0f};
     }
 
 
@@ -297,6 +293,35 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
         {
             demo_state->paused ^= true;
         }
+        if (controller->buttons.move_up.ended_down)
+        {
+            demo_state->spacing += 0.01f;
+        }
+        if (controller->buttons.move_down.ended_down)
+        {
+            demo_state->spacing -= 0.01f;
+        }
+        if (controller->buttons.move_left.ended_down)
+        {
+            demo_state->near_ -= 0.01f;
+        }
+        if (controller->buttons.move_right.ended_down)
+        {
+            demo_state->near_ += 0.01f;
+        }
+    }
+    if (demo_state->spacing < 0.00001f)
+    {
+        demo_state->spacing = 0.00001f;
+    }
+    if (demo_state->spacing > 4.0f)
+    {
+        demo_state->spacing = 4.0f;
+    }
+
+    if (demo_state->near_ > 0.99999f + demo_state->spacing * 0.33f)
+    {
+        demo_state->near_ = 0.99999f + demo_state->spacing * 0.33f;
     }
 
     if (!demo_state->paused)
@@ -314,16 +339,14 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
     glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
     glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
 
-    triangle2 *t = &demo_state->t;
-
     struct mdtm{
         float s; // size_multiplier;
         float t; // time_multiplier;
     };
     mdtm multipliers[] = {
-        {0.99f, 1.0f},
-        {0.66f,-0.5f},
-        {0.33f, 0.5f},
+        {-0.99f, 1.0f},
+        {-0.66f,-0.5f},
+        {-0.33f, 0.5f},
     };
     float ratio = 960.0f / 540.0f;
     for (uint32_t circle_idx = 0;
@@ -332,10 +355,10 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
     {
         mdtm *m = multipliers + circle_idx;
         vertex_with_style vertices[] = {
-            { { {-m->s, m->s, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-            { { { m->s, m->s, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-            { { { m->s,-m->s, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
-            { { {-m->s,-m->s, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { {-m->s, m->s, m->s * demo_state->spacing - 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { { m->s, m->s, m->s * demo_state->spacing - 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { { m->s,-m->s, m->s * demo_state->spacing - 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
+            { { {-m->s,-m->s, m->s * demo_state->spacing - 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f, 1.0f }, }, { 0.0f, 0.0f, 0.0f, 0.0f }, },
         };
 
         glErrorAssert();
@@ -352,8 +375,7 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
         glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
         m4 u_view = m4identity();
         glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
-        m4 u_perspective = m4identity();
-        u_perspective.cols[0].E[0] = 1 / ratio;
+        m4 u_perspective = m4frustumprojection(demo_state->near_, 5.0f, {-ratio, -1.0f}, {ratio, 1.0f});
         glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
         glErrorAssert();
         glDrawArrays(GL_TRIANGLE_FAN, 0, harray_count(vertices));
@@ -375,7 +397,7 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
             float a = idx * (2.0f * pi) / (harray_count(circle_vertices) - 1);
             *v = {
                 {
-                    {sinf(a) * m->s, cosf(a) * m->s, 0.0f, 1.0f},
+                    {sinf(a) * m->s, cosf(a) * m->s, m->s, 1.0f},
                     {1.0f, 1.0f, 1.0f, 0.5f},
                 },
                 {0.0f, 0.0f, 0.0f, 0.0f},
@@ -386,8 +408,16 @@ GAME_UPDATE_AND_RENDER(demo_rotate)
         glErrorAssert();
         glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
         glErrorAssert();
+        m4 u_perspective = m4identity();
+        u_perspective.cols[0].E[0] = 1 / ratio;
+        glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
         glDrawArrays(GL_LINE_STRIP, 0, harray_count(circle_vertices));
     }
+
+    memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
+    char msg[1024];
+    sprintf(msg, "NEAR: %+.2f SPACING: %+.2f", demo_state->near_, demo_state->spacing);
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
 }
 
 #include "hajonta/demos/demos.cpp"

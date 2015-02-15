@@ -722,3 +722,24 @@ m4rotation(v3 axis, float angle)
 
     return result;
 }
+
+m4
+m4frustumprojection(float near_, float far_, v2 bottom_left, v2 top_right)
+{
+    float b = bottom_left.y;
+    float l = bottom_left.x;
+    float t = top_right.y;
+    float r = top_right.x;
+
+    m4 result = {};
+    result.cols[0].E[0] = (near_ * 2.0f) / (r - l);
+    result.cols[1].E[1] = (2.0f * near_) / (t - b);
+    result.cols[2] = {
+        (r + l) / (r - l),
+        (t + b) / (t - b),
+        -((far_ + near_) / ( far_ - near_)),
+        -1,
+    };
+    result.cols[3].E[2] = -((2 * near_ * far_) / (far_ - near_));
+    return result;
+}
