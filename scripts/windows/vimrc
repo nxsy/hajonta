@@ -9,6 +9,16 @@ endfunction
 command! Build call s:build()
 map <Leader>b :Build<cr>
 
+function! s:run()
+    execute "silent !start /b build\\win32_msvc.exe"
+endfunction
+
+command! Run call s:run()
+map <Leader>r :Run<cr>
+
+command! Build call s:build()
+map <Leader>b :Build<cr>
+
 function! s:load_url(url)
     execute "silent !start explorer \"" . a:url . "\""
 endfunction
