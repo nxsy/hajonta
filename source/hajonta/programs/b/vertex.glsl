@@ -23,4 +23,8 @@ void main (void)
     {
         gl_Position = u_perspective * u_view * u_model * a_pos;
     }
+    if (u_mvp_enabled.w == 1)
+    {
+        v_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    }
 }
