@@ -1,12 +1,12 @@
 #pragma once
 
 static const demo_data menu_items[] = {
-    {"Menu", (void *)demo_menu},
-    {"Rainbow", (void *)demo_rainbow},
-    {"Normals", (void *)demo_normals},
-    {"Collision", (void *)demo_collision},
-    {"Bounce", (void *)demo_bounce},
-    {"Rotate", (void *)demo_rotate},
+    {"Menu", (demo_func *)demo_menu},
+    {"Rainbow", (demo_func *)demo_rainbow},
+    {"Normals", (demo_func *)demo_normals},
+    {"Collision", (demo_func *)demo_collision},
+    {"Bounce", (demo_func *)demo_bounce},
+    {"Rotate", (demo_func *)demo_rotate},
 };
 
 #include "hajonta/demos/rainbow.cpp"

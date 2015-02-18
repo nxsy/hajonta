@@ -89,11 +89,6 @@ glErrorAssert()
 #define fps_buffer_width 960
 #define fps_buffer_height 14
 
-struct demo_data {
-    char *name;
-    void *func;
-};
-
 #define matrix_buffer_width 300
 #define matrix_buffer_height 14
 struct demo_rotate_state {
@@ -230,13 +225,6 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     glErrorAssert();
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthFunc(GL_ALWAYS);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_STENCIL_TEST);
-    glDisable(GL_CULL_FACE);
 
     return true;
 }
@@ -589,6 +577,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
 
+    static uint32_t last_active_demo = UINT32_MAX;
+
+    demo_context demo_ctx = {};
+
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
     if (!glCreateProgram)
     {
@@ -608,8 +600,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     glErrorAssert();
-    game_update_and_render_func *demo = (game_update_and_render_func *)state->demos[(uint32_t)state->active_demo].func;
-    demo(ctx, memory, input, sound_output);
+    if (last_active_demo != state->active_demo)
+    {
+        demo_ctx.switched = true;
+
+        // Revert to something resembling defaults
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthFunc(GL_ALWAYS);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_CULL_FACE);
+    }
+    demo_func *demo = (demo_func *)state->demos[(uint32_t)state->active_demo].func;
+    demo(ctx, memory, input, sound_output, &demo_ctx);
+    demo_ctx.switched = false;
     glErrorAssert();
     debug_output(state);
     glErrorAssert();
