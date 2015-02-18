@@ -7,4 +7,4 @@ struct demo_collision_state
     v2 line_velocity;
 };
 
-GAME_UPDATE_AND_RENDER(demo_collision);
+DEMO(demo_collision);

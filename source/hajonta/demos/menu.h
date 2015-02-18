@@ -12,4 +12,4 @@ struct demo_menu_state
     uint32_t selected_index;
 };
 
-GAME_UPDATE_AND_RENDER(demo_menu);
+DEMO(demo_menu);

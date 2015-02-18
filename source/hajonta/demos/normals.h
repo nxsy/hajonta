@@ -7,4 +7,4 @@ struct demo_normals_state
     v2 line_velocity;
 };
 
-GAME_UPDATE_AND_RENDER(demo_normals);
+DEMO(demo_normals);

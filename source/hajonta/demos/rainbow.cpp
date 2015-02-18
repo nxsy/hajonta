@@ -1,6 +1,6 @@
 #pragma once
 
-GAME_UPDATE_AND_RENDER(demo_rainbow)
+DEMO(demo_rainbow)
 {
     game_state *state = (game_state *)memory->memory;
     if (!state->rainbow.vbo)

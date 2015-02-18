@@ -1,6 +1,6 @@
 #pragma once
 
-GAME_UPDATE_AND_RENDER(demo_bounce)
+DEMO(demo_bounce)
 {
     glPointSize(5.0f);
     game_state *state = (game_state *)memory->memory;

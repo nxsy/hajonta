@@ -11,4 +11,4 @@ struct demo_rainbow_state
     void *audio_buffer_data;
 };
 
-GAME_UPDATE_AND_RENDER(demo_rainbow);
+DEMO(demo_rainbow);

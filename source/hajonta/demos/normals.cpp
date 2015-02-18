@@ -1,6 +1,6 @@
 #pragma once
 
-GAME_UPDATE_AND_RENDER(demo_normals)
+DEMO(demo_normals)
 {
     game_state *state = (game_state *)memory->memory;
     demo_normals_state *demo_state = &state->normals;

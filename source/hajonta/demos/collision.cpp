@@ -1,6 +1,6 @@
 #pragma once
 
-GAME_UPDATE_AND_RENDER(demo_collision)
+DEMO(demo_collision)
 {
     game_state *state = (game_state *)memory->memory;
     demo_collision_state *demo_state = &state->collision;
