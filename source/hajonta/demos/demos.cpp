@@ -14,3 +14,4 @@ static const demo_data menu_items[] = {
 #include "hajonta/demos/normals.cpp"
 #include "hajonta/demos/collision.cpp"
 #include "hajonta/demos/menu.cpp"
+#include "hajonta/demos/rotate.cpp"
