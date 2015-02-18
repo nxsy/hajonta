@@ -4,7 +4,7 @@ DEMO(demo_bounce)
 {
     glPointSize(5.0f);
     game_state *state = (game_state *)memory->memory;
-    demo_bounce_state *demo_state = &state->bounce;
+    demo_bounce_state *demo_state = &state->demos.bounce;
 
     glClearColor(0.1f, 0.0f, 0.0f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -37,7 +37,7 @@ DEMO(demo_bounce)
         game_controller_state *controller = &input->controllers[i];
         if (controller->buttons.back.ended_down)
         {
-            state->active_demo = 0;
+            state->demos.active_demo = 0;
         }
     }
 

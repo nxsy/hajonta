@@ -3,7 +3,7 @@
 DEMO(demo_rotate)
 {
     game_state *state = (game_state *)memory->memory;
-    demo_rotate_state *demo_state = &state->rotate;
+    demo_rotate_state *demo_state = &state->demos.rotate;
 
     glDepthFunc(GL_LESS);
     glEnable(GL_DEPTH_TEST);
@@ -103,7 +103,7 @@ DEMO(demo_rotate)
         game_controller_state *controller = &input->controllers[i];
         if (controller->buttons.back.ended_down)
         {
-            state->active_demo = 0;
+            state->demos.active_demo = 0;
         }
         if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
         {

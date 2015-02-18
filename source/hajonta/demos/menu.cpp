@@ -3,7 +3,7 @@
 DEMO(demo_menu)
 {
     game_state *state = (game_state *)memory->memory;
-    demo_menu_state *demo = &state->menu;
+    demo_menu_state *demo = &state->demos.menu;
 
     if (!demo->vbo) {
         glGenBuffers(1, &demo->vbo);
@@ -49,13 +49,13 @@ DEMO(demo_menu)
         if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
             demo->selected_index++;
-            demo->selected_index %= state->number_of_demos;
+            demo->selected_index %= state->demos.number_of_demos;
         }
         if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
         {
             if (demo->selected_index == 0)
             {
-                demo->selected_index = state->number_of_demos - 1;
+                demo->selected_index = state->demos.number_of_demos - 1;
             }
             else
             {
@@ -64,11 +64,11 @@ DEMO(demo_menu)
         }
         if (controller->buttons.move_right.ended_down)
         {
-            state->active_demo = demo->selected_index;
+            state->demos.active_demo = demo->selected_index;
         }
         if (controller->buttons.start.ended_down)
         {
-            state->active_demo = demo->selected_index;
+            state->demos.active_demo = demo->selected_index;
         }
     }
 
@@ -79,7 +79,7 @@ DEMO(demo_menu)
     float height = 14.0f / (540.0f / 2.0f);
     float width = 300.0f / (960.0f / 2.0f);
     for (uint32_t menu_index = 0;
-            menu_index < state->number_of_demos;
+            menu_index < state->demos.number_of_demos;
             ++menu_index)
     {
         float offset = -height * 2 * menu_index;
@@ -91,7 +91,7 @@ DEMO(demo_menu)
         };
         glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
         memset(demo->menu_buffer, 0, sizeof(demo->menu_buffer));
-        write_to_buffer(&demo->menu_draw_buffer, &state->debug_font.font, state->demos[menu_index].name);
+        write_to_buffer(&demo->menu_draw_buffer, &state->debug_font.font, state->demos.registry[menu_index].name);
         if (menu_index == demo->selected_index)
         {
             for (uint32_t *b = (uint32_t *)demo->menu_buffer;

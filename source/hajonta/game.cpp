@@ -90,22 +90,13 @@ glErrorAssert()
 #define fps_buffer_height 14
 struct game_state
 {
-    uint32_t active_demo;
-    demo_data *demos;
-    uint32_t number_of_demos;
-
     a_program_struct program_a;
     b_program_struct program_b;
     debug_font_program_struct program_debug_font;
 
     uint32_t vao;
 
-    demo_menu_state menu;
-    demo_rainbow_state rainbow;
-    demo_normals_state normals;
-    demo_collision_state collision;
-    demo_bounce_state bounce;
-    demo_rotate_state rotate;
+    struct demos_state demos;
 
     kenpixel_future_14 debug_font;
     uint8_t fps_buffer[4 * fps_buffer_width * fps_buffer_height];
@@ -254,9 +245,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 #endif
     if (!memory->initialized)
     {
-        state->active_demo = 0;
-        state->demos = (demo_data *)menu_items;
-        state->number_of_demos = harray_count(menu_items);
+        state->demos.active_demo = 0;
+        state->demos.registry = (demo_data *)menu_items;
+        state->demos.number_of_demos = harray_count(menu_items);
         if(!gl_setup(ctx, memory))
         {
             return;
@@ -265,7 +256,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     glErrorAssert();
-    if (last_active_demo != state->active_demo)
+    if (last_active_demo != state->demos.active_demo)
     {
         demo_ctx.switched = true;
 
@@ -277,7 +268,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glDisable(GL_STENCIL_TEST);
         glDisable(GL_CULL_FACE);
     }
-    demo_func *demo = (demo_func *)state->demos[(uint32_t)state->active_demo].func;
+    demo_func *demo = (demo_func *)state->demos.registry[(uint32_t)state->demos.active_demo].func;
     demo(ctx, memory, input, sound_output, &demo_ctx);
     demo_ctx.switched = false;
     glErrorAssert();

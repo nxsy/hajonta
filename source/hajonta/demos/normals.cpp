@@ -3,7 +3,7 @@
 DEMO(demo_normals)
 {
     game_state *state = (game_state *)memory->memory;
-    demo_normals_state *demo_state = &state->normals;
+    demo_normals_state *demo_state = &state->demos.normals;
 
     glClearColor(0.1f, 0.0f, 0.0f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -31,7 +31,7 @@ DEMO(demo_normals)
         game_controller_state *controller = &input->controllers[i];
         if (controller->buttons.back.ended_down)
         {
-            state->active_demo = 0;
+            state->demos.active_demo = 0;
         }
         if (controller->buttons.move_up.ended_down)
         {

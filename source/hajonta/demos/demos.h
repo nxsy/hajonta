@@ -17,3 +17,17 @@ struct demo_data {
     char *name;
     demo_func *func;
 };
+
+struct demos_state
+{
+    uint32_t active_demo;
+    demo_data *registry;
+    uint32_t number_of_demos;
+
+    demo_menu_state menu;
+    demo_rainbow_state rainbow;
+    demo_normals_state normals;
+    demo_collision_state collision;
+    demo_bounce_state bounce;
+    demo_rotate_state rotate;
+};
