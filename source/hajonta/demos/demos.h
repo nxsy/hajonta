@@ -12,6 +12,7 @@ typedef DEMO(demo_func);
 #include "hajonta/demos/collision.h"
 #include "hajonta/demos/menu.h"
 #include "hajonta/demos/rotate.h"
+#include "hajonta/demos/model.h"
 
 struct demo_data {
     char *name;
@@ -30,4 +31,5 @@ struct demos_state
     demo_collision_state collision;
     demo_bounce_state bounce;
     demo_rotate_state rotate;
+    demo_model_state model;
 };
