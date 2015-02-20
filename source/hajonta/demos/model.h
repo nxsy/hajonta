@@ -28,12 +28,17 @@ struct demo_model_state {
     uint32_t vbo;
     uint32_t ibo;
     uint32_t ibo_length;
-    uint32_t texture_id;
+    uint32_t texture_ids[4];
 
     float near_;
     float far_;
 
     model minimalist_dudes;
+    uint8_t model_bitmap[1048576];
+    draw_buffer model_buffer;
+
+    float delta_t;
+    uint32_t current_texture_idx;
 };
 
 DEMO(demo_model);

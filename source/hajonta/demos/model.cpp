@@ -1,11 +1,16 @@
 #pragma once
 
+#include "hajonta/image.cpp"
+
 DEMO(demo_model)
 {
     game_state *state = (game_state *)memory->memory;
     demo_model_state *demo_state = &state->demos.model;
 
     glClearColor(0.2f, 0.1f, 0.1f, 0);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (!demo_state->vbo)
     {
@@ -19,14 +24,36 @@ DEMO(demo_model)
 
         v3 vertices[] =
         {
-            {-27.428101, 0.000000, 19.851852},
-            {22.571899, 0.000000, 19.851852},
-            {-27.428101, 0.000000 -10.148148},
-            {22.571899, 0.000000 -10.148148},
-            {-27.428101, 80.000000, 19.851852},
-            {22.571899, 80.000000, 19.851852},
-            {-27.428101, 80.000000 -10.148148},
-            {22.571899, 80.000000 -10.148148},
+            {-27.428101, -40.000000, 19.851852},
+            {22.571899, -40.000000, 19.851852},
+            {-27.428101, -40.000000,-10.148148},
+            {22.571899, -40.000000,-10.148148},
+            {-27.428101, 40.000000, 19.851852},
+            {22.571899, 40.000000, 19.851852},
+            {-27.428101, 40.000000, -10.148148},
+            {22.571899, 40.000000, -10.148148},
+        };
+
+        v3 texture_coords[] =
+        {
+            {1.000000,0.000000,0.000000},
+            {0.814453,0.000000,0.000000},
+            {0.814453,0.498047,0.000000},
+            {1.000000,0.498047,0.000000},
+            {0.500000,0.000000,0.000000},
+            {0.500000,0.498047,0.000000},
+            {0.000000,0.796875,0.000000},
+            {0.000000,0.498047,0.000000},
+            {0.500000,0.498047,0.000000},
+            {0.500000,0.796875,0.000000},
+            {0.314453,0.000000,0.000000},
+            {0.314453,0.498047,0.000000},
+            {0.000000,0.000000,0.000000},
+            {0.000000,0.498047,0.000000},
+            {0.500000,0.498047,0.000000},
+            {1.000000,0.498047,0.000000},
+            {1.000000,0.796875,0.000000},
+            {0.500000,0.796875,0.000000},
         };
 
         face faces[] =
@@ -52,7 +79,7 @@ DEMO(demo_model)
 
         GLushort faces_array[harray_count(faces) * 3];
         for (uint32_t face_idx = 0;
-                face_idx < harray_count(faces);
+                face_idx < harray_count(faces_array);
                 ++face_idx)
         {
             faces_array[face_idx] = face_idx;
@@ -61,28 +88,6 @@ DEMO(demo_model)
         demo_state->ibo_length = harray_count(faces_array);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->ibo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(faces_array), faces_array, GL_STATIC_DRAW);
-
-        v3 texture_coords[] =
-        {
-            {1.000000,0.000000,0.000000},
-            {0.814453,0.000000,0.000000},
-            {0.814453,0.498047,0.000000},
-            {1.000000,0.498047,0.000000},
-            {0.500000,0.000000,0.000000},
-            {0.500000,0.498047,0.000000},
-            {0.000000,0.796875,0.000000},
-            {0.000000,0.498047,0.000000},
-            {0.500000,0.498047,0.000000},
-            {0.500000,0.796875,0.000000},
-            {0.314453,0.000000,0.000000},
-            {0.314453,0.498047,0.000000},
-            {0.000000,0.000000,0.000000},
-            {0.000000,0.498047,0.000000},
-            {0.500000,0.498047,0.000000},
-            {1.000000,0.498047,0.000000},
-            {1.000000,0.796875,0.000000},
-            {0.500000,0.796875,0.000000},
-        };
 
         vertex_with_style vbo_vertices[harray_count(faces) * 3];
 
@@ -102,66 +107,81 @@ DEMO(demo_model)
             v3 *face_vt2 = texture_coords + (f->indices[1].texture_coord - 1);
             v3 *face_vt3 = texture_coords + (f->indices[2].texture_coord - 1);
 
-            vbo_v1->v.position[0] = face_v1->x / 40;
-            vbo_v1->v.position[1] = face_v1->y / 40;
-            vbo_v1->v.position[2] = face_v1->z / 40 - 15;
+            vbo_v1->v.position[0] = face_v1->x;
+            vbo_v1->v.position[1] = face_v1->y;
+            vbo_v1->v.position[2] = face_v1->z;
             vbo_v1->v.position[3] = 1.0f;
 
-            vbo_v2->v.position[0] = face_v2->x / 40;
-            vbo_v2->v.position[1] = face_v2->y / 40;
-            vbo_v2->v.position[2] = face_v2->z / 40 - 15;
+            vbo_v2->v.position[0] = face_v2->x;
+            vbo_v2->v.position[1] = face_v2->y;
+            vbo_v2->v.position[2] = face_v2->z;
             vbo_v2->v.position[3] = 1.0f;
 
-            vbo_v3->v.position[0] = face_v3->x / 40;
-            vbo_v3->v.position[1] = face_v3->y / 40;
-            vbo_v3->v.position[2] = face_v3->z / 40 - 15;
+            vbo_v3->v.position[0] = face_v3->x;
+            vbo_v3->v.position[1] = face_v3->y;
+            vbo_v3->v.position[2] = face_v3->z;
             vbo_v3->v.position[3] = 1.0f;
 
             vbo_v1->v.color[0] = face_vt1->x;
-            vbo_v1->v.color[1] = face_vt1->y;
+            vbo_v1->v.color[1] = 1 - face_vt1->y;
             vbo_v1->v.color[2] = 0.0f;
             vbo_v1->v.color[3] = 1.0f;
 
-            vbo_v1->v.color[0] += 0.3f;
-            vbo_v1->v.color[1] += 0.3f;
-            vbo_v1->v.color[2] += 0.3f;
-
             vbo_v2->v.color[0] = face_vt2->x;
-            vbo_v2->v.color[1] = face_vt2->y;
+            vbo_v2->v.color[1] = 1 - face_vt2->y;
             vbo_v2->v.color[2] = 0.0f;
             vbo_v2->v.color[3] = 1.0f;
 
-            vbo_v2->v.color[0] += 0.3f;
-            vbo_v2->v.color[1] += 0.3f;
-            vbo_v2->v.color[2] += 0.3f;
-
             vbo_v3->v.color[0] = face_vt3->x;
-            vbo_v3->v.color[1] = face_vt3->y;
+            vbo_v3->v.color[1] = 1 - face_vt3->y;
             vbo_v3->v.color[2] = 0.0f;
             vbo_v3->v.color[3] = 1.0f;
 
-            vbo_v3->v.color[0] += 0.3f;
-            vbo_v3->v.color[1] += 0.3f;
-            vbo_v3->v.color[2] += 0.3f;
-
-            vbo_v1->style[0] = 0.0f;
-            vbo_v2->style[0] = 0.0f;
-            vbo_v3->style[0] = 0.0f;
-        }
-
-        for (uint32_t i = 0;
-                i < harray_count(vbo_vertices);
-                ++i)
-        {
-            vertex_with_style *v = vbo_vertices + i;
-            printf("Vertex %d: ", i);
-            printf("Pos: %0.2f, %0.2f, %0.2f, %0.2f   ", v->v.position[0], v->v.position[1], v->v.position[2], v->v.position[3]);
-            printf("Col: %0.2f, %0.2f, %0.2f, %0.2f   ", v->v.color[0], v->v.color[1], v->v.color[2], v->v.color[3]);
-            printf("\n");
+            vbo_v1->style[0] = 2.0f;
+            vbo_v2->style[0] = 2.0f;
+            vbo_v3->style[0] = 2.0f;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, demo_state->vbo);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vbo_vertices), vbo_vertices, GL_STATIC_DRAW);
+
+        struct file_and_size
+        {
+            char *filename;
+            uint32_t size;
+        };
+
+        file_and_size f_s[] = {
+            {"models/minimalist-dudes/m0.jpg", 27970},
+            {"models/minimalist-dudes/m1.jpg", 34060},
+            {"models/minimalist-dudes/m2.jpg", 45223},
+            {"models/minimalist-dudes/m3.jpg", 58295},
+        };
+
+        glGenTextures(4, demo_state->texture_ids);
+        for (uint32_t file_idx = 0;
+                file_idx < harray_count(f_s);
+                ++file_idx)
+        {
+            file_and_size *f = f_s + file_idx;
+            uint8_t jpg[f->size];
+            if (!memory->platform_load_asset(ctx, f->filename, sizeof(jpg), jpg)) {
+                memory->platform_fail(ctx, "Could not load models/minimalist-dudes/m0.jpg");
+                memory->quit = true;
+                return;
+            }
+            demo_state->model_buffer.memory = demo_state->model_bitmap;
+            demo_state->model_buffer.width = 512;
+            demo_state->model_buffer.height = 512;
+            demo_state->model_buffer.pitch = 512;
+            load_image(jpg, sizeof(jpg), demo_state->model_bitmap, sizeof(demo_state->model_bitmap));
+
+            glBindTexture(GL_TEXTURE_2D, demo_state->texture_ids[file_idx]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                (GLsizei)demo_state->model_buffer.width, (GLsizei)demo_state->model_buffer.height, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, demo_state->model_buffer.memory);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        }
     }
 
     for (uint32_t i = 0;
@@ -178,9 +198,21 @@ DEMO(demo_model)
         {
             state->demos.active_demo = 0;
         }
+        if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
+        {
+            demo_state->current_texture_idx++;
+        }
+        if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
+        {
+            demo_state->current_texture_idx--;
+        }
     }
+    demo_state->current_texture_idx %= harray_count(demo_state->texture_ids);
+
+    demo_state->delta_t += input->delta_t;
 
     glUseProgram(state->program_b.program);
+    glBindTexture(GL_TEXTURE_2D, demo_state->texture_ids[demo_state->current_texture_idx]);
     glBindBuffer(GL_ARRAY_BUFFER, demo_state->vbo);
 
     glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
@@ -192,7 +224,21 @@ DEMO(demo_model)
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->ibo);
 
-    m4 u_model = m4identity();
+    v3 axis = {0.0f, 1.0f, 0.0f};
+    m4 rotate = m4rotation(axis, demo_state->delta_t);
+    m4 scale = m4identity();
+    scale.cols[0].E[0] = 0.025f;
+    scale.cols[1].E[1] = 0.025f;
+    scale.cols[2].E[2] = 0.025f;
+    m4 translate = m4identity();
+    translate.cols[3] = v4{0.0f, 0.0f, -6.0f, 1.0f};
+
+    m4 a = scale;
+    m4 b = rotate;
+    m4 c = translate;
+
+    m4 u_model = m4mul(c, m4mul(a, b));
+
     v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
     glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
     glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
@@ -200,8 +246,13 @@ DEMO(demo_model)
     glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
     float ratio = 960.0f / 540.0f;
     m4 u_perspective = m4frustumprojection(demo_state->near_, demo_state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
+    //m4 u_perspective = m4identity();
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
 
     glDrawElements(GL_TRIANGLES, (GLsizei)demo_state->ibo_length, GL_UNSIGNED_SHORT, 0);
     glErrorAssert();
+
+    u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
+    glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+    glDrawElements(GL_LINES, (GLsizei)demo_state->ibo_length, GL_UNSIGNED_SHORT, 0);
 }
