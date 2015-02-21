@@ -2,10 +2,14 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 
+#if defined(_MSC_VER)
 #pragma warning(push, 4)
 #pragma warning(disable: 4365 4312)
+#endif
 #include "hajonta/thirdparty/stb_image.h"
+#if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
 
 bool
 load_image(uint8_t *source, uint32_t source_size, uint8_t *dest, uint32_t dest_size)
