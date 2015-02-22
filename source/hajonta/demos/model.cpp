@@ -218,13 +218,17 @@ DEMO(demo_model)
         keyboard_input *ki = base + i;
         if (ki->type == keyboard_input_type::ASCII)
         {
-            printf("char %c\n", ki->ascii);
+            char msg[100];
+            sprintf(msg, "char %c\n", ki->ascii);
+            memory->platform_debug_message(ctx, msg);
             posted[posted_idx++] = ki->ascii;
         }
     }
     if (posted[0])
     {
-        printf("posted: %s\n", posted);
+        char msg[100];
+        sprintf(msg, "posted: %s\n", posted);
+        memory->platform_debug_message(ctx, msg);
     }
 
     demo_state->current_texture_idx %= harray_count(demo_state->texture_ids);

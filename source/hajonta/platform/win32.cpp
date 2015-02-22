@@ -11,6 +11,7 @@
 struct win32_state
 {
     int32_t stopping;
+    bool keyboard_mode;
     char *stop_reason;
 
     HDC device_context;
@@ -232,6 +233,54 @@ handle_win32_messages(win32_state *state)
                 state->stopping = true;
             } break;
 
+            case WM_CHAR:
+            {
+                char c = 0;
+                switch (message.wParam)
+                {
+                    case 0x08: // backspace
+                    {
+                    } break;
+                    case 0x0A: // linefeed
+                    {
+                    } break;
+                    case 0x1B: // escape
+                    {
+                    } break;
+                    case 0x09: // tab
+                    {
+                    } break;
+                    case 0x0D: // carriage return
+                    {
+                    } break;
+                    case '`':
+                    {
+                        state->keyboard_mode = false;
+                    } break;
+                    default:
+                    {
+                        c = (char)message.wParam;
+                    } break;
+                }
+                if (!c)
+                {
+                    break;
+                }
+                keyboard_input *k = state->new_input->keyboard_inputs;
+                for (uint32_t idx = 0;
+                        idx < harray_count(state->new_input->keyboard_inputs);
+                        ++idx)
+                {
+                    keyboard_input *ki = k + idx;
+                    if (ki->type == keyboard_input_type::NONE)
+                    {
+                        ki->type = keyboard_input_type::ASCII;
+                        ki->ascii = c;
+                        break;
+                    }
+                }
+            } break;
+
             case WM_SYSKEYDOWN:
             case WM_SYSKEYUP:
             case WM_KEYDOWN:
@@ -246,32 +295,50 @@ handle_win32_messages(win32_state *state)
                 */
                 bool was_down = ((message.lParam & (1 << 30)) != 0);
                 bool is_down = ((message.lParam & (1 << 31)) == 0);
-                switch(vkcode)
+                if (!state->keyboard_mode)
                 {
-                    case VK_RETURN:
+                    switch(vkcode)
                     {
-                        win32_process_keypress(&new_keyboard_controller->buttons.start, was_down, is_down);
-                    } break;
-                    case VK_ESCAPE:
-                    {
-                        win32_process_keypress(&new_keyboard_controller->buttons.back, was_down, is_down);
-                    } break;
-                    case 'W':
-                    {
-                        win32_process_keypress(&new_keyboard_controller->buttons.move_up, was_down, is_down);
-                    } break;
-                    case 'A':
-                    {
-                        win32_process_keypress(&new_keyboard_controller->buttons.move_left, was_down, is_down);
-                    } break;
-                    case 'S':
-                    {
-                        win32_process_keypress(&new_keyboard_controller->buttons.move_down, was_down, is_down);
-                    } break;
-                    case 'D':
-                    {
-                        win32_process_keypress(&new_keyboard_controller->buttons.move_right, was_down, is_down);
-                    } break;
+                        case VK_RETURN:
+                        {
+                            win32_process_keypress(&new_keyboard_controller->buttons.start, was_down, is_down);
+                        } break;
+                        case VK_ESCAPE:
+                        {
+                            win32_process_keypress(&new_keyboard_controller->buttons.back, was_down, is_down);
+                        } break;
+                        case 'W':
+                        {
+                            win32_process_keypress(&new_keyboard_controller->buttons.move_up, was_down, is_down);
+                        } break;
+                        case 'A':
+                        {
+                            win32_process_keypress(&new_keyboard_controller->buttons.move_left, was_down, is_down);
+                        } break;
+                        case 'S':
+                        {
+                            win32_process_keypress(&new_keyboard_controller->buttons.move_down, was_down, is_down);
+                        } break;
+                        case 'D':
+                        {
+                            win32_process_keypress(&new_keyboard_controller->buttons.move_right, was_down, is_down);
+                        } break;
+                        case VK_OEM_3:
+                        {
+                            if (is_down)
+                            {
+                                state->keyboard_mode = true;
+                            }
+                        } break;
+                        default:
+                        {
+                        } break;
+                    }
+                }
+                else
+                {
+                    TranslateMessage(&message);
+                    DispatchMessageA(&message);
                 }
             } break;
             default:
@@ -619,6 +686,13 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         game_input *temp_input = state.new_input;
         state.new_input = state.old_input;
         state.old_input = temp_input;
+
+        for (uint32_t input_idx = 0;
+                input_idx < harray_count(state.new_input->keyboard_inputs);
+                ++input_idx)
+        {
+            *(state.new_input->keyboard_inputs + input_idx) = {};
+        }
 
         if (memory.quit)
         {
