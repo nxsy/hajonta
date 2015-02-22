@@ -8,7 +8,7 @@
 #include "hajonta/platform/common.h"
 #include "hajonta/platform/win32.h"
 
-struct platform_state
+struct win32_state
 {
     int32_t stopping;
     char *stop_reason;
@@ -23,7 +23,7 @@ struct platform_state
 };
 
 static bool
-find_asset_path(platform_state *state)
+find_asset_path(win32_state *state)
 {
     char dir[sizeof(state->binary_path)];
     strcpy(dir, state->binary_path);
@@ -54,15 +54,15 @@ struct game_code
 LRESULT CALLBACK
 main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    platform_state *state;
+    win32_state *state;
     if (uMsg == WM_NCCREATE)
     {
-        state = (platform_state *)(((LPCREATESTRUCT)lParam)->lpCreateParams);
+        state = (win32_state *)(((LPCREATESTRUCT)lParam)->lpCreateParams);
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)state);
     }
     else
     {
-        state = (platform_state *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+        state = (win32_state *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
         if (!state)
         {
             // This message is allowed to arrive before WM_NCCREATE (!)
@@ -218,7 +218,7 @@ win32_process_keypress(game_button_state *new_button_state, bool was_down, bool 
 }
 
 static void
-handle_win32_messages(platform_state *state)
+handle_win32_messages(win32_state *state)
 {
     game_controller_state *new_keyboard_controller = get_controller(state->new_input, 0);
 
@@ -285,7 +285,7 @@ handle_win32_messages(platform_state *state)
 
 PLATFORM_FAIL(platform_fail)
 {
-    platform_state *state = (platform_state *)ctx;
+    win32_state *state = (win32_state *)ctx;
     state->stopping = 1;
     state->stop_reason = strdup(failure_reason);
 }
@@ -303,7 +303,7 @@ PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 
 PLATFORM_LOAD_ASSET(win32_load_asset)
 {
-    platform_state *state = (platform_state *)ctx;
+    win32_state *state = (win32_state *)ctx;
     char full_pathname[MAX_PATH];
     _snprintf(full_pathname, sizeof(full_pathname), "%s\\%s", state->asset_path, asset_path);
 
@@ -389,7 +389,7 @@ bool win32_load_game_code(game_code *code, char *filename)
 int CALLBACK
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-    platform_state state = {};
+    win32_state state = {};
 
     WNDCLASSEXA window_class = {};
     window_class.cbSize = sizeof(WNDCLASSEXA);
