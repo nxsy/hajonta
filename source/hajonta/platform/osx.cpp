@@ -201,9 +201,39 @@ loop_cycle(osx_state *state)
         new_keyboard_controller->_buttons[button_index].repeat = true;
     }
 
+    for (uint32_t input_idx = 0;
+            input_idx < harray_count(state->new_input->keyboard_inputs);
+            ++input_idx)
+    {
+        *(state->new_input->keyboard_inputs + input_idx) = {};
+    }
+
     if (state->memory.quit)
     {
         state->stopping = true;
+    }
+}
+
+void
+osx_process_character(osx_state *state, char c)
+{
+    if (c == '`')
+    {
+        state->keyboard_mode = false;
+        return;
+    }
+    keyboard_input *k = state->new_input->keyboard_inputs;
+    for (uint32_t idx = 0;
+            idx < harray_count(state->new_input->keyboard_inputs);
+            ++idx)
+    {
+        keyboard_input *ki = k + idx;
+        if (ki->type == keyboard_input_type::NONE)
+        {
+            ki->type = keyboard_input_type::ASCII;
+            ki->ascii = c;
+            break;
+        }
     }
 }
 
@@ -236,6 +266,13 @@ osx_process_key_event(osx_state *state, int key_code, bool is_down)
         case 36:
         {
             process_keyboard_message(&keyboard->buttons.start, is_down);
+        } break;
+        case 50:
+        {
+            if (!is_down)
+            {
+                state->keyboard_mode = true;
+            }
         } break;
         default:
         {

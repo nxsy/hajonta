@@ -37,6 +37,7 @@ struct platform_memory
     uint64_t size;
     void *memory;
     bool quit;
+    bool debug_keyboard;
 
     platform_fail_func *platform_fail;
     platform_glgetprocaddress_func *platform_glgetprocaddress;
@@ -74,12 +75,42 @@ struct game_controller_state
     };
 };
 
+enum struct keyboard_input_type
+{
+    NONE,
+    ASCII,
+};
+
+enum struct keyboard_input_modifiers
+{
+    LEFT_SHIFT = (1<<0),
+    RIGHT_SHIFT = (1<<1),
+    LEFT_CTRL = (1<<2),
+    RIGHT_CTRL = (1<<3),
+    LEFT_ALT = (1<<4),
+    RIGHT_ALT = (1<<5),
+    LEFT_CMD = (1<<6),
+    RIGHT_CMD = (1<<7),
+};
+
+struct keyboard_input
+{
+    keyboard_input_type type;
+    keyboard_input_modifiers modifiers;
+
+    union {
+        char ascii;
+    };
+};
+
+#define MAX_KEYBOARD_INPUTS 10
 #define NUM_CONTROLLERS ((uint32_t)4)
 struct game_input
 {
     float delta_t;
 
     game_controller_state controllers[NUM_CONTROLLERS];
+    keyboard_input keyboard_inputs[MAX_KEYBOARD_INPUTS];
 };
 
 inline game_controller_state *get_controller(game_input *input, uint32_t index)

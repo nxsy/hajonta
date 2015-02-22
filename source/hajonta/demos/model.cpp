@@ -207,6 +207,26 @@ DEMO(demo_model)
             demo_state->current_texture_idx--;
         }
     }
+
+    uint32_t posted_idx = 0;
+    char posted[MAX_KEYBOARD_INPUTS] = {};
+    keyboard_input *base = input->keyboard_inputs;
+    for (uint32_t i = 0;
+            i < MAX_KEYBOARD_INPUTS;
+            ++i)
+    {
+        keyboard_input *ki = base + i;
+        if (ki->type == keyboard_input_type::ASCII)
+        {
+            printf("char %c\n", ki->ascii);
+            posted[posted_idx++] = ki->ascii;
+        }
+    }
+    if (posted[0])
+    {
+        printf("posted: %s\n", posted);
+    }
+
     demo_state->current_texture_idx %= harray_count(demo_state->texture_ids);
 
     demo_state->delta_t += input->delta_t;

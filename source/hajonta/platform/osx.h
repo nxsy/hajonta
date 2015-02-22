@@ -14,7 +14,8 @@ struct osx_game_code
 
 struct osx_state
 {
-    int32_t stopping;
+    bool stopping;
+    bool keyboard_mode;
     char *stop_reason;
 
     char binary_name[PATH_MAX];

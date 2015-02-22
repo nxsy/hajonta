@@ -204,7 +204,9 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [appLock lock];
     if ([event isARepeat] == NO) {
         //NSLog(@"Key down: %d", [event keyCode]);
-        osx_process_key_event(&state, [event keyCode], true);
+        if (!state.keyboard_mode) {
+            osx_process_key_event(&state, [event keyCode], true);
+        }
     }
     [appLock unlock];
 }
@@ -212,7 +214,15 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 - (void) keyUp: (NSEvent*) event {
     [appLock lock];
     //NSLog(@"Key up: %d", [event keyCode]);
-    osx_process_key_event(&state, [event keyCode], false);
+    if (!state.keyboard_mode) {
+        osx_process_key_event(&state, [event keyCode], false);
+    }
+    else
+    {
+        NSString *characters = [event characters];
+        unichar c = [characters characterAtIndex:0];
+        osx_process_character(&state, c);
+    }
     [appLock unlock];
 }
 
