@@ -120,6 +120,11 @@ PLATFORM_FAIL(osx_fail)
     _exit(1);
 }
 
+PLATFORM_DEBUG_MESSAGE(osx_debug_message)
+{
+    printf("%s\n", message);
+}
+
 static bool
 find_asset_path(osx_state *state)
 {
@@ -160,6 +165,7 @@ osx_init(osx_state *state)
     state->memory.memory = calloc(state->memory.size, sizeof(uint8_t));
     state->memory.platform_fail = osx_fail;
     state->memory.platform_load_asset = osx_load_asset;
+    state->memory.platform_debug_message = osx_debug_message;
 
     state->new_input = &state->inputs[0];
     state->old_input = &state->inputs[1];
