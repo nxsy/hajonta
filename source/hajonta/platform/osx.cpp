@@ -114,10 +114,9 @@ PLATFORM_LOAD_ASSET(osx_load_asset)
     return true;
 }
 
-void
-osx_fail(hajonta_thread_context *ctx, char *message)
+PLATFORM_FAIL(osx_fail)
 {
-    printf("%s\n", message);
+    printf("%s\n", failure_reason);
     _exit(1);
 }
 
