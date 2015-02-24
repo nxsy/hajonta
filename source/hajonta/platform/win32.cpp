@@ -2,11 +2,17 @@
 #include <stdio.h>
 
 #include <windows.h>
+#include <windowsx.h>
 #include <gl/gl.h>
 #include <xaudio2.h>
 
 #include "hajonta/platform/common.h"
 #include "hajonta/platform/win32.h"
+
+struct win32_mouse_state
+{
+    bool in_window;
+};
 
 struct win32_state
 {
@@ -15,12 +21,15 @@ struct win32_state
     char *stop_reason;
 
     HDC device_context;
+    HWND window;
 
     char binary_path[MAX_PATH];
     char asset_path[MAX_PATH];
 
     game_input *new_input;
     game_input *old_input;
+
+    win32_mouse_state mouse;
 };
 
 static bool
@@ -341,6 +350,51 @@ handle_win32_messages(win32_state *state)
                     DispatchMessageA(&message);
                 }
             } break;
+            case WM_LBUTTONUP:
+            {
+                int x_pos = GET_X_LPARAM(message.lParam);
+                int y_pos = GET_Y_LPARAM(message.lParam);
+                char dbg[1024] = {};
+                sprintf(dbg, "WM_LBUTTONUP at %dx%d\n", x_pos, y_pos);
+                OutputDebugStringA(dbg);
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+            } break;
+            case WM_LBUTTONDOWN:
+            {
+                int x_pos = GET_X_LPARAM(message.lParam);
+                int y_pos = GET_Y_LPARAM(message.lParam);
+                char dbg[1024] = {};
+                sprintf(dbg, "WM_LBUTTONDOWN at %dx%d\n", x_pos, y_pos);
+                OutputDebugStringA(dbg);
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+            } break;
+            case WM_MOUSELEAVE:
+            {
+                int x_pos = GET_X_LPARAM(message.lParam);
+                int y_pos = GET_Y_LPARAM(message.lParam);
+                char dbg[1024] = {};
+                sprintf(dbg, "WM_MOUSELEAVE at %dx%d\n", x_pos, y_pos);
+                OutputDebugStringA(dbg);
+                state->mouse.in_window = false;
+            } break;
+            case WM_MOUSEMOVE:
+            {
+                if (!state->mouse.in_window)
+                {
+                    state->mouse.in_window = true;
+                    int x_pos = GET_X_LPARAM(message.lParam);
+                    int y_pos = GET_Y_LPARAM(message.lParam);
+                    char dbg[1024] = {};
+                    sprintf(dbg, "WM_MOUSEMOVE at %dx%d\n", x_pos, y_pos);
+                    TRACKMOUSEEVENT tme = { sizeof(tme) };
+                    tme.dwFlags = TME_LEAVE;
+                    tme.hwndTrack = state->window;
+                    TrackMouseEvent(&tme);
+                    OutputDebugStringA(dbg);
+                }
+            } break;
             default:
             {
                 TranslateMessage(&message);
@@ -508,6 +562,8 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         MessageBoxA(0, "Unable to create window", 0, MB_OK | MB_ICONSTOP);
         return 1;
     }
+
+    state.window = window;
 
     ShowWindow(window, nCmdShow);
     game_code code = {};
