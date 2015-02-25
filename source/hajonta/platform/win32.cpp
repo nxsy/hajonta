@@ -20,6 +20,9 @@ struct win32_state
     bool keyboard_mode;
     char *stop_reason;
 
+    int window_width;
+    int window_height;
+
     HDC device_context;
     HWND window;
 
@@ -206,20 +209,27 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         } break;
         case WM_ACTIVATE:
         {
+            RECT window_rect = {};
+            GetClientRect(hwnd, &window_rect);
+            ClientToScreen(hwnd, (LPPOINT)&window_rect.left);
+            ClientToScreen(hwnd, (LPPOINT)&window_rect.right);
 
             switch (LOWORD(wParam))
             {
                 case WA_INACTIVE:
                 {
                     OutputDebugStringA("WM_ACTIVATE with WA_INACTIVE\n");
+                    ClipCursor(0);
                 } break;
                 case WA_ACTIVE:
                 {
                     OutputDebugStringA("WM_ACTIVATE with WA_ACTIVE\n");
+                    ClipCursor(&window_rect);
                 } break;
                 case WA_CLICKACTIVE:
                 {
                     OutputDebugStringA("WM_ACTIVATE with WA_CLICKACTIVE\n");
+                    ClipCursor(&window_rect);
                 } break;
             }
         } break;
@@ -376,6 +386,7 @@ handle_win32_messages(win32_state *state)
                 char dbg[1024] = {};
                 sprintf(dbg, "WM_LBUTTONUP at %dx%d\n", x_pos, y_pos);
                 OutputDebugStringA(dbg);
+                ReleaseCapture();
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
             } break;
@@ -386,6 +397,7 @@ handle_win32_messages(win32_state *state)
                 char dbg[1024] = {};
                 sprintf(dbg, "WM_LBUTTONDOWN at %dx%d\n", x_pos, y_pos);
                 OutputDebugStringA(dbg);
+                SetCapture(state->window);
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
             } break;
@@ -547,13 +559,13 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     DWORD style;
     style = WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
-    int width = 960;
-    int height = 540;
+    state.window_width = 960;
+    state.window_height = 540;
     RECT window_rect = {};
     window_rect.left = 0;
     window_rect.top = 0;
-    window_rect.right = window_rect.left + width;
-    window_rect.bottom = window_rect.top + height;
+    window_rect.right = window_rect.left + state.window_width;
+    window_rect.bottom = window_rect.top + state.window_height;
     BOOL result = AdjustWindowRect(&window_rect, style, 0);
     if (!result)
     {
