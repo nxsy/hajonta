@@ -204,6 +204,25 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             PostQuitMessage(0);
         } break;
+        case WM_ACTIVATE:
+        {
+
+            switch (LOWORD(wParam))
+            {
+                case WA_INACTIVE:
+                {
+                    OutputDebugStringA("WM_ACTIVATE with WA_INACTIVE\n");
+                } break;
+                case WA_ACTIVE:
+                {
+                    OutputDebugStringA("WM_ACTIVATE with WA_ACTIVE\n");
+                } break;
+                case WA_CLICKACTIVE:
+                {
+                    OutputDebugStringA("WM_ACTIVATE with WA_CLICKACTIVE\n");
+                } break;
+            }
+        } break;
         default:
         {
             lResult = DefWindowProc(hwnd, uMsg, wParam, lParam);
