@@ -201,6 +201,8 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             {
                 width = (int32_t)(height * ratio);
             }
+            state->window_height = height;
+            state->window_width = width;
             glViewport((window_width - width) / 2, (window_height - height) / 2, width, height);
         } break;
         case WM_CLOSE:
