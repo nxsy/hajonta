@@ -70,7 +70,7 @@ struct game_controller_state
 
     union
     {
-        game_button_state _buttons[sizeof(game_buttons)];
+        game_button_state _buttons[sizeof(game_buttons) / sizeof(game_button_state)];
         game_buttons buttons;
     };
 };
@@ -103,14 +103,40 @@ struct keyboard_input
     };
 };
 
+struct mouse_buttons
+{
+    game_button_state left;
+    game_button_state middle;
+    game_button_state right;
+};
+
+struct mouse_input
+{
+    int32_t x, y;
+    union
+    {
+        game_button_state _buttons[sizeof(mouse_buttons) / sizeof(game_button_state)];
+        mouse_buttons buttons;
+    };
+};
+
+struct window_data
+{
+    int width;
+    int height;
+};
+
 #define MAX_KEYBOARD_INPUTS 10
 #define NUM_CONTROLLERS ((uint32_t)4)
 struct game_input
 {
     float delta_t;
 
+    window_data window;
+
     game_controller_state controllers[NUM_CONTROLLERS];
     keyboard_input keyboard_inputs[MAX_KEYBOARD_INPUTS];
+    mouse_input mouse;
 };
 
 inline game_controller_state *get_controller(game_input *input, uint32_t index)

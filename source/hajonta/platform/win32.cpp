@@ -391,6 +391,7 @@ handle_win32_messages(win32_state *state)
                 ReleaseCapture();
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
+                win32_process_keypress(&state->new_input->mouse.buttons.left, true, false);
             } break;
             case WM_LBUTTONDOWN:
             {
@@ -402,6 +403,7 @@ handle_win32_messages(win32_state *state)
                 SetCapture(state->window);
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
+                win32_process_keypress(&state->new_input->mouse.buttons.left, false, true);
             } break;
             case WM_MOUSELEAVE:
             {
@@ -414,17 +416,20 @@ handle_win32_messages(win32_state *state)
             } break;
             case WM_MOUSEMOVE:
             {
+                int x_pos = GET_X_LPARAM(message.lParam);
+                int y_pos = GET_Y_LPARAM(message.lParam);
+                state->new_input->mouse.x = x_pos;
+                state->new_input->mouse.y = y_pos;
+
                 if (!state->mouse.in_window)
                 {
                     state->mouse.in_window = true;
-                    int x_pos = GET_X_LPARAM(message.lParam);
-                    int y_pos = GET_Y_LPARAM(message.lParam);
-                    char dbg[1024] = {};
-                    sprintf(dbg, "WM_MOUSEMOVE at %dx%d\n", x_pos, y_pos);
                     TRACKMOUSEEVENT tme = { sizeof(tme) };
                     tme.dwFlags = TME_LEAVE;
                     tme.hwndTrack = state->window;
                     TrackMouseEvent(&tme);
+                    char dbg[1024] = {};
+                    sprintf(dbg, "WM_MOUSEMOVE at %dx%d\n", x_pos, y_pos);
                     OutputDebugStringA(dbg);
                 }
             } break;
@@ -702,7 +707,22 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             new_keyboard_controller->_buttons[button_index].repeat = true;
         }
 
+        for (
+                uint32_t button_index = 0;
+                button_index < harray_count(state.new_input->mouse._buttons);
+                ++button_index)
+        {
+            state.new_input->mouse._buttons[button_index].ended_down = state.old_input->mouse._buttons[button_index].ended_down;
+            state.new_input->mouse._buttons[button_index].repeat = true;
+        }
+
+        state.new_input->mouse.x = state.old_input->mouse.x;
+        state.new_input->mouse.y = state.old_input->mouse.y;
+
         handle_win32_messages(&state);
+
+        state.new_input->window.width = state.window_width;
+        state.new_input->window.height = state.window_height;
 
         game_sound_output sound_output;
         sound_output.samples_per_second = 48000;
@@ -782,6 +802,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         {
             *(state.new_input->keyboard_inputs + input_idx) = {};
         }
+        state.new_input->mouse = {};
 
         if (memory.quit)
         {
