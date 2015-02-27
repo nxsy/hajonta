@@ -72,6 +72,12 @@ DEMO(demo_menu)
         }
     }
 
+    v2 mouse_loc = {
+        (float)input->mouse.x / ((float)input->window.width / 2.0f) - 1.0f,
+        ((float)input->mouse.y / ((float)input->window.height / 2.0f) - 1.0f) * -1.0f,
+    };
+    int32_t mouse_demo_chosen = -1;
+
     glClearColor(0.1f, 0.1f, 0.1f, 0);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -89,6 +95,15 @@ DEMO(demo_menu)
             {{ width/2.0f,offset-height, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}},
             {{-width/2.0f,offset-height, 0.0, 1.0}, {0.0, 0.0, 1.0, 1.0}},
         };
+        rectangle2 font_area = {
+            {-width/2.0f, offset-height},
+            {width, height},
+        };
+        if (point_in_rectangle(mouse_loc, font_area))
+        {
+            demo->selected_index = menu_index;
+            mouse_demo_chosen = (int32_t)demo->selected_index;
+        }
         glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(vertex), font_vertices, GL_STATIC_DRAW);
         memset(demo->menu_buffer, 0, sizeof(demo->menu_buffer));
         write_to_buffer(&demo->menu_draw_buffer, &state->debug_font.font, state->demos.registry[menu_index].name);
@@ -109,7 +124,18 @@ DEMO(demo_menu)
         font_output(state, demo->menu_draw_buffer, demo->vbo, demo->texture_id);
     }
     memset(state->fps_buffer, 0, sizeof(state->fps_buffer));
-    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, "MENU");
+    char msg[1024];
+    sprintf(msg, "MENU %03dx%03d ", input->mouse.x, input->mouse.y);
+    sprintf(msg + strlen(msg), "OGL %0.2fx%0.2f ", mouse_loc.x, mouse_loc.y);
+    if (input->mouse.buttons.left.ended_down)
+    {
+        sprintf(msg + strlen(msg), "LMB ");
+        if (mouse_demo_chosen >= 0)
+        {
+            state->demos.active_demo = (uint32_t)mouse_demo_chosen;
+        }
+    }
+    write_to_buffer(&state->fps_draw_buffer, &state->debug_font.font, msg);
 
     sound_output->samples = 0;
 }
