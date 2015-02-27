@@ -301,6 +301,21 @@ point_in_triangle(v2 point, triangle2 tri)
     return (s > 0) && (t > 0) && ((s + t) < a);
 }
 
+struct rectangle2
+{
+    v2 position;
+    v2 dimension;
+};
+
+bool
+point_in_rectangle(v2 point, rectangle2 rect)
+{
+    return (point.x > rect.position.x) &&
+        (point.y > rect.position.y) &&
+        (point.x < (rect.position.x + rect.dimension.x)) &&
+        (point.y < (rect.position.y + rect.dimension.y));
+}
+
 struct line2
 {
     v2 position;
