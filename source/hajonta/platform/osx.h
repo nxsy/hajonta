@@ -29,6 +29,9 @@ struct osx_state
 
     osx_game_code game_code;
     platform_memory memory;
+
+    int window_width;
+    int window_height;
 };
 
 

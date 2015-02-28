@@ -148,7 +148,7 @@ find_asset_path(osx_state *state)
 }
 
 void
-osx_init(osx_state *state)
+osx_init(osx_state *state, int window_width, int window_height)
 {
     *state = {};
     get_binary_name(state);
@@ -169,6 +169,9 @@ osx_init(osx_state *state)
 
     state->new_input = &state->inputs[0];
     state->old_input = &state->inputs[1];
+
+    state->window_width = window_width;
+    state->window_height = window_height;
 }
 
 void
@@ -185,6 +188,9 @@ loop_cycle(osx_state *state)
     sound_output.samples_per_second = 48000;
     sound_output.channels = 2;
     sound_output.number_of_samples = 48000 / 60;
+
+    state->new_input->window.width = state->window_width;
+    state->new_input->window.height = state->window_height;
 
     state->game_code.game_update_and_render((hajonta_thread_context *)state, &state->memory, state->new_input, &sound_output);
 
@@ -213,6 +219,21 @@ loop_cycle(osx_state *state)
         *(state->new_input->keyboard_inputs + input_idx) = {};
     }
 
+    state->new_input->mouse = {};
+    state->new_input->mouse.is_active = true;
+
+    for (
+            uint32_t button_index = 0;
+            button_index < harray_count(state->new_input->mouse._buttons);
+            ++button_index)
+    {
+        state->new_input->mouse._buttons[button_index].ended_down = state->old_input->mouse._buttons[button_index].ended_down;
+        state->new_input->mouse._buttons[button_index].repeat = true;
+    }
+
+    state->new_input->mouse.x = state->old_input->mouse.x;
+    state->new_input->mouse.y = state->old_input->mouse.y;
+
     if (state->memory.quit)
     {
         state->stopping = true;
@@ -240,6 +261,12 @@ osx_process_character(osx_state *state, char c)
             break;
         }
     }
+}
+
+void
+osx_process_mouse_press(osx_state *state, bool is_down)
+{
+    process_keyboard_message(&state->new_input->mouse.buttons.left, is_down);
 }
 
 void

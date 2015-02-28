@@ -29,7 +29,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 // Initialize
 - (id) initWithFrame: (NSRect) frame {
 
-    osx_init(&state);
+    osx_init(&state, frame.size.width, frame.size.height);
     running = true;
 
     // No multisampling
@@ -128,7 +128,13 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 - (void)mouseMoved:(NSEvent*) event {
     [appLock lock];
     NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
-    NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
+    // NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
+    if (point.x < 0)
+    {
+        point.x = 0;
+    }
+    state.new_input->mouse.x = point.x;
+    state.new_input->mouse.y = state.window_height - point.y;
     [appLock unlock];
 }
 
@@ -150,6 +156,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [appLock lock];
     NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
     NSLog(@"Left mouse down: %lf, %lf", point.x, point.y);
+    osx_process_mouse_press(&state, true);
     [appLock unlock];
 }
 
@@ -157,6 +164,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [appLock lock];
     NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
     NSLog(@"Left mouse up: %lf, %lf", point.x, point.y);
+    osx_process_mouse_press(&state, false);
     [appLock unlock];
 }
 
@@ -367,7 +375,7 @@ int main(int argc, const char * argv[])  {
     // Create app delegate to handle system events
     View* view = [[[View alloc] initWithFrame:windowRect] autorelease];
     view->windowRect = windowRect;
-    // [window setAcceptsMouseMovedEvents:YES];
+    [window setAcceptsMouseMovedEvents:YES];
     [window setContentView:view];
     [window setDelegate:view];
 
