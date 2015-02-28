@@ -99,7 +99,7 @@ DEMO(demo_menu)
             {-width/2.0f, offset-height},
             {width, height},
         };
-        if (point_in_rectangle(mouse_loc, font_area))
+        if (input->mouse.is_active && point_in_rectangle(mouse_loc, font_area))
         {
             demo->selected_index = menu_index;
             mouse_demo_chosen = (int32_t)demo->selected_index;

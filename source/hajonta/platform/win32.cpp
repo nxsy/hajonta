@@ -707,6 +707,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             new_keyboard_controller->_buttons[button_index].repeat = true;
         }
 
+        state.new_input->mouse.is_active = true;
         for (
                 uint32_t button_index = 0;
                 button_index < harray_count(state.new_input->mouse._buttons);

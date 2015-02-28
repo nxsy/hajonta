@@ -112,6 +112,7 @@ struct mouse_buttons
 
 struct mouse_input
 {
+    bool is_active;
     int32_t x, y;
     union
     {
