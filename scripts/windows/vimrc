@@ -16,6 +16,13 @@ endfunction
 command! Run call s:run()
 map <Leader>r :Run<cr>
 
+function! s:run_editor()
+    execute "silent !start /b build\\win32_editor.exe"
+endfunction
+
+command! RunEditor call s:run_editor()
+map <Leader>E :RunEditor<cr>
+
 command! Build call s:build()
 map <Leader>b :Build<cr>
 

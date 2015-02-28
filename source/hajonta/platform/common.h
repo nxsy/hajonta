@@ -9,6 +9,9 @@
 #define hassert(expression)
 #endif
 
+#define hstrvalue(x) #x
+#define hquoted(x) hstrvalue(x)
+
 #define harray_count(array) (sizeof(array) / sizeof((array)[0]))
 
 struct hajonta_thread_context

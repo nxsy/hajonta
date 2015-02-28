@@ -622,7 +622,12 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     char game_library_path[sizeof(state.binary_path)];
     char *location_of_last_slash = strrchr(state.binary_path, '\\');
     strncpy(game_library_path, state.binary_path, (size_t)(location_of_last_slash - state.binary_path));
-    strcat(game_library_path, "\\game.dll");
+    strcat(game_library_path, "\\");
+#if defined(HAJONTA_LIBRARY_NAME)
+    strcat(game_library_path, hquoted(HAJONTA_LIBRARY_NAME));
+#else
+    strcat(game_library_path, "game.dll");
+#endif
     if (!find_asset_path(&state))
     {
         MessageBoxA(0, "Failed to locate asset path", 0, MB_OK | MB_ICONSTOP);
