@@ -34,6 +34,9 @@ typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 #define PLATFORM_LOAD_ASSET(func_name) bool func_name(hajonta_thread_context *ctx, char *asset_path, uint32_t size, uint8_t *dest)
 typedef PLATFORM_LOAD_ASSET(platform_load_asset_func);
 
+#define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(hajonta_thread_context *ctx, char **dest, uint32_t *dest_size)
+typedef PLATFORM_EDITOR_LOAD_FILE(platform_editor_load_file_func);
+
 struct platform_memory
 {
     bool initialized;
@@ -46,6 +49,7 @@ struct platform_memory
     platform_glgetprocaddress_func *platform_glgetprocaddress;
     platform_debug_message_func *platform_debug_message;
     platform_load_asset_func *platform_load_asset;
+    platform_editor_load_file_func *platform_editor_load_file;
 };
 
 struct game_button_state

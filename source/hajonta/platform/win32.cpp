@@ -5,6 +5,12 @@
 #include <windowsx.h>
 #include <gl/gl.h>
 #include <xaudio2.h>
+#pragma warning (push)
+#pragma warning (disable: 4471)
+#pragma warning (disable: 4278)
+#pragma warning (disable: 4917)
+#include <Shobjidl.h>
+#pragma warning (pop)
 
 #include "hajonta/platform/common.h"
 #include "hajonta/platform/win32.h"
@@ -496,6 +502,61 @@ PLATFORM_LOAD_ASSET(win32_load_asset)
     return true;
 }
 
+PLATFORM_EDITOR_LOAD_FILE(win32_editor_load_file)
+{
+    bool result = false;
+    IFileOpenDialog *pFileOpen;
+
+    // Create the FileOpenDialog object.
+    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+            IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+
+    if (SUCCEEDED(hr))
+    {
+        // Show the Open dialog box.
+        hr = pFileOpen->Show(NULL);
+
+        // Get the file name from the dialog box.
+        if (SUCCEEDED(hr))
+        {
+            IShellItem *pItem;
+            hr = pFileOpen->GetResult(&pItem);
+            if (SUCCEEDED(hr))
+            {
+                PWSTR pszFilePath;
+                hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+
+                // Display the file name to the user.
+                if (SUCCEEDED(hr))
+                {
+                    HANDLE handle = CreateFileW(pszFilePath, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+                    if (handle != INVALID_HANDLE_VALUE)
+                    {
+                        LARGE_INTEGER _size;
+                        GetFileSizeEx(handle, &_size);
+                        void *buffer = malloc((size_t)_size.QuadPart);
+                        DWORD bytes_read;
+                        if (ReadFile(handle, buffer, (DWORD)_size.QuadPart, &bytes_read, 0))
+                        {
+                            *dest = (char *)buffer;
+                            *dest_size = (uint32_t)_size.QuadPart;
+                            result = true;
+                        }
+                    }
+                    else
+                    {
+                        MessageBoxA(0, "Failed to open file", 0, MB_OK | MB_ICONSTOP);
+                    }
+                    CoTaskMemFree(pszFilePath);
+                }
+                pItem->Release();
+            }
+        }
+        pFileOpen->Release();
+    }
+    return result;
+}
+
 bool win32_load_game_code(game_code *code, char *filename)
 {
     WIN32_FILE_ATTRIBUTE_DATA data;
@@ -617,6 +678,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     memory.platform_glgetprocaddress = platform_glgetprocaddress;
     memory.platform_load_asset = win32_load_asset;
     memory.platform_debug_message = win32_debug_message;
+    memory.platform_editor_load_file = win32_editor_load_file;
 
     GetModuleFileNameA(0, state.binary_path, sizeof(state.binary_path));
     char game_library_path[sizeof(state.binary_path)];

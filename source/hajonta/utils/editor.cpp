@@ -70,6 +70,9 @@ glErrorAssert()
 struct game_state
 {
     uint32_t vao;
+
+    char *objfile;
+    uint32_t objfile_size;
 };
 
 bool
@@ -112,6 +115,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             return;
         }
         memory->initialized = 1;
+
+        while (!memory->platform_editor_load_file(ctx, &state->objfile, &state->objfile_size))
+        {
+
+        }
     }
 
     for (uint32_t i = 0;
