@@ -17,6 +17,7 @@
 #endif
 
 #include "hajonta/platform/common.h"
+#include "hajonta/math.cpp"
 
 inline void
 glErrorAssert()
@@ -67,12 +68,31 @@ glErrorAssert()
     }
 }
 
+struct face_index
+{
+    uint32_t vertex;
+    uint32_t texture_coord;
+};
+
+struct face
+{
+    face_index indices[3];
+};
+
+
 struct game_state
 {
     uint32_t vao;
 
     char *objfile;
     uint32_t objfile_size;
+
+    v3 vertices[10000];
+    uint32_t num_vertices;
+    v3 texture_coords[10000];
+    uint32_t num_texture_coords;
+    face faces[10000];
+    uint32_t num_faces;
 };
 
 bool
@@ -118,7 +138,116 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         while (!memory->platform_editor_load_file(ctx, &state->objfile, &state->objfile_size))
         {
+        }
+        char *position = (char *)state->objfile;
+        char *eol;
+        uint32_t max_lines = 100;
+        uint32_t counter = 0;
+        while ((eol = strchr(position, '\n')) || (eol = strchr(position, '\r')) || (eol = strchr(position, '\0')))
+        {
+            if (eol > (state->objfile + state->objfile_size))
+            {
+                eol = state->objfile + state->objfile_size;
+                if (position == eol)
+                {
+                    break;
+                }
+            }
+            char msg[1024];
+            char line[1024];
+            strncpy(line, position, (size_t)(eol - position));
+            line[eol - position] = '\0';
+            sprintf(msg, "position: %d; eol: %d; line: %s\n", position - state->objfile, eol - position, line);
+            memory->platform_debug_message(ctx, msg);
 
+            if (position[0] == 'v')
+            {
+                if (position[1] == 't')
+                {
+                    float a, b, c;
+                    if (sscanf(position + 2, "%f %f %f", &a, &b, &c) == 3)
+                    {
+                        v3 texture_coord = {a,b,c};
+                        state->texture_coords[state->num_texture_coords++] = texture_coord;
+                        memory->platform_debug_message(ctx, "Saved texture coords\n");
+                    }
+                    else
+                    {
+                        memory->platform_debug_message(ctx, "Failed to decode texture coords\n");
+                        break;
+                    }
+                }
+                else if (position[1] == ' ')
+                {
+                    float a, b, c;
+                    if (sscanf(position + 2, "%f %f %f", &a, &b, &c) == 3)
+                    {
+                        v3 vertex = {a,b,c};
+                        state->vertices[state->num_vertices++] = vertex;
+                    }
+                }
+                else
+                {
+                    memory->platform_debug_message(ctx, "Unknown command\n");
+                    break;
+
+                }
+            }
+            else if (position[0] == 'f')
+            {
+                char a[100], b[100], c[100], d[100];
+                int num_found = sscanf(position + 2, "%s %s %s %s", &a, &b, &c, &d);
+                if (num_found == 4)
+                {
+                    uint32_t t1, t2;
+                    int num_found2 = sscanf(a, "%d/%d", &t1, &t2);
+                    if (num_found2 == 2)
+                    {
+                        uint32_t a_vertex_id, a_texture_coord_id;
+                        uint32_t b_vertex_id, b_texture_coord_id;
+                        uint32_t c_vertex_id, c_texture_coord_id;
+                        uint32_t d_vertex_id, d_texture_coord_id;
+                        int num_found2;
+                        num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
+                        hassert(num_found2 == 2);
+                        num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
+                        hassert(num_found2 == 2);
+                        num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
+                        hassert(num_found2 == 2);
+                        num_found2 = sscanf(d, "%d/%d", &d_vertex_id, &d_texture_coord_id);
+                        hassert(num_found2 == 2);
+                        face face1 = {
+                            {
+                                {a_vertex_id, a_texture_coord_id},
+                                {b_vertex_id, b_texture_coord_id},
+                                {c_vertex_id, c_texture_coord_id},
+                            },
+                        };
+                        face face2 = {
+                            {
+                                {c_vertex_id, c_texture_coord_id},
+                                {d_vertex_id, d_texture_coord_id},
+                                {a_vertex_id, a_texture_coord_id},
+                            }
+                        };
+                        state->faces[state->num_faces++] = face1;
+                        state->faces[state->num_faces++] = face2;
+                    }
+                }
+                char msg[100];
+                sprintf(msg, "Found %d face positions\n", num_found);
+                memory->platform_debug_message(ctx, msg);
+            }
+
+            if (*eol == '\0')
+            {
+                break;
+            }
+            position = eol + 1;
+            if (counter++ >= max_lines)
+            {
+                break;
+            }
         }
     }
 
