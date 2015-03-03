@@ -1,0 +1,8 @@
+newmtl Textured
+Ka 1.000 1.000 1.000
+Kd 1.000 1.000 1.000
+Ks 0.000 0.000 0.000
+d 1.0
+illum 2
+map_Ka m0.jpg
+map_Kd m0.jpg

@@ -538,10 +538,12 @@ PLATFORM_EDITOR_LOAD_FILE(win32_editor_load_file)
                         DWORD bytes_read;
                         if (ReadFile(handle, buffer, (DWORD)_size.QuadPart, &bytes_read, 0))
                         {
-                            *dest = (char *)buffer;
-                            *dest_size = (uint32_t)_size.QuadPart;
+                            target->contents = (char *)buffer;
+                            target->size = (uint32_t)_size.QuadPart;
+                            wcstombs(target->file_path, pszFilePath, sizeof(target->file_path));
                             result = true;
                         }
+                        CloseHandle(handle);
                     }
                     else
                     {
@@ -553,6 +555,39 @@ PLATFORM_EDITOR_LOAD_FILE(win32_editor_load_file)
             }
         }
         pFileOpen->Release();
+    }
+    return result;
+}
+
+PLATFORM_EDITOR_LOAD_NEARBY_FILE(win32_editor_load_nearby_file)
+{
+    bool result = false;
+    char new_path[MAX_PATH];
+    strcpy(new_path, existing_file.file_path);
+    char *location_of_last_slash = strrchr(new_path, '\\');
+    if (!location_of_last_slash)
+    {
+        return false;
+    }
+    *location_of_last_slash = '\0';
+    strcat(new_path, "\\");
+    strcat(new_path, name);
+
+    HANDLE handle = CreateFile(new_path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if (handle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER _size;
+        GetFileSizeEx(handle, &_size);
+        void *buffer = malloc((size_t)_size.QuadPart);
+        DWORD bytes_read;
+        if (ReadFile(handle, buffer, (DWORD)_size.QuadPart, &bytes_read, 0))
+        {
+            target->contents = (char *)buffer;
+            target->size = (uint32_t)_size.QuadPart;
+            strncpy(target->file_path, new_path, sizeof(target->file_path));
+            result = true;
+        }
+        CloseHandle(handle);
     }
     return result;
 }
@@ -679,6 +714,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     memory.platform_load_asset = win32_load_asset;
     memory.platform_debug_message = win32_debug_message;
     memory.platform_editor_load_file = win32_editor_load_file;
+    memory.platform_editor_load_nearby_file = win32_editor_load_nearby_file;
 
     GetModuleFileNameA(0, state.binary_path, sizeof(state.binary_path));
     char game_library_path[sizeof(state.binary_path)];

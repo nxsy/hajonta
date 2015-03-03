@@ -19,6 +19,14 @@ struct hajonta_thread_context
     void *opaque;
 };
 
+struct loaded_file
+{
+    char *contents;
+    uint32_t size;
+
+    char file_path[MAX_PATH]; // platform path for load_nearby
+};
+
 #define PLATFORM_FAIL(func_name) void func_name(hajonta_thread_context *ctx, char *failure_reason)
 typedef PLATFORM_FAIL(platform_fail_func);
 
@@ -34,8 +42,11 @@ typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 #define PLATFORM_LOAD_ASSET(func_name) bool func_name(hajonta_thread_context *ctx, char *asset_path, uint32_t size, uint8_t *dest)
 typedef PLATFORM_LOAD_ASSET(platform_load_asset_func);
 
-#define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(hajonta_thread_context *ctx, char **dest, uint32_t *dest_size)
+#define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target)
 typedef PLATFORM_EDITOR_LOAD_FILE(platform_editor_load_file_func);
+
+#define PLATFORM_EDITOR_LOAD_NEARBY_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target, loaded_file existing_file, char *name)
+typedef PLATFORM_EDITOR_LOAD_NEARBY_FILE(platform_editor_load_nearby_file_func);
 
 struct platform_memory
 {
@@ -50,6 +61,7 @@ struct platform_memory
     platform_debug_message_func *platform_debug_message;
     platform_load_asset_func *platform_load_asset;
     platform_editor_load_file_func *platform_editor_load_file;
+    platform_editor_load_nearby_file_func *platform_editor_load_nearby_file;
 };
 
 struct game_button_state
