@@ -92,8 +92,14 @@ struct face_index
 struct face
 {
     face_index indices[3];
+    int texture_offset;
 };
 
+struct material
+{
+    char name[100];
+    int32_t texture_offset;
+};
 
 struct game_state
 {
@@ -101,6 +107,7 @@ struct game_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t line_ibo;
+    int32_t sampler_ids[4];
     uint32_t texture_ids[10];
     uint32_t num_texture_ids;
 
@@ -121,6 +128,9 @@ struct game_state
     face faces[10000];
     uint32_t num_faces;
 
+    material materials[10];
+    uint32_t num_materials;
+
     GLushort faces_array[30000];
     uint32_t num_faces_array;
     GLushort line_elements[60000];
@@ -132,6 +142,10 @@ struct game_state
 
     v3 model_max;
     v3 model_min;
+
+    char bitmap_scratch[2048 * 2048 * 4];
+
+    bool hide_lines;
 };
 
 bool
@@ -159,6 +173,128 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
         return loaded;
     }
 
+    return true;
+}
+
+bool
+load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
+{
+    game_state *state = (game_state *)memory->memory;
+
+
+    char *position = (char *)state->mtl_file.contents;
+    uint32_t max_lines = 100000;
+    uint32_t counter = 0;
+    material *current_material = 0;
+    for (;;)
+    {
+        char *newline = strchr(position, '\n');
+        char *returnnewline = strchr(position, '\r');
+        char *nul = strchr(position, '\0');
+        char *eol = newline;
+        if (returnnewline && eol > returnnewline)
+        {
+            eol = returnnewline;
+        }
+        if (nul && eol > nul)
+        {
+            eol = nul;
+        }
+        if (!eol)
+        {
+            break;
+        }
+        if (eol > (state->mtl_file.contents + state->mtl_file.size))
+        {
+            eol = state->mtl_file.contents + state->mtl_file.size;
+        }
+        char line[1024];
+        strncpy(line, position, (size_t)(eol - position));
+        line[eol - position] = '\0';
+        /*
+        char msg[1024];
+        sprintf(msg, "position: %d; eol: %d; line: %s\n", position - state->mtl_file.contents, eol - position, line);
+        memory->platform_debug_message(ctx, msg);
+        */
+
+        if (line[0] == '\0')
+        {
+
+        }
+        else if (line[0] == '#')
+        {
+
+        }
+        else if (strncmp(line, "newmtl", 6) == 0)
+        {
+            current_material = state->materials + state->num_materials++;
+            strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
+            current_material->texture_offset = -1;
+        }
+        else if (strncmp(line, "Ns", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Ka", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Kd", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Ks", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Ni", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "d ", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "illum ", sizeof("illum ") - 1) == 0)
+        {
+        }
+        else if (strncmp(line, "map_Bump ", sizeof("map_Bump ") - 1) == 0)
+        {
+        }
+        else if (strncmp(line, "map_Kd ", sizeof("map_Kd ") - 1) == 0)
+        {
+            char *filename = line + sizeof("map_Kd ") - 1;
+            loaded_file texture;
+            bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+            hassert(loaded);
+            int32_t x, y, size;
+            load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+            /*
+            char msg[1024];
+            sprintf(msg, "name = %s; x = %i, y = %i, size = %i", filename, x, y, size);
+            memory->platform_debug_message(ctx, msg);
+            */
+
+            current_material->texture_offset = (int32_t)(state->num_texture_ids++);
+            glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->texture_offset]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                x, y, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        }
+        else
+        {
+            hassert(!"Invalid code path");
+        }
+        if (counter++ > max_lines)
+        {
+            hassert(!"Too many lines in mtl file");
+        }
+
+        if (*eol == '\0')
+        {
+            break;
+        }
+        position = eol + 1;
+        while((*position == '\r') && (*position == '\n'))
+        {
+            position++;
+        }
+    }
     return true;
 }
 
@@ -194,6 +330,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glErrorAssert();
         glGenTextures(harray_count(state->texture_ids), state->texture_ids);
         glErrorAssert();
+        state->sampler_ids[0] = glGetUniformLocation(state->program_b.program, "tex");
+        state->sampler_ids[1] = glGetUniformLocation(state->program_b.program, "tex1");
+        state->sampler_ids[2] = glGetUniformLocation(state->program_b.program, "tex2");
+        state->sampler_ids[3] = glGetUniformLocation(state->program_b.program, "tex3");
+        glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
         {
@@ -202,6 +343,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         char *position = (char *)state->model_file.contents;
         uint32_t max_lines = 100000;
         uint32_t counter = 0;
+        material *current_material = 0;
         for (;;)
         {
             char *newline = strchr(position, '\n');
@@ -224,12 +366,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 eol = state->model_file.contents + state->model_file.size;
             }
-            char msg[1024];
             char line[1024];
             strncpy(line, position, (size_t)(eol - position));
             line[eol - position] = '\0';
+            /*
+            char msg[1024];
             sprintf(msg, "position: %d; eol: %d; line: %s\n", position - state->model_file.contents, eol - position, line);
             memory->platform_debug_message(ctx, msg);
+            */
 
             if (line[0] == '\0')
             {
@@ -336,13 +480,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {b_vertex_id, b_texture_coord_id},
                                 {c_vertex_id, c_texture_coord_id},
                             },
+                            current_material->texture_offset,
                         };
                         face face2 = {
                             {
                                 {c_vertex_id, c_texture_coord_id},
                                 {d_vertex_id, d_texture_coord_id},
                                 {a_vertex_id, a_texture_coord_id},
-                            }
+                            },
+                            current_material->texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                         state->faces[state->num_faces++] = face2;
@@ -371,13 +517,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {b_vertex_id, b_texture_coord_id},
                                 {c_vertex_id, c_texture_coord_id},
                             },
+                            current_material->texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                     }
                 }
+                /*
                 char msg[100];
                 sprintf(msg, "Found %d face positions\n", num_found);
                 memory->platform_debug_message(ctx, msg);
+                */
             }
             else if (line[0] == '#')
             {
@@ -393,9 +542,30 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
             else if (strncmp(line, "mtllib", 6) == 0)
             {
+                char *filename = line + 7;
+                bool loaded = memory->platform_editor_load_nearby_file(ctx, &state->mtl_file, state->model_file, filename);
+                hassert(loaded);
+                load_mtl(ctx, memory);
             }
             else if (strncmp(line, "usemtl", 6) == 0)
             {
+                material *tm;
+                char material_name[100];
+                auto material_name_length = eol - position - 7;
+                strncpy(material_name, line + 7, (size_t)material_name_length + 1);
+
+                current_material = 0;
+                for (tm = state->materials;
+                        tm < state->materials + state->num_materials;
+                        tm++)
+                {
+                    if (strcmp(tm->name, material_name) == 0)
+                    {
+                        current_material = tm;
+                        break;
+                    }
+                }
+                hassert(current_material);
             }
             else
             {
@@ -501,11 +671,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v3->v.color[2] = 0.0f;
             vbo_v3->v.color[3] = 1.0f;
 
-            /*
-            vbo_v1->style[0] = 2.0f;
-            vbo_v2->style[0] = 2.0f;
-            vbo_v3->style[0] = 2.0f;
-            */
+            vbo_v1->style[0] = 3.0f;
+            vbo_v1->style[1] = (float)f->texture_offset;
+            vbo_v2->style[0] = 3.0f;
+            vbo_v2->style[1] = (float)f->texture_offset;
+            vbo_v3->style[0] = 3.0f;
+            vbo_v3->style[1] = (float)f->texture_offset;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
@@ -516,10 +687,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->vbo_vertices,
                 GL_STATIC_DRAW);
         glErrorAssert();
-
-        char mtl_filename[] = "minimalist-dudes.mtl";
-
-        memory->platform_editor_load_nearby_file(ctx, &state->mtl_file, state->model_file, mtl_filename);
     }
 
     for (uint32_t i = 0;
@@ -534,6 +701,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         if (controller->buttons.back.ended_down && !controller->buttons.back.repeat)
         {
             memory->quit = true;
+        }
+        if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+        {
+            state->hide_lines ^= true;
         }
     }
 
@@ -568,6 +739,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), 0);
     glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
     glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
+
+    for (uint32_t idx = 0;
+            idx < state->num_texture_ids;
+            ++idx)
+    {
+        glUniform1i(state->sampler_ids[idx], idx);
+        glActiveTexture(GL_TEXTURE0 + idx);
+        glBindTexture(GL_TEXTURE_2D, state->texture_ids[idx]);
+    }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
 
@@ -614,11 +794,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_SHORT, 0);
     glErrorAssert();
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
-    glDepthFunc(GL_LEQUAL);
-    u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
-    glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-    glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_SHORT, 0);
-
+    if (!state->hide_lines)
+    {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
+        glDepthFunc(GL_LEQUAL);
+        u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
+        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+        glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_SHORT, 0);
+    }
 }
 

@@ -239,6 +239,11 @@ typedef void (APIENTRYP PFNGLUNIFORM4IVPROC) (GLint location, GLsizei count, con
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX2FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX3FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+typedef void (APIENTRYP PFNGLACTIVETEXTUREPROC) (GLenum texture);
+#endif
+
+#ifndef GL_TEXTURE0
+#define GL_TEXTURE0                       0x84C0
 #endif
 
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
@@ -282,6 +287,8 @@ PFNGLUNIFORM4IVPROC glUniform4iv;
 PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
 PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;
 PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
+
+PFNGLACTIVETEXTUREPROC glActiveTexture;
 
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
@@ -345,5 +352,7 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
     glUniformMatrix2fv = (PFNGLUNIFORMMATRIX2FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix2fv");
     glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix3fv");
     glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix4fv");
+
+    glActiveTexture = (PFNGLACTIVETEXTUREPROC)get_proc_address(ctx, (char *)"glActiveTexture");
 }
 #endif
