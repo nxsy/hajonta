@@ -3,22 +3,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#if defined(_WIN32)
-#include <windows.h>
-#define SLASH "\\"
-#elif defined(__linux__)
-#include <linux/limits.h>
-#define MAX_PATH PATH_MAX
-#define _snprintf snprintf
-#define SLASH "/"
-#elif defined(__APPLE__)
-#if defined(__MACH__)
-#include <sys/syslimits.h>
-#define MAX_PATH PATH_MAX
-#define _snprintf snprintf
-#define SLASH "/"
-#endif
-#endif
+#include "hajonta/platform/neutral.h"
 
 int
 mkdir_recursively(char *path)

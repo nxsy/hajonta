@@ -16,7 +16,7 @@ cd ${BASEDIR}
 mkdir -p build
 mkdir -p build/debug
 
-${CC} ${CPPFLAGS} -std=c++0x ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/program.cpp ${CPPFLAGS} ${DEBUG_FLAGS}
+${CC} ${CPPFLAGS} ${INCLUDES} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/program.cpp ${CPPFLAGS} ${DEBUG_FLAGS}
 (cd build/debug && ./program ../../source hajonta/programs a )
 (cd build/debug && ./program ../../source hajonta/programs debug_font )
 (cd build/debug && ./program ../../source hajonta/programs b )

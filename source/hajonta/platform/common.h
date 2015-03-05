@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hajonta/platform/neutral.h"
+
 #ifdef HAJONTA_DEBUG
 #define hassert(expression) if(!(expression)) {*(volatile int *)0 = 0;}
 #else
@@ -288,7 +290,9 @@ PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
 PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;
 PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 
+#ifndef GL_VERSION_1_3
 PFNGLACTIVETEXTUREPROC glActiveTexture;
+#endif
 
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
@@ -353,6 +357,8 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
     glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix3fv");
     glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix4fv");
 
+#ifndef GL_VERSION_1_3
     glActiveTexture = (PFNGLACTIVETEXTUREPROC)get_proc_address(ctx, (char *)"glActiveTexture");
+#endif
 }
 #endif
