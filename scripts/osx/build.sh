@@ -15,7 +15,7 @@ mkdir -p build
 mkdir -p build/debug
 
 # code generation
-clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/program.cpp ${DEBUG_FLAGS}
+clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/program.cpp ${DEBUG_FLAGS} ${INCLUDES}
 ( cd build/debug && ./program ../../source hajonta/programs a )
 ( cd build/debug && ./program ../../source hajonta/programs debug_font )
 ( cd build/debug && ./program ../../source hajonta/programs b )
