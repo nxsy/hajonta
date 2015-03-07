@@ -4,6 +4,7 @@ uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_perspective;
 uniform vec4 u_mvp_enabled;
+uniform int u_model_mode;
 
 in vec4 a_pos;
 in vec4 a_color;

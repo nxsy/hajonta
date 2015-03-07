@@ -146,6 +146,7 @@ struct game_state
     char bitmap_scratch[2048 * 2048 * 4];
 
     bool hide_lines;
+    int model_mode;
 };
 
 bool
@@ -706,6 +707,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->hide_lines ^= true;
         }
+        if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
+        {
+            state->model_mode = (state->model_mode + 1) % 2;
+        }
     }
 
     glBindVertexArray(state->vao);
@@ -744,7 +749,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             idx < state->num_texture_ids;
             ++idx)
     {
-        glUniform1i(state->sampler_ids[idx], idx);
+        glUniform1i(state->sampler_ids[idx], (GLint)idx);
         glActiveTexture(GL_TEXTURE0 + idx);
         glBindTexture(GL_TEXTURE_2D, state->texture_ids[idx]);
     }
@@ -790,12 +795,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_perspective = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
     //m4 u_perspective = m4identity();
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
+    glUniform1i(state->program_b.u_model_mode_id, state->model_mode);
 
     glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_SHORT, 0);
     glErrorAssert();
 
     if (!state->hide_lines)
     {
+        glUniform1i(state->program_b.u_model_mode_id, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
