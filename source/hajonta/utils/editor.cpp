@@ -344,7 +344,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         char *position = (char *)state->model_file.contents;
         uint32_t max_lines = 100000;
         uint32_t counter = 0;
-        material *current_material = 0;
+        material null_material = {};
+        null_material.texture_offset = -1;
+        material *current_material = &null_material;
         for (;;)
         {
             char *newline = strchr(position, '\n');
