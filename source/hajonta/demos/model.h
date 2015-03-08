@@ -28,6 +28,8 @@ struct demo_model_state {
     uint32_t vbo;
     uint32_t ibo;
     uint32_t ibo_length;
+    uint32_t line_ibo;
+    uint32_t line_ibo_length;
     uint32_t texture_ids[4];
 
     float near_;
@@ -39,6 +41,7 @@ struct demo_model_state {
 
     float delta_t;
     uint32_t current_texture_idx;
+    int model_mode;
 };
 
 DEMO(demo_model);

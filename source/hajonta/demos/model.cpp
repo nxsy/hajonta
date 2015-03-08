@@ -20,6 +20,7 @@ DEMO(demo_model)
         glErrorAssert();
         glGenBuffers(1, &demo_state->vbo);
         glGenBuffers(1, &demo_state->ibo);
+        glGenBuffers(1, &demo_state->line_ibo);
         glErrorAssert();
 
         v3 vertices[] =
@@ -85,9 +86,27 @@ DEMO(demo_model)
             faces_array[face_idx] = (GLushort)face_idx;
         }
 
+        GLushort lines_array[harray_count(faces) * 6];
+        int num_line_elements = 0;
+        for (uint32_t face_array_idx = 0;
+                face_array_idx < harray_count(faces_array);
+                face_array_idx += 3)
+        {
+            lines_array[num_line_elements++] = face_array_idx;
+            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 1);
+            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 1);
+            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 2);
+            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 2);
+            lines_array[num_line_elements++] = face_array_idx;
+        }
+        demo_state->line_ibo_length = harray_count(lines_array);
+
         demo_state->ibo_length = harray_count(faces_array);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->ibo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(faces_array), faces_array, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->line_ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(lines_array), lines_array, GL_STATIC_DRAW);
 
         vertex_with_style vbo_vertices[harray_count(faces) * 3];
 
@@ -206,6 +225,10 @@ DEMO(demo_model)
         {
             demo_state->current_texture_idx--;
         }
+        if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
+        {
+            demo_state->model_mode = (demo_state->model_mode + 1) % 2;
+        }
     }
 
     uint32_t posted_idx = 0;
@@ -273,10 +296,13 @@ DEMO(demo_model)
     //m4 u_perspective = m4identity();
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
 
+    glUniform1i(state->program_b.u_model_mode_id, demo_state->model_mode);
     glDrawElements(GL_TRIANGLES, (GLsizei)demo_state->ibo_length, GL_UNSIGNED_SHORT, 0);
     glErrorAssert();
 
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->line_ibo);
     u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
     glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-    glDrawElements(GL_LINES, (GLsizei)demo_state->ibo_length, GL_UNSIGNED_SHORT, 0);
+    glUniform1i(state->program_b.u_model_mode_id, 0);
+    glDrawElements(GL_LINES, (GLsizei)demo_state->line_ibo_length, GL_UNSIGNED_SHORT, 0);
 }
