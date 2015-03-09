@@ -92,7 +92,7 @@ main(int argc, char **argv)
     sprintf(buffer, "struct %s_program_struct\n{\n    GLuint program;\n", program_name);
     fwrite(buffer, 1, strlen(buffer), p);
 
-    char structbuffer[1024] = {};
+    char structbuffer[2048] = {};
     char *start_of_next_write = structbuffer;
     char uniforms[16][128] = {};
     char attribs[16][128] = {};
@@ -278,6 +278,13 @@ main(int argc, char **argv)
             memory->platform_fail(ctx, info_log);
             return false;
         }
+        else
+        {
+            char info_log[1024] = {};
+            strcpy(info_log, PROGRAM_NAME " vertex: ");
+            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
+            memory->platform_debug_message(ctx, info_log);
+        }
     }
     {
         uint32_t shader = fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
@@ -296,6 +303,13 @@ main(int argc, char **argv)
             glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
+        }
+        else
+        {
+            char info_log[1024] = {};
+            strcpy(info_log, PROGRAM_NAME " fragment: ");
+            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
+            memory->platform_debug_message(ctx, info_log);
         }
     }
     glAttachShader(state->program, vertex_shader_id);
@@ -325,11 +339,12 @@ main(int argc, char **argv)
         sprintf(uniform_location_string, R"EOF(
     state->%s_id = glGetUniformLocation(state->program, "%s");
     if (state->%s_id < 0) {
-        char info_log[] = "Could not locate %s uniform";
+        char info_log[1024];
+        sprintf(info_log, "Could not locate %s uniform - glGetUniformLocation returned %%d", state->%s_id);
         memory->platform_fail(ctx, info_log);
         return false;
     }
-)EOF", uniforms[i], uniforms[i], uniforms[i], uniforms[i]);
+)EOF", uniforms[i], uniforms[i], uniforms[i], uniforms[i], uniforms[i]);
         fwrite(uniform_location_string, 1, strlen(uniform_location_string), p);
     }
 
