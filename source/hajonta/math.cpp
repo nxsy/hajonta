@@ -301,6 +301,23 @@ point_in_triangle(v2 point, triangle2 tri)
     return (s > 0) && (t > 0) && ((s + t) < a);
 }
 
+struct triangle3
+{
+    v3 p0;
+    v3 p1;
+    v3 p2;
+};
+
+v3
+winded_triangle_normal(triangle3 tri)
+{
+    v3 e0 = v3sub(tri.p1, tri.p0);
+    v3 e1 = v3sub(tri.p2, tri.p0);
+    v3 normal = v3cross(e0, e1);
+    normal = v3normalize(normal);
+    return normal;
+}
+
 struct rectangle2
 {
     v2 position;
