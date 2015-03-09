@@ -77,10 +77,11 @@ struct vertex
     float color[4];
 };
 
-struct vertex_with_style
+struct editor_vertex_format
 {
     vertex v;
     float style[4];
+    v4 normal;
 };
 
 struct face_index
@@ -121,21 +122,21 @@ struct game_state
     char *objfile;
     uint32_t objfile_size;
 
-    v3 vertices[10000];
+    v3 vertices[100000];
     uint32_t num_vertices;
-    v3 texture_coords[10000];
+    v3 texture_coords[100000];
     uint32_t num_texture_coords;
-    face faces[10000];
+    face faces[100000];
     uint32_t num_faces;
 
     material materials[10];
     uint32_t num_materials;
 
-    GLushort faces_array[30000];
+    GLushort faces_array[300000];
     uint32_t num_faces_array;
-    GLushort line_elements[60000];
+    GLushort line_elements[600000];
     uint32_t num_line_elements;
-    vertex_with_style vbo_vertices[30000];
+    editor_vertex_format vbo_vertices[300000];
     uint32_t num_vbo_vertices;
 
     b_program_struct program_b;
@@ -147,6 +148,7 @@ struct game_state
 
     bool hide_lines;
     int model_mode;
+    int shading_mode;
 };
 
 bool
@@ -342,7 +344,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         char *position = (char *)state->model_file.contents;
-        uint32_t max_lines = 100000;
+        uint32_t max_lines = 200000;
         uint32_t counter = 0;
         material null_material = {};
         null_material.texture_offset = -1;
@@ -586,6 +588,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
             if (counter++ >= max_lines)
             {
+                hassert(!"Counter too high!");
                 break;
             }
         }
@@ -632,13 +635,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 ++face_idx)
         {
             state->num_vbo_vertices += 3;
-            vertex_with_style *vbo_v1 = state->vbo_vertices + (3 * face_idx);
-            vertex_with_style *vbo_v2 = vbo_v1 + 1;
-            vertex_with_style *vbo_v3 = vbo_v2 + 1;
+            editor_vertex_format *vbo_v1 = state->vbo_vertices + (3 * face_idx);
+            editor_vertex_format *vbo_v2 = vbo_v1 + 1;
+            editor_vertex_format *vbo_v3 = vbo_v2 + 1;
             face *f = state->faces + face_idx;
             v3 *face_v1 = state->vertices + (f->indices[0].vertex - 1);
             v3 *face_v2 = state->vertices + (f->indices[1].vertex - 1);
             v3 *face_v3 = state->vertices + (f->indices[2].vertex - 1);
+
+            triangle3 t = {
+                {face_v1->x, face_v1->y, face_v1->z},
+                {face_v2->x, face_v2->y, face_v2->z},
+                {face_v3->x, face_v3->y, face_v3->z},
+            };
+            v3 normal3 = winded_triangle_normal(t);
+            v4 normal = {normal3.x, normal3.y, normal3.z, 1.0f};
 
             v3 *face_vt1 = state->texture_coords + (f->indices[0].texture_coord - 1);
             v3 *face_vt2 = state->texture_coords + (f->indices[1].texture_coord - 1);
@@ -648,16 +659,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v1->v.position[1] = face_v1->y;
             vbo_v1->v.position[2] = face_v1->z;
             vbo_v1->v.position[3] = 1.0f;
+            vbo_v1->normal = normal;
 
             vbo_v2->v.position[0] = face_v2->x;
             vbo_v2->v.position[1] = face_v2->y;
             vbo_v2->v.position[2] = face_v2->z;
             vbo_v2->v.position[3] = 1.0f;
+            vbo_v2->normal = normal;
 
             vbo_v3->v.position[0] = face_v3->x;
             vbo_v3->v.position[1] = face_v3->y;
             vbo_v3->v.position[2] = face_v3->z;
             vbo_v3->v.position[3] = 1.0f;
+            vbo_v3->normal = normal;
 
             vbo_v1->v.color[0] = face_vt1->x;
             vbo_v1->v.color[1] = 1 - face_vt1->y;
@@ -711,7 +725,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
         {
-            state->model_mode = (state->model_mode + 1) % 2;
+            state->model_mode = (state->model_mode + 1) % 4;
+        }
+        if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
+        {
+            state->shading_mode = (state->shading_mode + 1) % 2;
         }
     }
 
@@ -743,9 +761,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
-    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), 0);
-    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex, color));
-    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(vertex_with_style), (void *)offsetof(vertex_with_style, style));
+    glEnableVertexAttribArray((GLuint)state->program_b.a_normal_id);
+    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), 0);
+    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(vertex, color));
+    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
+    glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
 
     for (uint32_t idx = 0;
             idx < state->num_texture_ids;
@@ -788,6 +808,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
 
+    v4 light_position = {0.0f, 10.0f, -10.0f, 1.0f};
+    glUniform4fv(state->program_b.u_w_lightPosition_id, 1, (float *)&light_position);
     v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
     glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
     glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
@@ -798,6 +820,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     //m4 u_perspective = m4identity();
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
     glUniform1i(state->program_b.u_model_mode_id, state->model_mode);
+    glUniform1i(state->program_b.u_shading_mode_id, state->shading_mode);
 
     glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_SHORT, 0);
     glErrorAssert();
@@ -805,6 +828,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if (!state->hide_lines)
     {
         glUniform1i(state->program_b.u_model_mode_id, 0);
+        glUniform1i(state->program_b.u_shading_mode_id, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
