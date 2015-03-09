@@ -92,12 +92,12 @@ DEMO(demo_model)
                 face_array_idx < harray_count(faces_array);
                 face_array_idx += 3)
         {
-            lines_array[num_line_elements++] = face_array_idx;
-            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 1);
-            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 1);
-            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 2);
-            lines_array[num_line_elements++] = (GLushort)(face_array_idx + 2);
-            lines_array[num_line_elements++] = face_array_idx;
+            lines_array[num_line_elements++] = faces_array[face_array_idx];
+            lines_array[num_line_elements++] = faces_array[face_array_idx + 1];
+            lines_array[num_line_elements++] = faces_array[face_array_idx + 1];
+            lines_array[num_line_elements++] = faces_array[face_array_idx + 2];
+            lines_array[num_line_elements++] = faces_array[face_array_idx + 2];
+            lines_array[num_line_elements++] = faces_array[face_array_idx];
         }
         demo_state->line_ibo_length = harray_count(lines_array);
 
