@@ -149,6 +149,9 @@ struct game_state
     bool hide_lines;
     int model_mode;
     int shading_mode;
+
+    int x_rotation;
+    int y_rotation;
 };
 
 bool
@@ -731,6 +734,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->shading_mode = (state->shading_mode + 1) % 2;
         }
+        if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
+        {
+            state->x_rotation = (state->x_rotation + 1) % 4;
+        }
+        if (controller->buttons.move_left.ended_down && !controller->buttons.move_left.repeat)
+        {
+            state->y_rotation = (state->y_rotation + 1) % 4;
+        }
     }
 
     glBindVertexArray(state->vao);
@@ -778,7 +789,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
 
-    v3 axis = {0.0f, 1.0f, 0.0f};
     v3 center = v3div(v3add(state->model_max, state->model_min), 2.0f);
     m4 center_translate = m4identity();
     center_translate.cols[3] = {-center.x, -center.y, -center.z, 1.0f};
@@ -793,7 +803,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         max_dimension = dimension.z;
     }
+
+    v3 axis = {0.0f, 1.0f, 0.0f};
     m4 rotate = m4rotation(axis, state->delta_t);
+    v3 x_axis = {1.0f, 0.0f, 0.0f};
+    static float pi = 3.14159265358979f;
+    m4 x_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation);
+    rotate = m4mul(rotate, x_rotate);
+
     m4 scale = m4identity();
     scale.cols[0].E[0] = 2.0f / max_dimension;
     scale.cols[1].E[1] = 2.0f / max_dimension;
