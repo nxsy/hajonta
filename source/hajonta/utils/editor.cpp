@@ -460,7 +460,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             else if (line[0] == 'f')
             {
                 char a[100], b[100], c[100], d[100];
-                int num_found = sscanf(line + 2, "%s %s %s %s", &a, &b, &c, &d);
+                int num_found = sscanf(line + 2, "%s %s %s %s", (char *)&a, (char *)&b, (char *)&c, (char *)&d);
                 hassert((num_found == 4) || (num_found == 3));
                 if (num_found == 4)
                 {
