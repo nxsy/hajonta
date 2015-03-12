@@ -111,6 +111,8 @@ struct game_state
     int32_t sampler_ids[4];
     uint32_t texture_ids[10];
     uint32_t num_texture_ids;
+    uint32_t aabb_cube_vbo;
+    uint32_t aabb_cube_ibo;
 
     float near_;
     float far_;
@@ -304,6 +306,68 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
     return true;
 }
 
+void
+load_aabb_buffer_objects(game_state *state, v3 model_min, v3 model_max)
+{
+    editor_vertex_format vertices[] = {
+        {
+            {model_min.x, model_min.y, model_min.z, 1.0},
+        },
+        {
+            {model_max.x, model_min.y, model_min.z, 1.0},
+        },
+        {
+            {model_max.x, model_max.y, model_min.z, 1.0},
+        },
+        {
+            {model_min.x, model_max.y, model_min.z, 1.0},
+        },
+        {
+            {model_min.x, model_min.y, model_max.z, 1.0},
+        },
+        {
+            {model_max.x, model_min.y, model_max.z, 1.0},
+        },
+        {
+            {model_max.x, model_max.y, model_max.z, 1.0},
+        },
+        {
+            {model_min.x, model_max.y, model_max.z, 1.0},
+        },
+    };
+    glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
+
+    glBufferData(GL_ARRAY_BUFFER,
+            (GLsizeiptr)sizeof(vertices),
+            vertices,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+
+    GLushort elements[] = {
+        0, 1,
+        1, 2,
+        2, 3,
+        3, 0,
+
+        4, 5,
+        5, 6,
+        6, 7,
+        7, 4,
+
+        0, 4,
+        1, 5,
+        2, 6,
+        3, 7,
+    };
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            (GLsizeiptr)sizeof(elements),
+            elements,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -331,8 +395,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         glErrorAssert();
         glGenBuffers(1, &state->vbo);
+        glGenBuffers(1, &state->aabb_cube_vbo);
         glGenBuffers(1, &state->ibo);
         glGenBuffers(1, &state->line_ibo);
+        glGenBuffers(1, &state->aabb_cube_ibo);
         glErrorAssert();
         glGenTextures(harray_count(state->texture_ids), state->texture_ids);
         glErrorAssert();
@@ -707,6 +773,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->vbo_vertices,
                 GL_STATIC_DRAW);
         glErrorAssert();
+
+        load_aabb_buffer_objects(state, state->model_min, state->model_max);
     }
 
     for (uint32_t i = 0;
@@ -851,6 +919,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
         glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_SHORT, 0);
+    }
+
+    {
+        glUniform1i(state->program_b.u_model_mode_id, 0);
+        glUniform1i(state->program_b.u_shading_mode_id, 0);
+        glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
+        glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), 0);
+        glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(vertex, color));
+        glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
+        glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
+        glDepthFunc(GL_LEQUAL);
+        u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
+        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+        glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
     }
 }
 
