@@ -22,6 +22,8 @@
 
 #include "hajonta/programs/b.h"
 
+static float pi = 3.14159265358979f;
+
 inline void
 glErrorAssert()
 {
@@ -113,6 +115,10 @@ struct game_state
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
     uint32_t aabb_cube_ibo;
+    uint32_t bounding_sphere_vbo;
+    uint32_t bounding_sphere_ibo;
+
+    uint32_t num_bounding_sphere_elements;
 
     float near_;
     float far_;
@@ -368,6 +374,83 @@ load_aabb_buffer_objects(game_state *state, v3 model_min, v3 model_max)
     glErrorAssert();
 }
 
+void
+load_bounding_sphere(game_state *state, v3 model_min, v3 model_max)
+{
+    v3 center = v3div(v3add(state->model_max, state->model_min), 2.0f);
+    v3 diff = v3sub(center, state->model_min);
+    float size = v3length(diff);
+
+    editor_vertex_format vertices[64 * 3] = {};
+    for (uint32_t idx = 0;
+            idx < harray_count(vertices);
+            ++idx)
+    {
+        editor_vertex_format *v = vertices + idx;
+        if (idx < 64)
+        {
+            float a = idx * (2.0f * pi) / (harray_count(vertices) / 3 - 1);
+            *v = {
+                {
+                    {center.x + sinf(a) * size, center.y + cosf(a) * size, center.z, 1.0f},
+                    {1.0f, 1.0f, 1.0f, 0.5f},
+                },
+                {0.0f, 0.0f, 0.0f, 0.0f},
+            };
+        }
+        else if (idx < 128)
+        {
+            float a = (idx - 64) * (2.0f * pi) / (harray_count(vertices) / 3 - 1);
+            *v = {
+                {
+                    {center.x, center.y + sinf(a) * size, center.z + cosf(a) * size, 1.0f},
+                    {1.0f, 1.0f, 1.0f, 0.5f},
+                },
+                {0.0f, 0.0f, 0.0f, 0.0f},
+            };
+        }
+        else
+        {
+            float a = (idx - 128) * (2.0f * pi) / (harray_count(vertices) / 3 - 1);
+            *v = {
+                {
+                    {center.x + cosf(a) * size, center.y, center.z + sinf(a) * size, 1.0f},
+                    {1.0f, 1.0f, 1.0f, 0.5f},
+                },
+                {0.0f, 0.0f, 0.0f, 0.0f},
+            };
+        }
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
+
+    glBufferData(GL_ARRAY_BUFFER,
+            (GLsizeiptr)sizeof(vertices),
+            vertices,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+
+    GLushort elements[harray_count(vertices)];
+    for (GLushort idx = 0;
+            idx < harray_count(vertices);
+            ++idx)
+    {
+        elements[idx] = idx;
+        if ((idx % 64) == 63)
+        {
+            elements[idx] = 65535;
+        }
+    }
+
+    state->num_bounding_sphere_elements = harray_count(elements);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            (GLsizeiptr)sizeof(elements),
+            elements,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -396,9 +479,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glErrorAssert();
         glGenBuffers(1, &state->vbo);
         glGenBuffers(1, &state->aabb_cube_vbo);
+        glGenBuffers(1, &state->bounding_sphere_vbo);
         glGenBuffers(1, &state->ibo);
         glGenBuffers(1, &state->line_ibo);
         glGenBuffers(1, &state->aabb_cube_ibo);
+        glGenBuffers(1, &state->bounding_sphere_ibo);
         glErrorAssert();
         glGenTextures(harray_count(state->texture_ids), state->texture_ids);
         glErrorAssert();
@@ -775,6 +860,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glErrorAssert();
 
         load_aabb_buffer_objects(state, state->model_min, state->model_max);
+        load_bounding_sphere(state, state->model_min, state->model_max);
     }
 
     for (uint32_t i = 0;
@@ -823,6 +909,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_CULL_FACE);
+    glEnable(GL_PRIMITIVE_RESTART);
 
     glErrorAssert();
 
@@ -875,7 +962,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 axis = {0.0f, 1.0f, 0.0f};
     m4 rotate = m4rotation(axis, state->delta_t);
     v3 x_axis = {1.0f, 0.0f, 0.0f};
-    static float pi = 3.14159265358979f;
     m4 x_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation);
     rotate = m4mul(rotate, x_rotate);
 
@@ -934,6 +1020,22 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
         glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
+    }
+
+    {
+        glUniform1i(state->program_b.u_model_mode_id, 0);
+        glUniform1i(state->program_b.u_shading_mode_id, 0);
+        glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
+        glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), 0);
+        glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(vertex, color));
+        glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
+        glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
+        glDepthFunc(GL_LEQUAL);
+        u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
+        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+        glPrimitiveRestartIndex(65535);
+        glDrawElements(GL_LINE_LOOP, state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
     }
 }
 

@@ -196,6 +196,9 @@ typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 #define GL_COMPILE_STATUS                 0x8B81
 #define GL_LINK_STATUS                    0x8B82
 
+#define GL_PRIMITIVE_RESTART              0x8F9D
+#define GL_PRIMITIVE_RESTART_INDEX        0x8F9E
+
 typedef char GLchar;
 #if !defined(NEEDS_EGL)
 typedef ptrdiff_t GLsizeiptr;
@@ -242,6 +245,7 @@ typedef void (APIENTRYP PFNGLUNIFORMMATRIX2FVPROC) (GLint location, GLsizei coun
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX3FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLACTIVETEXTUREPROC) (GLenum texture);
+typedef void (APIENTRYP PFNGLPRIMITIVERESTARTINDEXPROC) (GLuint index);
 #endif
 
 #ifndef GL_TEXTURE0
@@ -289,6 +293,8 @@ PFNGLUNIFORM4IVPROC glUniform4iv;
 PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
 PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;
 PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
+
+PFNGLPRIMITIVERESTARTINDEXPROC glPrimitiveRestartIndex;
 
 #ifndef GL_VERSION_1_3
 PFNGLACTIVETEXTUREPROC glActiveTexture;
@@ -356,6 +362,8 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
     glUniformMatrix2fv = (PFNGLUNIFORMMATRIX2FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix2fv");
     glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix3fv");
     glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix4fv");
+
+    glPrimitiveRestartIndex = (PFNGLPRIMITIVERESTARTINDEXPROC)get_proc_address(ctx, (char*)"glPrimitiveRestartIndex");
 
 #ifndef GL_VERSION_1_3
     glActiveTexture = (PFNGLACTIVETEXTUREPROC)get_proc_address(ctx, (char *)"glActiveTexture");
