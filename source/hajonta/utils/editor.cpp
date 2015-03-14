@@ -223,14 +223,30 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
     {
         uint32_t remainder = state->mtl_file.size - (uint32_t)(position - start_position);
         char *eol = next_newline(position, remainder);
-        char line[1024];
-        strncpy(line, position, (size_t)(eol - position));
-        line[eol - position] = '\0';
+        char _line[1024];
+        strncpy(_line, position, (size_t)(eol - position));
+        _line[eol - position] = '\0';
+        char *line = _line;
         /*
         char msg[1024];
         sprintf(msg, "position: %d; eol: %d; line: %s\n", position - state->mtl_file.contents, eol - position, line);
         memory->platform_debug_message(ctx, msg);
         */
+
+        for(;;)
+        {
+            if (line[0] == '\t')
+            {
+                line++;
+                continue;
+            }
+            if (line[0] == ' ')
+            {
+                line++;
+                continue;
+            }
+            break;
+        }
 
         if (line[0] == '\0')
         {
@@ -255,10 +271,22 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         else if (strncmp(line, "Kd", 2) == 0)
         {
         }
+        else if (strncmp(line, "Ke", 2) == 0)
+        {
+        }
         else if (strncmp(line, "Ks", 2) == 0)
         {
         }
         else if (strncmp(line, "Ni", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Ns", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Tr", 2) == 0)
+        {
+        }
+        else if (strncmp(line, "Tf", 2) == 0)
         {
         }
         else if (strncmp(line, "d ", 2) == 0)
