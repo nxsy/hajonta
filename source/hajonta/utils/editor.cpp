@@ -1020,7 +1020,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
         glPrimitiveRestartIndex(65535);
-        glDrawElements(GL_LINE_LOOP, state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
+        glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
     }
 }
 
