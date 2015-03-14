@@ -975,8 +975,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 axis = {0.0f, 1.0f, 0.0f};
     m4 rotate = m4rotation(axis, state->delta_t);
     v3 x_axis = {1.0f, 0.0f, 0.0f};
+    v3 y_axis = {0.0f, 0.0f, 1.0f};
     m4 x_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation);
+    m4 y_rotate = m4rotation(y_axis, (pi / 2) * state->y_rotation);
     rotate = m4mul(rotate, x_rotate);
+    rotate = m4mul(rotate, y_rotate);
 
     m4 scale = m4identity();
     scale.cols[0].E[0] = 2.0f / max_dimension;
