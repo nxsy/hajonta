@@ -190,38 +190,39 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     return true;
 }
 
+char *
+next_newline(char *str, uint32_t str_length)
+{
+    for (uint32_t idx = 0;
+            idx < str_length;
+            ++idx)
+    {
+        switch (str[idx]) {
+            case '\n':
+            case '\r':
+            case '\0':
+                return str + idx;
+        }
+    }
+    return str + str_length;
+}
+
 bool
 load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
 {
     game_state *state = (game_state *)memory->memory;
 
 
-    char *position = (char *)state->mtl_file.contents;
+    char *start_position = (char *)state->mtl_file.contents;
+    char *eof = start_position + state->mtl_file.size;
+    char *position = start_position;
     uint32_t max_lines = 100000;
     uint32_t counter = 0;
     material *current_material = 0;
-    for (;;)
+    while (position < eof)
     {
-        char *newline = strchr(position, '\n');
-        char *returnnewline = strchr(position, '\r');
-        char *nul = strchr(position, '\0');
-        char *eol = newline;
-        if (returnnewline && eol > returnnewline)
-        {
-            eol = returnnewline;
-        }
-        if (nul && eol > nul)
-        {
-            eol = nul;
-        }
-        if (!eol)
-        {
-            break;
-        }
-        if (eol > (state->mtl_file.contents + state->mtl_file.size))
-        {
-            eol = state->mtl_file.contents + state->mtl_file.size;
-        }
+        uint32_t remainder = state->mtl_file.size - (uint32_t)(position - start_position);
+        char *eol = next_newline(position, remainder);
         char line[1024];
         strncpy(line, position, (size_t)(eol - position));
         line[eol - position] = '\0';
@@ -497,34 +498,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
         }
 
-        char *position = (char *)state->model_file.contents;
+        char *start_position = (char *)state->model_file.contents;
+        char *eof = start_position + state->model_file.size;
+        char *position = start_position;
         uint32_t max_lines = 200000;
         uint32_t counter = 0;
         material null_material = {};
         null_material.texture_offset = -1;
         material *current_material = &null_material;
-        for (;;)
+        while (position < eof)
         {
-            char *newline = strchr(position, '\n');
-            char *returnnewline = strchr(position, '\r');
-            char *nul = strchr(position, '\0');
-            char *eol = newline;
-            if (returnnewline && eol > returnnewline)
-            {
-                eol = returnnewline;
-            }
-            if (nul && eol > nul)
-            {
-                eol = nul;
-            }
-            if (!eol)
-            {
-                break;
-            }
-            if (eol > (state->model_file.contents + state->model_file.size))
-            {
-                eol = state->model_file.contents + state->model_file.size;
-            }
+            uint32_t remainder = state->model_file.size - (uint32_t)(position - start_position);
+            char *eol = next_newline(position, remainder);
             char line[1024];
             strncpy(line, position, (size_t)(eol - position));
             line[eol - position] = '\0';
