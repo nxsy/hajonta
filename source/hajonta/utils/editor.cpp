@@ -298,26 +298,41 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         else if (strncmp(line, "map_Bump ", sizeof("map_Bump ") - 1) == 0)
         {
         }
+        else if (strncmp(line, "map_d ", sizeof("map_d ") - 1) == 0)
+        {
+        }
         else if (strncmp(line, "map_Kd ", sizeof("map_Kd ") - 1) == 0)
         {
             char *filename = line + sizeof("map_Kd ") - 1;
-            loaded_file texture;
-            bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
-            hassert(loaded);
-            int32_t x, y, size;
-            load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-            /*
-            char msg[1024];
-            sprintf(msg, "name = %s; x = %i, y = %i, size = %i", filename, x, y, size);
-            memory->platform_debug_message(ctx, msg);
-            */
+            hassert(strlen(filename) > 0);
+            if (filename[0] == '.')
+            {
 
-            current_material->texture_offset = (int32_t)(state->num_texture_ids++);
-            glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->texture_offset]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                x, y, 0,
-                GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            }
+            else
+            {
+                loaded_file texture;
+                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+                hassert(loaded);
+                int32_t x, y, size;
+                load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+                /*
+                char msg[1024];
+                sprintf(msg, "name = %s; x = %i, y = %i, size = %i", filename, x, y, size);
+                memory->platform_debug_message(ctx, msg);
+                */
+
+                current_material->texture_offset = (int32_t)(state->num_texture_ids++);
+                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->texture_offset]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                    x, y, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            }
+
+        }
+        else if (strncmp(line, "map_Ks ", sizeof("map_Ks ") - 1) == 0)
+        {
         }
         else
         {
