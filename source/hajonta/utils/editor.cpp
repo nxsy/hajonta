@@ -110,7 +110,7 @@ struct game_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t line_ibo;
-    int32_t sampler_ids[4];
+    int32_t sampler_ids[6];
     uint32_t texture_ids[10];
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
@@ -309,6 +309,10 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             {
 
             }
+            else if (strncmp(filename, "untitled", sizeof("untitled") - 1) == 0)
+            {
+
+            }
             else
             {
                 loaded_file texture;
@@ -332,6 +336,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
 
         }
         else if (strncmp(line, "map_Ks ", sizeof("map_Ks ") - 1) == 0)
+        {
+        }
+        else if (strncmp(line, "refl ", sizeof("refl ") - 1) == 0)
         {
         }
         else
@@ -535,6 +542,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->sampler_ids[1] = glGetUniformLocation(state->program_b.program, "tex1");
         state->sampler_ids[2] = glGetUniformLocation(state->program_b.program, "tex2");
         state->sampler_ids[3] = glGetUniformLocation(state->program_b.program, "tex3");
+        state->sampler_ids[4] = glGetUniformLocation(state->program_b.program, "tex4");
+        state->sampler_ids[5] = glGetUniformLocation(state->program_b.program, "tex5");
         glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
@@ -645,8 +654,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {
                     uint32_t t1, t2;
                     int num_found2 = sscanf(a, "%d/%d", &t1, &t2);
-                    hassert(num_found2 == 2);
-                    if (num_found2 == 2)
+                    if (num_found2 == 1)
+                    {
+
+                    }
+                    else if (num_found2 == 2)
                     {
                         uint32_t a_vertex_id, a_texture_coord_id;
                         uint32_t b_vertex_id, b_texture_coord_id;
@@ -680,13 +692,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                         state->faces[state->num_faces++] = face1;
                         state->faces[state->num_faces++] = face2;
                     }
+                    else
+                    {
+                        hassert(!"Invalid number of face attributes");
+                    }
                 }
                 else if (num_found == 3)
                 {
                     uint32_t t1, t2;
                     int num_found2 = sscanf(a, "%d/%d", &t1, &t2);
-                    hassert(num_found2 == 2);
-                    if (num_found2 == 2)
+                    if (num_found2 == 1)
+                    {
+
+                    }
+                    else if (num_found2 == 2)
                     {
                         uint32_t a_vertex_id, a_texture_coord_id;
                         uint32_t b_vertex_id, b_texture_coord_id;
@@ -707,6 +726,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             current_material->texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
+                    }
+                    else
+                    {
+                        hassert(!"Invalid number of face attributes");
                     }
                 }
                 /*
@@ -952,6 +975,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUseProgram(state->program_b.program);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
 
+    glErrorAssert();
     glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
@@ -961,6 +985,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
     glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
 
+    glErrorAssert();
     for (uint32_t idx = 0;
             idx < state->num_texture_ids;
             ++idx)
@@ -968,9 +993,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform1i(state->sampler_ids[idx], (GLint)idx);
         glActiveTexture(GL_TEXTURE0 + idx);
         glBindTexture(GL_TEXTURE_2D, state->texture_ids[idx]);
+        glErrorAssert();
     }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    glErrorAssert();
 
     v3 center = v3div(v3add(state->model_max, state->model_min), 2.0f);
     m4 center_translate = m4identity();

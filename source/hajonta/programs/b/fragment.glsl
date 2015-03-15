@@ -14,6 +14,8 @@ uniform sampler2D tex;
 uniform sampler2D tex1;
 uniform sampler2D tex2;
 uniform sampler2D tex3;
+uniform sampler2D tex4;
+uniform sampler2D tex5;
 uniform vec4 u_mvp_enabled;
 uniform vec4 u_w_lightPosition;
 uniform int u_model_mode;
@@ -86,6 +88,16 @@ void main(void)
                     {
                         o_color =
                             vec4(texture(tex3, tex_coord));
+                    }
+                    else if (v_style.y < 4.5)
+                    {
+                        o_color =
+                            vec4(texture(tex4, tex_coord));
+                    }
+                    else if (v_style.y < 5.5)
+                    {
+                        o_color =
+                            vec4(texture(tex5, tex_coord));
                     }
                     if (u_shading_mode == 1)
                     {
