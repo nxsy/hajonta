@@ -335,6 +335,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             }
 
         }
+        else if (strncmp(line, "map_Ke ", sizeof("map_Ke ") - 1) == 0)
+        {
+        }
         else if (strncmp(line, "map_Ks ", sizeof("map_Ks ") - 1) == 0)
         {
         }
