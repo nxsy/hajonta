@@ -117,6 +117,8 @@ struct game_state
     uint32_t aabb_cube_ibo;
     uint32_t bounding_sphere_vbo;
     uint32_t bounding_sphere_ibo;
+    uint32_t mouse_vbo;
+    uint32_t mouse_texture;
 
     uint32_t num_bounding_sphere_elements;
 
@@ -160,6 +162,8 @@ struct game_state
 
     int x_rotation;
     int y_rotation;
+
+    uint8_t mouse_bitmap[4096];
 };
 
 bool
@@ -540,6 +544,34 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glGenBuffers(1, &state->bounding_sphere_ibo);
         glErrorAssert();
         glGenTextures(harray_count(state->texture_ids), state->texture_ids);
+        glGenBuffers(1, &state->mouse_vbo);
+        glGenTextures(1, &state->mouse_texture);
+
+        {
+            char *filename = "ui/slick_arrows/slick_arrow-delta.png";
+            uint32_t a_filesize = 256;
+            uint8_t image[1000];
+            if (!memory->platform_load_asset(ctx, filename, a_filesize, image)) {
+                memory->platform_fail(ctx, "Could not load ui/slick_arrows/slick_arrow-delta.png");
+                memory->quit = true;
+                return;
+            }
+
+            int32_t x, y, actual_size;
+            load_image(image, a_filesize, state->mouse_bitmap, sizeof(state->mouse_bitmap),
+                    &x, &y, &actual_size);
+
+            char msg[1024];
+            sprintf(msg, "x, y, size: %d, %d, %d\n", x, y, actual_size);
+            memory->platform_debug_message(ctx, msg);
+
+            glBindTexture(GL_TEXTURE_2D, state->mouse_texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                x, y, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, state->mouse_bitmap);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        }
+
         glErrorAssert();
         state->sampler_ids[0] = glGetUniformLocation(state->program_b.program, "tex");
         state->sampler_ids[1] = glGetUniformLocation(state->program_b.program, "tex1");
@@ -952,6 +984,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
+    v2 mouse_loc = {
+        (float)input->mouse.x / ((float)input->window.width / 2.0f) - 1.0f,
+        ((float)input->mouse.y / ((float)input->window.height / 2.0f) - 1.0f) * -1.0f,
+    };
+
     glBindVertexArray(state->vao);
 
     glErrorAssert();
@@ -1081,6 +1118,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
         glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
+        glErrorAssert();
     }
 
     {
@@ -1097,6 +1135,64 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
         glPrimitiveRestartIndex(65535);
         glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
+        glErrorAssert();
+    }
+    {
+        glDisable(GL_DEPTH_TEST);
+        glDepthFunc(GL_ALWAYS);
+        glUniform1i(state->program_b.u_model_mode_id, 0);
+        glUniform1i(state->program_b.u_shading_mode_id, 0);
+        float mouse_width = 16.0f / (960.0f / 2.0f);
+        float mouse_height = 16.0f / (540.0f / 2.0f);
+        editor_vertex_format vertices[] =
+        {
+            {
+                {
+                    {mouse_loc.x, mouse_loc.y, 0.0, 1.0},
+                    {0.0, 0.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+            {
+                {
+                    {mouse_loc.x + mouse_width, mouse_loc.y, 0.0, 1.0},
+                    {1.0, 0.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+            {
+                {
+                    {mouse_loc.x + mouse_width, mouse_loc.y - mouse_height, 0.0, 1.0},
+                    {1.0, 1.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+            {
+                {
+                    {mouse_loc.x, mouse_loc.y - mouse_height, 0.0, 1.0},
+                    {0.0, 1.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+        };
+        glBindBuffer(GL_ARRAY_BUFFER, state->mouse_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), 0);
+        glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(vertex, color));
+        glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
+        glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, state->mouse_texture);
+        glUniform1i(
+            glGetUniformLocation(state->program_b.program, "tex"),
+            0);
+        u_mvp_enabled = {0.0f, 0.0f, 0.0f, 0.0f};
+        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+        v2 position = {0, 0};
+        glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+        glErrorAssert();
     }
 }
 

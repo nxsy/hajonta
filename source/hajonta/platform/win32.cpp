@@ -700,6 +700,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     state.window = window;
 
     ShowWindow(window, nCmdShow);
+    ShowCursor(0);
     game_code code = {};
 
     wglSwapIntervalEXT =
