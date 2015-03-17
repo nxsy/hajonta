@@ -28,5 +28,10 @@ clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/unit source/hajonta/bootstrap/unit
 clang ${CPPFLAGS} ${WARNFLAGS} -c source/hajonta/game.cpp ${DEBUG_FLAGS} ${INCLUDES} -o build/debug/game.o
 clang ${WARNFLAGS} -dynamiclib -o build/debug/libgame.dylib build/debug/game.o -framework OpenGL ${DEBUG_FLAGS}
 
+# editor
+clang ${CPPFLAGS} ${WARNFLAGS} -c source/hajonta/utils/editor.cpp ${DEBUG_FLAGS} ${INCLUDES} -o build/debug/editor.o
+clang ${WARNFLAGS} -dynamiclib -o build/debug/libeditor.dylib build/debug/editor.o -framework OpenGL ${DEBUG_FLAGS}
+
 # binary
 clang ${CPPFLAGS} ${WARNFLAGS} -framework Cocoa -framework QuartzCore -framework OpenGL -o build/debug/hajonta source/hajonta/platform/osx.mm ${DEBUG_FLAGS} ${INCLUDES}
+clang ${CPPFLAGS} ${WARNFLAGS} -framework Cocoa -framework QuartzCore -framework OpenGL -o build/debug/editor source/hajonta/platform/osx.mm ${DEBUG_FLAGS} ${INCLUDES} -DHAJONTA_LIBRARY_NAME=libeditor.dylib

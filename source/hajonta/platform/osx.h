@@ -32,6 +32,8 @@ struct osx_state
 
     int window_width;
     int window_height;
+
+    void *view;
 };
 
 

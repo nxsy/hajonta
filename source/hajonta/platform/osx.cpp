@@ -125,6 +125,14 @@ PLATFORM_DEBUG_MESSAGE(osx_debug_message)
     printf("%s\n", message);
 }
 
+PLATFORM_EDITOR_LOAD_FILE(osx_editor_load_file)
+{
+    bool result = false;
+    char filename[MAX_PATH];
+    osx_state *state = (osx_state *)ctx;
+    return openFileDialog(state->view, filename, sizeof(filename));
+}
+
 static bool
 find_asset_path(osx_state *state)
 {
@@ -148,13 +156,17 @@ find_asset_path(osx_state *state)
 }
 
 void
-osx_init(osx_state *state, int window_width, int window_height)
+osx_init(osx_state *state, int window_width, int window_height, void *view)
 {
     *state = {};
     get_binary_name(state);
     find_asset_path(state);
 
+#if defined(HAJONTA_LIBRARY_NAME)
+    char *game_code_filename = hquoted(HAJONTA_LIBRARY_NAME);
+#else
     char *game_code_filename = (char *)"libgame.dylib";
+#endif
     build_full_filename(state, game_code_filename,
             sizeof(state->library_path),
             state->library_path);
@@ -166,12 +178,15 @@ osx_init(osx_state *state, int window_width, int window_height)
     state->memory.platform_fail = osx_fail;
     state->memory.platform_load_asset = osx_load_asset;
     state->memory.platform_debug_message = osx_debug_message;
+    state->memory.platform_editor_load_file = osx_editor_load_file;
 
     state->new_input = &state->inputs[0];
     state->old_input = &state->inputs[1];
 
     state->window_width = window_width;
     state->window_height = window_height;
+
+    state->view = view;
 }
 
 void
