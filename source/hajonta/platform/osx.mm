@@ -8,11 +8,14 @@
 #import <OpenGL/OpenGL.h>
 #include <OpenGL/gl.h>
 
-struct OpenFileDialogReturn
-{
-    char *filename;
-    uint32_t file_max_length;
+@interface OpenFileDialogReturn : NSObject {
+@public
+    NSURL *filename;
 };
+@end
+
+@implementation OpenFileDialogReturn
+@end
 
 bool
 openFileDialog(void *view, char *filename, uint32_t file_max_length);
@@ -322,25 +325,18 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 
 - (bool) openFileDialog:(OpenFileDialogReturn *)ret {
     bool result = false;
-    NSLog(@"%d", ret->file_max_length);
     NSOpenPanel *panel = [NSOpenPanel openPanel];
     int panel_run_result = [panel runModal];
     if (panel_run_result == NSFileHandlingPanelOKButton)
     {
+        NSLog(@"Got NSFileHandlingPanelOKButton");
         NSArray* urls = [panel URLs];
         for(int i = 0; i < [urls count]; i++ )
         {
-            NSString* urlstring = [urls objectAtIndex:i];
-            NSURL *url = [NSURL URLWithString:urlstring];
-            NSError *error;
-            NSLog(@"Url: %@", url);
-            NSString *stringFromFileAtURL = [[NSString alloc]
-                initWithContentsOfURL:url
-                encoding:NSUTF8StringEncoding
-                error:&error];
+            NSURL *url = [urls objectAtIndex:i];
+            ret->filename = url;
         }
     }
-    NSLog(@"OMGOMGOMG");
     return true;
 }
 @end
@@ -349,27 +345,14 @@ bool
 openFileDialog(void *void_view, char *filename, uint32_t file_max_length)
 {
     View *view = (View *)void_view;
-    OpenFileDialogReturn fdr;
-    fdr.filename = filename;
-    fdr.file_max_length = file_max_length;
-/*
+    OpenFileDialogReturn *fdr = [OpenFileDialogReturn alloc];
+    NSLog(@"%@", fdr->filename);
+
     [view
         performSelectorOnMainThread:@selector(openFileDialog:) withObject:fdr waitUntilDone:YES];
+
+    NSLog(@"%@", fdr->filename);
     return true;
-*/
-
-NSInvocation *inv = [NSInvocation invocationWithMethodSignature:[view methodSignatureForSelector:@selector(openFileDialog:)]];
-[inv setTarget:view];
-[inv setSelector:@selector(openFileDialog:)];
-// if you have arguments, set them up here
-[inv setArgument:&fdr atIndex:2];
-
-bool myReturnValue;
-[inv setReturnValue:&myReturnValue];
-
-[inv performSelectorOnMainThread:@selector(invoke) withObject:nil waitUntilDone:YES];
-NSLog(@"return value: %d", myReturnValue);
-return true;
 }
 
 
