@@ -96,12 +96,14 @@ struct face
 {
     face_index indices[3];
     int texture_offset;
+    int bump_texture_offset;
 };
 
 struct material
 {
     char name[100];
     int32_t texture_offset;
+    int32_t bump_texture_offset;
 };
 
 struct game_state
@@ -265,6 +267,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             current_material = state->materials + state->num_materials++;
             strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
             current_material->texture_offset = -1;
+            current_material->bump_texture_offset = -1;
         }
         else if (strncmp(line, "Ns", 2) == 0)
         {
@@ -301,6 +304,27 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         }
         else if (strncmp(line, "map_Bump ", sizeof("map_Bump ") - 1) == 0)
         {
+            char *filename = line + sizeof("map_Bump ") - 1;
+            hassert(strlen(filename) > 0);
+            if (filename[0] == '.')
+            {
+
+            }
+            else
+            {
+                loaded_file texture;
+                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+                hassert(loaded);
+                int32_t x, y, size;
+                load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+
+                current_material->bump_texture_offset = (int32_t)(state->num_texture_ids++);
+                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->bump_texture_offset]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                    x, y, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            }
         }
         else if (strncmp(line, "map_d ", sizeof("map_d ") - 1) == 0)
         {
@@ -310,10 +334,6 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             char *filename = line + sizeof("map_Kd ") - 1;
             hassert(strlen(filename) > 0);
             if (filename[0] == '.')
-            {
-
-            }
-            else if (strncmp(filename, "untitled", sizeof("untitled") - 1) == 0)
             {
 
             }
@@ -592,6 +612,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         uint32_t counter = 0;
         material null_material = {};
         null_material.texture_offset = -1;
+        null_material.bump_texture_offset = -1;
         material *current_material = &null_material;
         while (position < eof)
         {
@@ -715,6 +736,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {c_vertex_id, c_texture_coord_id},
                             },
                             current_material->texture_offset,
+                            current_material->bump_texture_offset,
                         };
                         face face2 = {
                             {
@@ -723,6 +745,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {a_vertex_id, a_texture_coord_id},
                             },
                             current_material->texture_offset,
+                            current_material->bump_texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                         state->faces[state->num_faces++] = face2;
@@ -759,6 +782,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {c_vertex_id, c_texture_coord_id},
                             },
                             current_material->texture_offset,
+                            current_material->bump_texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                     }
@@ -930,10 +954,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
             vbo_v1->style[0] = 3.0f;
             vbo_v1->style[1] = (float)f->texture_offset;
+            vbo_v1->style[2] = (float)f->bump_texture_offset;
             vbo_v2->style[0] = 3.0f;
             vbo_v2->style[1] = (float)f->texture_offset;
+            vbo_v2->style[2] = (float)f->bump_texture_offset;
             vbo_v3->style[0] = 3.0f;
             vbo_v3->style[1] = (float)f->texture_offset;
+            vbo_v3->style[2] = (float)f->bump_texture_offset;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
@@ -968,7 +995,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
         {
-            state->model_mode = (state->model_mode + 1) % 4;
+            state->model_mode = (state->model_mode + 1) % 5;
         }
         if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
         {

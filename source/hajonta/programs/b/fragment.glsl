@@ -21,6 +21,47 @@ uniform vec4 u_w_lightPosition;
 uniform int u_model_mode;
 uniform int u_shading_mode;
 
+vec4 tex_crazy(float t, vec2 tex_coord)
+{
+    vec4 o_color;
+    if (t < -0.5)
+    {
+        o_color = vec4(0);
+    }
+    else if (t < 0.5)
+    {
+        o_color =
+            vec4(texture(tex, tex_coord));
+    }
+    else if (t < 1.5)
+    {
+        o_color =
+            vec4(texture(tex1, tex_coord));
+    }
+    else if (t < 2.5)
+    {
+        o_color =
+            vec4(texture(tex2, tex_coord));
+    }
+    else if (t < 3.5)
+    {
+        o_color =
+            vec4(texture(tex3, tex_coord));
+    }
+    else if (t < 4.5)
+    {
+        o_color =
+            vec4(texture(tex4, tex_coord));
+    }
+    else if (t < 5.5)
+    {
+        o_color =
+            vec4(texture(tex5, tex_coord));
+    }
+
+    return o_color;
+}
+
 void main(void)
 {
     o_color = v_color;
@@ -57,6 +98,11 @@ void main(void)
             vec4 lightDirection_clamped = normalize(v_c_lightDirection) / 2 + 0.5;
             o_color = vec4(lightDirection_clamped.xyz, 1);
         }
+        else if (u_model_mode == 4)
+        {
+            vec2 tex_coord = v_color.xy;
+            o_color = tex_crazy(v_style.z, tex_coord);
+        }
         else
         {
             if (v_style.x > 1.1)
@@ -69,36 +115,7 @@ void main(void)
                 }
                 else
                 {
-                    if (v_style.y < 0.5)
-                    {
-                        o_color =
-                            vec4(texture(tex, tex_coord));
-                    }
-                    else if (v_style.y < 1.5)
-                    {
-                        o_color =
-                            vec4(texture(tex1, tex_coord));
-                    }
-                    else if (v_style.y < 2.5)
-                    {
-                        o_color =
-                            vec4(texture(tex2, tex_coord));
-                    }
-                    else if (v_style.y < 3.5)
-                    {
-                        o_color =
-                            vec4(texture(tex3, tex_coord));
-                    }
-                    else if (v_style.y < 4.5)
-                    {
-                        o_color =
-                            vec4(texture(tex4, tex_coord));
-                    }
-                    else if (v_style.y < 5.5)
-                    {
-                        o_color =
-                            vec4(texture(tex5, tex_coord));
-                    }
+                    o_color = tex_crazy(v_style.y, tex_coord);
                     if (u_shading_mode == 1)
                     {
                         vec3 light_color = vec3(1.0f, 1.0f, 0.9f);
