@@ -23,6 +23,7 @@ in vec4 a_pos;
 in vec4 a_color;
 in vec4 a_style;
 in vec4 a_normal;
+in vec4 a_tangent;
 
 out vec4 v_color;
 out vec4 v_style;
@@ -32,6 +33,8 @@ out vec4 v_w_vertexPosition;
 out vec4 v_c_vertexNormal;
 out vec4 v_c_eyeDirection;
 out vec4 v_c_lightDirection;
+
+out mat3 v_tbn_matrix;
 
 void main (void)
 {
@@ -53,7 +56,10 @@ void main (void)
         vec4 c_lightPosition = u_view * u_w_lightPosition;
 
         v_c_lightDirection = c_lightPosition + v_c_eyeDirection;
-        v_c_vertexNormal = u_view * inverse(transpose(u_model)) * a_normal;
+        v_c_vertexNormal = normalize(u_view * inverse(transpose(u_model)) * a_normal);
+        vec3 tangent = normalize(u_view * inverse(transpose(u_model)) * a_tangent).xyz;
+        vec3 bitangent = cross(v_c_vertexNormal.xyz, tangent);
+        v_tbn_matrix = transpose(mat3(tangent, bitangent, v_c_vertexNormal.xyz));
     }
     if (u_mvp_enabled.w == 1)
     {

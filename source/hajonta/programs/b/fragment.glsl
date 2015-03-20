@@ -9,6 +9,8 @@ in vec4 v_c_vertexNormal;
 in vec4 v_c_eyeDirection;
 in vec4 v_c_lightDirection;
 
+in mat3 v_tbn_matrix;
+
 out vec4 o_color;
 uniform sampler2D tex;
 uniform sampler2D tex1;
@@ -116,7 +118,14 @@ void main(void)
                 else
                 {
                     o_color = tex_crazy(v_style.y, tex_coord);
-                    if (u_shading_mode == 1)
+                    vec3 normal = normalize(v_c_vertexNormal.xyz);
+                    if (u_shading_mode >= 2 && v_style.z >= 0)
+                    {
+                        vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
+                        vec3 bump_normal = 2.0 * bump_normal_raw - vec3(1.0, 1.0, 1.0);
+                        normal = v_tbn_matrix * bump_normal;
+                    }
+                    if (u_shading_mode >= 1)
                     {
                         vec3 light_color = vec3(1.0f, 1.0f, 0.9f);
                         float light_power = 70.0f;
@@ -125,7 +134,7 @@ void main(void)
                         vec3 material_ambient_color = material_diffuse_color * 0.2;
                         vec3 material_specular_color = vec3(0.3, 0.3, 0.3);
                         float distance = length(u_w_lightPosition - v_w_vertexPosition);
-                        vec3 n = normalize(v_c_vertexNormal.xyz);
+                        vec3 n = normalize(normal);
                         vec3 l = normalize(v_c_lightDirection.xyz);
                         float cosTheta = clamp(dot(n, l), 0, 1);
                         vec3 E = normalize(v_c_eyeDirection.xyz);
