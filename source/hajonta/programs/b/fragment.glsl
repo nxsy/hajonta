@@ -98,7 +98,10 @@ void main(void)
         else if (u_model_mode == 3)
         {
             vec4 lightDirection_clamped = normalize(v_c_lightDirection) / 2 + 0.5;
-            o_color = vec4(lightDirection_clamped.xyz, 1);
+            vec3 n = normalize(v_c_vertexNormal.xyz);
+            vec3 l = normalize(v_c_lightDirection.xyz);
+            float cosTheta = clamp(dot(n, l), 0, 1);
+            o_color = vec4(cosTheta, cosTheta, cosTheta, 1.0);
         }
         else if (u_model_mode == 4)
         {

@@ -1149,7 +1149,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
 
-    v4 light_position = {0.0f, 10.0f, -10.0f, 1.0f};
+    v4 light_position = {10.0f, 10.0f, -10.0f, 1.0f};
     glUniform4fv(state->program_b.u_w_lightPosition_id, 1, (float *)&light_position);
     v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
     glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
