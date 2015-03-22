@@ -17,10 +17,14 @@
 @implementation OpenFileDialogReturn
 @end
 
-bool
-openFileDialog(void *view, char *filename, uint32_t file_max_length);
-
 #include "hajonta/platform/common.h"
+
+bool
+openFileDialog(void *void_view, char *filename, uint32_t file_max_length, char **contents, uint32_t *size, char *file_path);
+
+bool
+openFileNearby(char *base, char *path, char **contents, uint32_t *size, char *file_path);
+
 #include "hajonta/platform/osx.cpp"
 
 @class View;
@@ -342,7 +346,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 @end
 
 bool
-openFileDialog(void *void_view, char *filename, uint32_t file_max_length)
+openFileDialog(void *void_view, char *filename, uint32_t file_max_length, char **contents, uint32_t *size, char *file_path)
 {
     View *view = (View *)void_view;
     OpenFileDialogReturn *fdr = [OpenFileDialogReturn alloc];
@@ -352,9 +356,40 @@ openFileDialog(void *void_view, char *filename, uint32_t file_max_length)
         performSelectorOnMainThread:@selector(openFileDialog:) withObject:fdr waitUntilDone:YES];
 
     NSLog(@"%@", fdr->filename);
+
+    NSString *filename_s = [fdr->filename absoluteString];
+
+    strcpy(file_path, [filename_s UTF8String]);
+    NSData *data = [[NSData alloc] initWithContentsOfURL:fdr->filename];
+
+    *size = [data length];
+    char *file_contents = (char *)malloc(*size);
+    [data getBytes:file_contents length:*size];
+
+    *contents = file_contents;
+
     return true;
 }
 
+bool
+openFileNearby(char *base, char *path, char **contents, uint32_t *size, char *file_path)
+{
+    NSString *base_string = [NSString stringWithCString:base encoding:NSUTF8StringEncoding];
+    NSURL *base_url = [NSURL URLWithString:base_string];
+    NSString *path_string = [NSString stringWithCString:path encoding:NSUTF8StringEncoding];
+    NSURL *url = [NSURL URLWithString:path_string relativeToURL:base_url];
+
+    strcpy(file_path, (char *)url);
+
+    NSData *data = [[NSData alloc] initWithContentsOfURL:url];
+
+    *size = [data length];
+    char *file_contents = (char *)malloc(*size);
+    [data getBytes:file_contents length:*size];
+
+    *contents = file_contents;
+    return true;
+}
 
 static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeStamp* now, const CVTimeStamp* outputTime, CVOptionFlags flagsIn, CVOptionFlags* flagsOut, void* displayLinkContext) {
     CVReturn result = [(View*)displayLinkContext getFrameForTime:outputTime];

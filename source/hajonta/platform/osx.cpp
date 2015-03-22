@@ -127,10 +127,18 @@ PLATFORM_DEBUG_MESSAGE(osx_debug_message)
 
 PLATFORM_EDITOR_LOAD_FILE(osx_editor_load_file)
 {
-    bool result = false;
     char filename[MAX_PATH];
     osx_state *state = (osx_state *)ctx;
-    return openFileDialog(state->view, filename, sizeof(filename));
+    bool result = openFileDialog(state->view, filename, sizeof(filename), &target->contents, &target->size, (char *)target->file_path);
+    return result;
+}
+
+PLATFORM_EDITOR_LOAD_NEARBY_FILE(osx_editor_load_nearby_file)
+{
+    char filename[MAX_PATH];
+    osx_state *state = (osx_state *)ctx;
+    bool result = openFileNearby(existing_file.file_path, name, &target->contents, &target->size, (char *)target->file_path);
+    return result;
 }
 
 static bool
@@ -179,6 +187,7 @@ osx_init(osx_state *state, int window_width, int window_height, void *view)
     state->memory.platform_load_asset = osx_load_asset;
     state->memory.platform_debug_message = osx_debug_message;
     state->memory.platform_editor_load_file = osx_editor_load_file;
+    state->memory.platform_editor_load_nearby_file = osx_editor_load_nearby_file;
 
     state->new_input = &state->inputs[0];
     state->old_input = &state->inputs[1];
