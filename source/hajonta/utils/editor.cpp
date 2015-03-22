@@ -19,6 +19,8 @@
 #include "hajonta/platform/common.h"
 #include "hajonta/math.cpp"
 #include "hajonta/image.cpp"
+#include "hajonta/bmp.cpp"
+#include "hajonta/font.cpp"
 
 #include "hajonta/programs/b.h"
 
@@ -107,6 +109,13 @@ struct material
     int32_t bump_texture_offset;
 };
 
+struct kenpixel_future_14
+{
+    uint8_t zfi[5159];
+    uint8_t bmp[131210];
+    font_data font;
+};
+
 struct game_state
 {
     uint32_t vao;
@@ -167,6 +176,14 @@ struct game_state
     int y_rotation;
 
     uint8_t mouse_bitmap[4096];
+
+    uint32_t debug_texture_id;
+    uint32_t debug_vbo;
+    kenpixel_future_14 debug_font;
+    draw_buffer debug_draw_buffer;
+#define debug_buffer_width 960
+#define debug_buffer_height 14
+    uint8_t debug_buffer[4 * debug_buffer_width * debug_buffer_height];
 };
 
 bool
@@ -567,6 +584,67 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glGenTextures(harray_count(state->texture_ids), state->texture_ids);
         glGenBuffers(1, &state->mouse_vbo);
         glGenTextures(1, &state->mouse_texture);
+
+        {
+            if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.zfi", sizeof(state->debug_font.zfi), state->debug_font.zfi))
+            {
+                memory->platform_fail(ctx, "Failed to open zfi file");
+                return;
+            }
+            if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.bmp", sizeof(state->debug_font.bmp), state->debug_font.bmp))
+            {
+                memory->platform_fail(ctx, "Failed to open bmp file");
+                return;
+            }
+            load_font(state->debug_font.zfi, state->debug_font.bmp, &state->debug_font.font, ctx, memory);
+
+            state->debug_draw_buffer.memory = state->debug_buffer;
+            state->debug_draw_buffer.width = debug_buffer_width;
+            state->debug_draw_buffer.height = debug_buffer_height;
+            state->debug_draw_buffer.pitch = 4 * debug_buffer_width;
+
+            glGenBuffers(1, &state->debug_vbo);
+            glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
+            glGenTextures(1, &state->debug_texture_id);
+            glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                debug_buffer_width, debug_buffer_height, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, state->debug_buffer);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            float height = 14.0f / (540.0f / 2.0f);
+            float top = -(1-height);
+            editor_vertex_format font_vertices[4] = {
+                {
+                    {
+                        {-1.0, top, 0.0, 1.0},
+                        { 0.0, 1.0, 1.0, 1.0},
+                    },
+                    {2.0, 0.0, 0.0, 0.0},
+                },
+                {
+                    {
+                        { 1.0, top, 0.0, 1.0},
+                        { 1.0, 1.0, 1.0, 1.0},
+                    },
+                    {2.0, 0.0, 0.0, 0.0},
+                },
+                {
+                    {
+                        { 1.0,-1.0, 0.0, 1.0},
+                        {1.0, 0.0, 1.0, 1.0},
+                    },
+                    {2.0, 0.0, 0.0, 0.0},
+                },
+                {
+                    {
+                        {-1.0,-1.0, 0.0, 1.0},
+                        {0.0, 0.0, 1.0, 1.0},
+                    },
+                    {2.0, 0.0, 0.0, 0.0},
+                },
+            };
+            glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
+        }
 
         {
             char *filename = "ui/slick_arrows/slick_arrow-delta.png";
@@ -1211,6 +1289,97 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
         glErrorAssert();
     }
+
+    {
+
+        memset(state->debug_buffer, 0, sizeof(state->debug_buffer));
+        char msg[1024] = {};
+        sprintf(msg + strlen(msg), "MODEL MODE:...");
+        switch (state->model_mode)
+        {
+            case 0:
+            {
+                sprintf(msg + strlen(msg), "STD");
+            } break;
+            case 1:
+            {
+                sprintf(msg + strlen(msg), "DISCARD");
+            } break;
+            case 2:
+            {
+                sprintf(msg + strlen(msg), "NORMAL");
+            } break;
+            case 3:
+            {
+                sprintf(msg + strlen(msg), "LIGHT.REFLECT");
+            } break;
+            case 4:
+            {
+                sprintf(msg + strlen(msg), "BUMP.MAP");
+            } break;
+            default:
+            {
+                sprintf(msg + strlen(msg), "UNKNOWN");
+            } break;
+        }
+        sprintf(msg + strlen(msg), "...");
+
+        sprintf(msg + strlen(msg), "SHADING MODE...");
+        switch (state->shading_mode)
+        {
+            case 0:
+            {
+                sprintf(msg + strlen(msg), "DIFFUSE");
+            } break;
+            case 1:
+            {
+                sprintf(msg + strlen(msg), "LIGHTING.NOBUMP");
+            } break;
+            case 2:
+            {
+                sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP");
+            } break;
+            default:
+            {
+                sprintf(msg + strlen(msg), "UNKNOWN");
+            } break;
+        }
+        sprintf(msg + strlen(msg), "...");
+        write_to_buffer(&state->debug_draw_buffer, &state->debug_font.font, msg);
+
+        glDisable(GL_DEPTH_TEST);
+        glDepthFunc(GL_ALWAYS);
+        glUniform1i(state->program_b.u_model_mode_id, 0);
+        glUniform1i(state->program_b.u_shading_mode_id, 0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
+        glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), 0);
+        glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(vertex, color));
+        glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
+        glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
+        glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);
+        glUniform1i(
+            glGetUniformLocation(state->program_b.program, "tex"),
+            0);
+        glTexSubImage2D(GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            (GLsizei)debug_buffer_width,
+            (GLsizei)debug_buffer_height,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            state->debug_buffer);
+        u_mvp_enabled = {0.0f, 0.0f, 0.0f, 0.0f};
+        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+        v2 position = {0, 0};
+        glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    }
+
     {
         glDisable(GL_DEPTH_TEST);
         glDepthFunc(GL_ALWAYS);
