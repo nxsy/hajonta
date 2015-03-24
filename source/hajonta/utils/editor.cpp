@@ -320,7 +320,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         else if (strncmp(line, "illum ", sizeof("illum ") - 1) == 0)
         {
         }
-        else if (strncmp(line, "map_Bump ", sizeof("map_Bump ") - 1) == 0)
+        else if ((strncmp(line, "map_Bump ", sizeof("map_Bump ") - 1) == 0) || (strncmp(line, "map_bump ", sizeof("map_bump ") - 1) == 0))
         {
             char *filename = line + sizeof("map_Bump ") - 1;
             hassert(strlen(filename) > 0);
