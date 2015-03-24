@@ -386,6 +386,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         else if (strncmp(line, "refl ", sizeof("refl ") - 1) == 0)
         {
         }
+        else if (strncmp(line, "bump ", sizeof("bump ") - 1) == 0)
+        {
+        }
         else
         {
             hassert(!"Invalid code path");
