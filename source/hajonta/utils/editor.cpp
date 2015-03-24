@@ -337,11 +337,15 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
 
                 current_material->bump_texture_offset = (int32_t)(state->num_texture_ids++);
+                glErrorAssert();
                 glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->bump_texture_offset]);
+                glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
                     GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+                glErrorAssert();
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glErrorAssert();
             }
         }
         else if (strncmp(line, "map_d ", sizeof("map_d ") - 1) == 0)
@@ -369,11 +373,15 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 */
 
                 current_material->texture_offset = (int32_t)(state->num_texture_ids++);
+                glErrorAssert();
                 glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->texture_offset]);
+                glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
                     GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+                glErrorAssert();
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glErrorAssert();
             }
 
         }
@@ -407,6 +415,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         {
             position++;
         }
+        glErrorAssert();
     }
     return true;
 }
@@ -686,6 +695,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
         {
         }
+        glErrorAssert();
 
         char *start_position = (char *)state->model_file.contents;
         char *eof = start_position + state->model_file.size;
@@ -939,6 +949,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
+        glErrorAssert();
+
         for (uint32_t face_idx = 0;
                 face_idx < state->num_faces * 3;
                 ++face_idx)
@@ -960,6 +972,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->line_elements[state->num_line_elements++] = face_array_idx;
         }
 
+        glErrorAssert();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
         glErrorAssert();
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
