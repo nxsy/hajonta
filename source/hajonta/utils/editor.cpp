@@ -231,6 +231,8 @@ next_newline(char *str, uint32_t str_length)
     return str + str_length;
 }
 
+#define starts_with(line, s) (strncmp(line, s, sizeof(s) - 1) == 0)
+
 bool
 load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
 {
@@ -280,7 +282,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         {
 
         }
-        else if (strncmp(line, "newmtl", 6) == 0)
+        else if (starts_with(line, "newmtl"))
         {
             current_material = state->materials + state->num_materials++;
             strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
