@@ -379,7 +379,8 @@ openFileNearby(char *base, char *path, char **contents, uint32_t *size, char *fi
     NSString *path_string = [NSString stringWithCString:path encoding:NSUTF8StringEncoding];
     NSURL *url = [NSURL URLWithString:path_string relativeToURL:base_url];
 
-    strcpy(file_path, (char *)url);
+    NSString *url_s = [url absoluteString];
+    strcpy(file_path, [url_s UTF8String]);
 
     NSData *data = [[NSData alloc] initWithContentsOfURL:url];
 
