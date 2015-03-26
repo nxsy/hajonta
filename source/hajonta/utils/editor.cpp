@@ -282,47 +282,47 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         {
 
         }
-        else if (starts_with(line, "newmtl"))
+        else if (starts_with(line, "newmtl "))
         {
             current_material = state->materials + state->num_materials++;
             strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
             current_material->texture_offset = -1;
             current_material->bump_texture_offset = -1;
         }
-        else if (strncmp(line, "Ns", 2) == 0)
+        else if (starts_with(line, "Ns "))
         {
         }
-        else if (strncmp(line, "Ka", 2) == 0)
+        else if (starts_with(line, "Ka "))
         {
         }
-        else if (strncmp(line, "Kd", 2) == 0)
+        else if (starts_with(line, "Kd "))
         {
         }
-        else if (strncmp(line, "Ke", 2) == 0)
+        else if (starts_with(line, "Ke "))
         {
         }
-        else if (strncmp(line, "Ks", 2) == 0)
+        else if (starts_with(line, "Ks "))
         {
         }
-        else if (strncmp(line, "Ni", 2) == 0)
+        else if (starts_with(line, "Ni "))
         {
         }
-        else if (strncmp(line, "Ns", 2) == 0)
+        else if (starts_with(line, "Ns "))
         {
         }
-        else if (strncmp(line, "Tr", 2) == 0)
+        else if (starts_with(line, "Tr "))
         {
         }
-        else if (strncmp(line, "Tf", 2) == 0)
+        else if (starts_with(line, "Tf "))
         {
         }
-        else if (strncmp(line, "d ", 2) == 0)
+        else if (starts_with(line, "d "))
         {
         }
-        else if (strncmp(line, "illum ", sizeof("illum ") - 1) == 0)
+        else if (starts_with(line, "illum "))
         {
         }
-        else if ((strncmp(line, "map_Bump ", sizeof("map_Bump ") - 1) == 0) || (strncmp(line, "map_bump ", sizeof("map_bump ") - 1) == 0))
+        else if (starts_with(line, "map_Bump ") || starts_with(line, "map_bump "))
         {
             char *filename = line + sizeof("map_Bump ") - 1;
             hassert(strlen(filename) > 0);
@@ -350,10 +350,10 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 glErrorAssert();
             }
         }
-        else if (strncmp(line, "map_d ", sizeof("map_d ") - 1) == 0)
+        else if (starts_with(line, "map_d "))
         {
         }
-        else if (strncmp(line, "map_Kd ", sizeof("map_Kd ") - 1) == 0)
+        else if (starts_with(line, "map_Kd "))
         {
             char *filename = line + sizeof("map_Kd ") - 1;
             hassert(strlen(filename) > 0);
@@ -387,16 +387,16 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             }
 
         }
-        else if (strncmp(line, "map_Ke ", sizeof("map_Ke ") - 1) == 0)
+        else if (starts_with(line, "map_Ke "))
         {
         }
-        else if (strncmp(line, "map_Ks ", sizeof("map_Ks ") - 1) == 0)
+        else if (starts_with(line, "map_Ks "))
         {
         }
-        else if (strncmp(line, "refl ", sizeof("refl ") - 1) == 0)
+        else if (starts_with(line, "refl "))
         {
         }
-        else if (strncmp(line, "bump ", sizeof("bump ") - 1) == 0)
+        else if (starts_with(line, "bump "))
         {
         }
         else
@@ -903,14 +903,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             else if (line[0] == 's')
             {
             }
-            else if (strncmp(line, "mtllib", 6) == 0)
+            else if (starts_with(line, "mtllib"))
             {
                 char *filename = line + 7;
                 bool loaded = memory->platform_editor_load_nearby_file(ctx, &state->mtl_file, state->model_file, filename);
                 hassert(loaded);
                 load_mtl(ctx, memory);
             }
-            else if (strncmp(line, "usemtl", 6) == 0)
+            else if (starts_with(line, "usemtl"))
             {
                 material *tm;
                 char material_name[100];
