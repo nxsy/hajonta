@@ -260,7 +260,9 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     //NSLog(@"Update");
     // Temp
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    [appLock unlock];
     loop_cycle(&state);
+    [appLock lock];
 
     // EndTemp
 
@@ -328,6 +330,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 }
 
 - (bool) openFileDialog:(OpenFileDialogReturn *)ret {
+    [appLock lock];
     bool result = false;
     NSOpenPanel *panel = [NSOpenPanel openPanel];
     int panel_run_result = [panel runModal];
@@ -341,6 +344,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
             ret->filename = url;
         }
     }
+    [appLock unlock];
     return true;
 }
 @end
