@@ -625,7 +625,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 debug_buffer_width, debug_buffer_height, 0,
                 GL_RGBA, GL_UNSIGNED_BYTE, state->debug_buffer);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            float height = 14.0f / (540.0f / 2.0f);
+            float height = 14.0f / ((float)input->window.height / 2.0f);
             float top = -(1-height);
             editor_vertex_format font_vertices[4] = {
                 {
@@ -1252,7 +1252,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
     m4 u_view = m4identity();
     glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
-    float ratio = 960.0f / 540.0f;
+    float ratio = (float)input->window.width / (float)input->window.height;
     m4 u_perspective = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
     //m4 u_perspective = m4identity();
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
@@ -1403,8 +1403,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glDepthFunc(GL_ALWAYS);
         glUniform1i(state->program_b.u_model_mode_id, 0);
         glUniform1i(state->program_b.u_shading_mode_id, 0);
-        float mouse_width = 16.0f / (960.0f / 2.0f);
-        float mouse_height = 16.0f / (540.0f / 2.0f);
+        float mouse_width = 16.0f / ((float)input->window.width / 2.0f);
+        float mouse_height = 16.0f / ((float)input->window.height / 2.0f);
         editor_vertex_format vertices[] =
         {
             {
