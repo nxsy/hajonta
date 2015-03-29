@@ -1363,6 +1363,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             } break;
         }
         sprintf(msg + strlen(msg), "...");
+        sprintf(msg + strlen(msg), "%d x %d", input->window.width, input->window.height);
         write_to_buffer(&state->debug_draw_buffer, &state->debug_font.font, msg);
 
         glDisable(GL_DEPTH_TEST);

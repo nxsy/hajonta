@@ -288,6 +288,8 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     // Temp
     windowRect.size.width = size.width;
     windowRect.size.height = size.height;
+    state.window_width = size.width;
+    state.window_height = size.height;
     glViewport(0, 0, windowRect.size.width, windowRect.size.height);
     // End temp
     CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]); 
