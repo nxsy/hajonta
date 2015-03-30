@@ -215,6 +215,7 @@ loop_cycle(osx_state *state)
 
     state->new_input->window.width = state->window_width;
     state->new_input->window.height = state->window_height;
+    glViewport(0, 0, state->window_width, state->window_height);
 
     state->game_code.game_update_and_render((hajonta_thread_context *)state, &state->memory, state->new_input, &sound_output);
 
