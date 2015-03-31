@@ -353,6 +353,11 @@ openFileDialog(void *void_view, char *filename, uint32_t file_max_length, char *
     [view
         performSelectorOnMainThread:@selector(openFileDialog:) withObject:fdr waitUntilDone:YES];
 
+    if (!fdr->filename)
+    {
+        return false;
+    }
+
     NSLog(@"%@", fdr->filename);
 
     NSString *filename_s = [fdr->filename absoluteString];
