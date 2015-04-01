@@ -327,6 +327,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [appLock lock];
     bool result = false;
     NSOpenPanel *panel = [NSOpenPanel openPanel];
+    [panel makeKeyAndOrderFront:self];
     int panel_run_result = [panel runModal];
     if (panel_run_result == NSFileHandlingPanelOKButton)
     {
