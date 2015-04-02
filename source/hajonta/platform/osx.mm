@@ -471,6 +471,7 @@ int main(int argc, const char * argv[])  {
 
     // Show window and run event loop 
     [window orderFrontRegardless]; 
+    [NSApp activateIgnoringOtherApps:true]; 
     [NSApp run]; 
 
     [pool drain]; 
