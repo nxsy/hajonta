@@ -1124,7 +1124,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     {
         glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
-#define debug_buffer_width 960
         float height = (float)debug_buffer_height / ((float)input->window.height / 2.0f);
         float top = -(1-height);
         float width = (float)debug_buffer_width / ((float)input->window.width / 2.0f);
