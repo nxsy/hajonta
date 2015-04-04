@@ -196,20 +196,9 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             int32_t window_width = LOWORD(lParam);
             int32_t window_height = HIWORD(lParam);
-            int32_t height = window_height;
-            int32_t width = window_width;
-            float ratio = 960.0f / 540.0f;
-            if (height > width / ratio)
-            {
-                height = (int32_t)(width / ratio);
-            }
-            else if (width > height * ratio)
-            {
-                width = (int32_t)(height * ratio);
-            }
-            state->window_height = height;
-            state->window_width = width;
-            glViewport((window_width - width) / 2, (window_height - height) / 2, width, height);
+            state->window_height = window_height;
+            state->window_width = window_width;
+            glViewport(0, 0, window_width, window_height);
         } break;
         case WM_CLOSE:
         {
