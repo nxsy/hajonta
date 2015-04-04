@@ -618,46 +618,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->debug_draw_buffer.pitch = 4 * debug_buffer_width;
 
             glGenBuffers(1, &state->debug_vbo);
-            glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
             glGenTextures(1, &state->debug_texture_id);
             glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                 debug_buffer_width, debug_buffer_height, 0,
                 GL_RGBA, GL_UNSIGNED_BYTE, state->debug_buffer);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            float height = 14.0f / ((float)input->window.height / 2.0f);
-            float top = -(1-height);
-            editor_vertex_format font_vertices[4] = {
-                {
-                    {
-                        {-1.0, top, 0.0, 1.0},
-                        { 0.0, 1.0, 1.0, 1.0},
-                    },
-                    {2.0, 0.0, 0.0, 0.0},
-                },
-                {
-                    {
-                        { 1.0, top, 0.0, 1.0},
-                        { 1.0, 1.0, 1.0, 1.0},
-                    },
-                    {2.0, 0.0, 0.0, 0.0},
-                },
-                {
-                    {
-                        { 1.0,-1.0, 0.0, 1.0},
-                        {1.0, 0.0, 1.0, 1.0},
-                    },
-                    {2.0, 0.0, 0.0, 0.0},
-                },
-                {
-                    {
-                        {-1.0,-1.0, 0.0, 1.0},
-                        {0.0, 0.0, 1.0, 1.0},
-                    },
-                    {2.0, 0.0, 0.0, 0.0},
-                },
-            };
-            glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
         }
 
         {
@@ -1155,6 +1121,46 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         (float)input->mouse.x / ((float)input->window.width / 2.0f) - 1.0f,
         ((float)input->mouse.y / ((float)input->window.height / 2.0f) - 1.0f) * -1.0f,
     };
+
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
+#define debug_buffer_width 960
+        float height = (float)debug_buffer_height / ((float)input->window.height / 2.0f);
+        float top = -(1-height);
+        float width = (float)debug_buffer_width / ((float)input->window.width / 2.0f);
+        float left = 1 - width;
+        editor_vertex_format font_vertices[4] = {
+            {
+                {
+                    {left, top, 0.0, 1.0},
+                    { 0.0, 1.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+            {
+                {
+                    { 1.0, top, 0.0, 1.0},
+                    { 1.0, 1.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+            {
+                {
+                    { 1.0,-1.0, 0.0, 1.0},
+                    {1.0, 0.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+            {
+                {
+                    {left,-1.0, 0.0, 1.0},
+                    {0.0, 0.0, 1.0, 1.0},
+                },
+                {2.0, 0.0, 0.0, 0.0},
+            },
+        };
+        glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
+    }
 
     glBindVertexArray(state->vao);
 
