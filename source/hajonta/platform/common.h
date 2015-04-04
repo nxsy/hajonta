@@ -370,3 +370,53 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
 #endif
 }
 #endif
+
+inline void
+glErrorAssert()
+{
+    GLenum error = glGetError();
+    switch(error)
+    {
+        case GL_NO_ERROR:
+        {
+            return;
+        } break;
+        case GL_INVALID_ENUM:
+        {
+            hassert(!"Invalid enum");
+        } break;
+        case GL_INVALID_VALUE:
+        {
+            hassert(!"Invalid value");
+        } break;
+        case GL_INVALID_OPERATION:
+        {
+            hassert(!"Invalid operation");
+        } break;
+#if !defined(_WIN32)
+        case GL_INVALID_FRAMEBUFFER_OPERATION:
+        {
+            hassert(!"Invalid framebuffer operation");
+        } break;
+#endif
+        case GL_OUT_OF_MEMORY:
+        {
+            hassert(!"Out of memory");
+        } break;
+#if !defined(__APPLE__) && !defined(NEEDS_EGL)
+        case GL_STACK_UNDERFLOW:
+        {
+            hassert(!"Stack underflow");
+        } break;
+        case GL_STACK_OVERFLOW:
+        {
+            hassert(!"Stack overflow");
+        } break;
+#endif
+        default:
+        {
+            hassert(!"Unknown error");
+        } break;
+    }
+}
+
