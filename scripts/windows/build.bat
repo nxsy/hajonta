@@ -13,6 +13,7 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no 
 .\program.exe ..\source hajonta\programs a
 .\program.exe ..\source hajonta\programs debug_font
 .\program.exe ..\source hajonta\programs b
+.\program.exe ..\source hajonta\programs ui2d
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\unit.exe
 del *.pdb > NUL 2> NUL

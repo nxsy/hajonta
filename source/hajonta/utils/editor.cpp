@@ -23,6 +23,7 @@
 #include "hajonta/font.cpp"
 
 #include "hajonta/programs/b.h"
+#include "hajonta/programs/ui2d.h"
 
 static float pi = 3.14159265358979f;
 
@@ -113,6 +114,7 @@ struct game_state
     uint32_t num_vbo_vertices;
 
     b_program_struct program_b;
+    ui2d_program_struct program_ui2d;
 
     v3 model_max;
     v3 model_min;
@@ -157,6 +159,12 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     bool loaded;
 
     loaded = b_program(&state->program_b, ctx, memory);
+    if (!loaded)
+    {
+        return loaded;
+    }
+
+    loaded = ui2d_program(&state->program_ui2d, ctx, memory);
     if (!loaded)
     {
         return loaded;
@@ -319,11 +327,6 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 hassert(loaded);
                 int32_t x, y, size;
                 load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-                /*
-                char msg[1024];
-                sprintf(msg, "name = %s; x = %i, y = %i, size = %i", filename, x, y, size);
-                memory->platform_debug_message(ctx, msg);
-                */
 
                 current_material->texture_offset = (int32_t)(state->num_texture_ids++);
                 glErrorAssert();
