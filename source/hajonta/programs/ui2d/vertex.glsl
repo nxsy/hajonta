@@ -10,5 +10,8 @@ out uint v_tex_id;
 
 void main (void)
 {
-    gl_Position = a_pos + vec4(u_offset, 0.0, 0.0);
+    vec2 half_screen_pixel_size = screen_pixel_size / 2;
+    gl_Position = vec4((a_pos - half_screen_pixel_size) / half_screen_pixel_size, 0, 0);
+    v_tex_coord = a_tex_coord;
+    v_tex_id = a_tex_id;
 }
