@@ -258,8 +258,10 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [[self openGLContext] makeCurrentContext];
     CGLLockContext((CGLContextObj)[[self openGLContext] CGLContextObj]);
 
+#if 0
     CGDirectDisplayID displayId = CVDisplayLinkGetCurrentCGDisplay(displayLink);
     CGDisplayHideCursor(displayId);
+#endif
 
     //NSLog(@"Update");
     // Temp
@@ -272,7 +274,9 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 
     CGLFlushDrawable((CGLContextObj)[[self openGLContext] CGLContextObj]);
 
+#if 0
     CGDisplayShowCursor(displayId);
+#endif
 
     CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]); 
 
@@ -332,8 +336,10 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 
 - (bool) openFileDialog:(OpenFileDialogReturn *)ret {
     [appLock lock];
+#if 0
     CGDirectDisplayID displayId = CVDisplayLinkGetCurrentCGDisplay(displayLink);
     CGDisplayShowCursor(displayId);
+#endif
 
     bool result = false;
     NSOpenPanel *panel = [NSOpenPanel openPanel];
@@ -349,7 +355,9 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
             ret->filename = url;
         }
     }
+#if 0
     CGDisplayHideCursor(displayId);
+#endif
     [appLock unlock];
     return true;
 }
@@ -483,7 +491,9 @@ int main(int argc, const char * argv[])  {
     // Show window and run event loop 
     [window orderFrontRegardless]; 
     [NSApp activateIgnoringOtherApps:true]; 
+#if 0
     [NSCursor hide];
+#endif
     [NSApp run]; 
 
     [pool drain]; 
