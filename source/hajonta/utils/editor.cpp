@@ -39,6 +39,7 @@ struct editor_vertex_format
     float style[4];
     v4 normal;
     v4 tangent;
+    v4 bitangent;
 };
 
 struct face_index
@@ -938,6 +939,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             v3 *face_vt3 = state->texture_coords + (f->indices[2].texture_coord - 1);
 
             v4 tangent = {};
+            v4 bitangent = {};
             {
                 v3 q1 = v3sub(t.p1, t.p0);
                 v3 q2 = v3sub(t.p2, t.p0);
@@ -974,6 +976,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     tangent3.z,
                     w,
                 };
+                v3 bitangent3 = v3cross(normal3, tangent3);
+                bitangent = {
+                    bitangent3.x,
+                    bitangent3.y,
+                    bitangent3.z,
+                    1.0f,
+                };
             }
 
             vbo_v1->v.position[0] = face_v1->x;
@@ -982,6 +991,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v1->v.position[3] = 1.0f;
             vbo_v1->normal = normal;
             vbo_v1->tangent = tangent;
+            vbo_v1->bitangent = bitangent;
 
             vbo_v2->v.position[0] = face_v2->x;
             vbo_v2->v.position[1] = face_v2->y;
@@ -989,6 +999,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v2->v.position[3] = 1.0f;
             vbo_v2->normal = normal;
             vbo_v2->tangent = tangent;
+            vbo_v2->bitangent = bitangent;
 
             vbo_v3->v.position[0] = face_v3->x;
             vbo_v3->v.position[1] = face_v3->y;
@@ -996,6 +1007,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v3->v.position[3] = 1.0f;
             vbo_v3->normal = normal;
             vbo_v3->tangent = tangent;
+            vbo_v3->bitangent = bitangent;
 
             vbo_v1->v.color[0] = face_vt1->x;
             vbo_v1->v.color[1] = 1 - face_vt1->y;
@@ -1055,7 +1067,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
         {
-            state->model_mode = (state->model_mode + 1) % 5;
+            state->model_mode = (state->model_mode + 1) % 8;
         }
         if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
         {
@@ -1151,6 +1163,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
     glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
     glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+    glVertexAttribPointer((GLuint)state->program_b.a_bitangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, bitangent));
 
     glErrorAssert();
     for (uint32_t idx = 0;
@@ -1242,6 +1255,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
         glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
         glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+        glVertexAttribPointer((GLuint)state->program_b.a_bitangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, bitangent));
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
@@ -1259,6 +1273,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
         glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
         glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+        glVertexAttribPointer((GLuint)state->program_b.a_bitangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, bitangent));
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
@@ -1293,6 +1308,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             case 4:
             {
                 sprintf(msg + strlen(msg), "BUMP.MAP");
+            } break;
+            case 5:
+            {
+                sprintf(msg + strlen(msg), "BUMP.NORMAL");
+            } break;
+            case 6:
+            {
+                sprintf(msg + strlen(msg), "NORMAL.CAMERA");
+            } break;
+            case 7:
+            {
+                sprintf(msg + strlen(msg), "NORMAL.CAMERA.SPLIT");
             } break;
             default:
             {
@@ -1337,6 +1364,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
         glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
         glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+        glVertexAttribPointer((GLuint)state->program_b.a_bitangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, bitangent));
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);
@@ -1404,6 +1432,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
         glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
         glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+        glVertexAttribPointer((GLuint)state->program_b.a_bitangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, bitangent));
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, state->mouse_texture);

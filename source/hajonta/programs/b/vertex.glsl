@@ -24,6 +24,7 @@ in vec4 a_color;
 in vec4 a_style;
 in vec4 a_normal;
 in vec4 a_tangent;
+in vec4 a_bitangent;
 
 out vec4 v_color;
 out vec4 v_style;
@@ -33,6 +34,9 @@ out vec4 v_w_vertexPosition;
 out vec4 v_c_vertexNormal;
 out vec4 v_c_eyeDirection;
 out vec4 v_c_lightDirection;
+
+out vec4 v_tangent;
+out vec4 v_bitangent;
 
 out mat3 v_tbn_matrix;
 
@@ -49,6 +53,9 @@ void main (void)
     else
     {
         gl_Position = u_perspective * u_view * u_model * a_pos;
+        v_tangent = u_model * a_tangent;
+        v_bitangent = u_model * a_bitangent;
+
         v_w_vertexPosition = u_model * a_pos;
         vec4 c_vertexPosition = u_view * u_model * a_pos;
 
@@ -57,9 +64,10 @@ void main (void)
 
         v_c_lightDirection = c_lightPosition + v_c_eyeDirection;
         v_c_vertexNormal = normalize(u_view * inverse(transpose(u_model)) * a_normal);
+
         vec3 tangent = normalize(u_view * inverse(transpose(u_model)) * a_tangent).xyz;
-        vec3 bitangent = cross(v_c_vertexNormal.xyz, tangent);
-        v_tbn_matrix = transpose(mat3(tangent, bitangent, v_c_vertexNormal.xyz));
+        vec3 bitangent = normalize(u_view * inverse(transpose(u_model)) * a_bitangent).xyz;
+        v_tbn_matrix = mat3(tangent, bitangent, v_c_vertexNormal.xyz);
     }
     if (u_mvp_enabled.w == 1)
     {

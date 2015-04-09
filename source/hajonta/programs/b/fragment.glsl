@@ -9,6 +9,9 @@ in vec4 v_c_vertexNormal;
 in vec4 v_c_eyeDirection;
 in vec4 v_c_lightDirection;
 
+in vec4 v_tangent;
+in vec4 v_bitangent;
+
 in mat3 v_tbn_matrix;
 
 out vec4 o_color;
@@ -22,6 +25,9 @@ uniform vec4 u_mvp_enabled;
 uniform vec4 u_w_lightPosition;
 uniform int u_model_mode;
 uniform int u_shading_mode;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
 
 vec4 tex_crazy(float t, vec2 tex_coord)
 {
@@ -108,6 +114,68 @@ void main(void)
             vec2 tex_coord = v_color.xy;
             o_color = tex_crazy(v_style.z, tex_coord);
         }
+        else if (u_model_mode == 5)
+        {
+            vec2 tex_coord = v_color.xy;
+            vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
+            vec3 bump_normal = normalize(bump_normal_raw * 2.0 - 1.0);
+            vec3 normal = v_tbn_matrix * bump_normal;
+            vec3 normal_clamped = normal / 2 + 0.5;
+            o_color = vec4(normal_clamped.xyz, 1);
+        }
+        else if (u_model_mode == 6)
+        {
+            vec3 n = normalize(v_c_vertexNormal.xyz);
+            vec3 normal_clamped = n / 2 + 0.5;
+            o_color = vec4(normal_clamped, 1);
+        }
+        else if (u_model_mode == 7)
+        {
+            if (v_w_vertexPosition.x > 0)
+            {
+                if (v_w_vertexPosition.y < 0)
+                {
+                    vec3 n = normalize(v_c_vertexNormal.xyz);
+                    vec3 normal_clamped = n / 2 + 0.5;
+                    o_color = vec4(normal_clamped, 1);
+                }
+                else
+                {
+                    vec2 tex_coord = v_color.xy;
+                    vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
+                    vec3 bump_normal = bump_normal_raw * 2.0 - 1.0;
+                    vec3 n = normalize(v_normal.xyz);
+                    vec3 t = normalize(v_tangent.xyz);
+                    t = normalize(t - dot(t, n) * n);
+                    vec3 b = cross(t, n);
+                    mat3 tbn_m = mat3(t, b, n);
+                    vec3 normal_clamped = normalize(tbn_m * bump_normal) / 2 + 0.5;
+                    o_color = vec4(normal_clamped, 1);
+                }
+            }
+            else
+            {
+                if (v_w_vertexPosition.y < 0)
+                {
+                    vec2 tex_coord = v_color.xy;
+                    o_color = tex_crazy(v_style.z, tex_coord);
+                }
+                else
+                {
+                /*
+                    vec2 tex_coord = v_color.xy;
+                    vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
+                    vec3 bump_normal = normalize(bump_normal_raw * 2.0 - 1.0);
+                    vec3 normal = v_tbn_matrix * bump_normal;
+                    vec3 normal_clamped = normalize(normal) / 2 + 0.5;
+                    o_color = vec4(normal_clamped.xyz, 1);
+                    */
+
+                    vec4 normal_clamped = v_normal / 2 + 0.5;
+                    o_color = vec4(normal_clamped.xyz, 1);
+                }
+            }
+        }
         else
         {
             if (v_style.x > 1.1)
@@ -122,23 +190,37 @@ void main(void)
                 {
                     o_color = tex_crazy(v_style.y, tex_coord);
                     vec3 normal = normalize(v_c_vertexNormal.xyz);
+                    vec4 lightDirection = v_c_lightDirection;
                     if (u_shading_mode >= 2 && v_style.z >= 0)
                     {
+                    /*
                         vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
-                        vec3 bump_normal = 2.0 * bump_normal_raw - vec3(1.0, 1.0, 1.0);
+                        vec3 bump_normal = normalize(bump_normal_raw * 2.0 - 1.0);
                         normal = v_tbn_matrix * bump_normal;
+                    */
+                        vec2 tex_coord = v_color.xy;
+                        vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
+                        vec3 bump_normal = bump_normal_raw * 2.0 - 1.0;
+                        vec3 n = normalize(v_normal.xyz);
+                        vec3 t = normalize(v_tangent.xyz);
+                        t = normalize(t - dot(t, n) * n);
+                        vec3 b = cross(t, n);
+                        mat3 tbn_m = mat3(t, b, n);
+                        normal = normalize(tbn_m * bump_normal);
+                        normal = normalize(u_view * inverse(transpose(u_model)) * vec4(normal, 1)).xyz;
                     }
+
                     if (u_shading_mode >= 1)
                     {
                         vec3 light_color = vec3(1.0f, 1.0f, 0.9f);
-                        float light_power = 70.0f;
+                        float light_power = 90.0f;
 
                         vec3 material_diffuse_color = o_color.rgb;
-                        vec3 material_ambient_color = material_diffuse_color * 0.2;
+                        vec3 material_ambient_color = material_diffuse_color * 0.1;
                         vec3 material_specular_color = vec3(0.3, 0.3, 0.3);
                         float distance = length(u_w_lightPosition - v_w_vertexPosition);
                         vec3 n = normalize(normal);
-                        vec3 l = normalize(v_c_lightDirection.xyz);
+                        vec3 l = normalize(lightDirection.xyz);
                         float cosTheta = clamp(dot(n, l), 0, 1);
                         vec3 E = normalize(v_c_eyeDirection.xyz);
                         vec3 R = reflect(-l, n);
