@@ -10,9 +10,6 @@ in vec4 v_c_eyeDirection;
 in vec4 v_c_lightDirection;
 
 in vec4 v_tangent;
-in vec4 v_bitangent;
-
-in mat3 v_tbn_matrix;
 
 out vec4 o_color;
 uniform sampler2D tex;
@@ -118,10 +115,14 @@ void main(void)
         {
             vec2 tex_coord = v_color.xy;
             vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
-            vec3 bump_normal = normalize(bump_normal_raw * 2.0 - 1.0);
-            vec3 normal = v_tbn_matrix * bump_normal;
-            vec3 normal_clamped = normal / 2 + 0.5;
-            o_color = vec4(normal_clamped.xyz, 1);
+            vec3 bump_normal = bump_normal_raw * 2.0 - 1.0;
+            vec3 n = normalize(v_normal.xyz);
+            vec3 t = normalize(v_tangent.xyz);
+            t = normalize(t - dot(t, n) * n);
+            vec3 b = cross(t, n);
+            mat3 tbn_m = mat3(t, b, n);
+            vec3 normal_clamped = normalize(tbn_m * bump_normal) / 2 + 0.5;
+            o_color = vec4(normal_clamped, 1);
         }
         else if (u_model_mode == 6)
         {
@@ -157,22 +158,13 @@ void main(void)
             {
                 if (v_w_vertexPosition.y < 0)
                 {
-                    vec2 tex_coord = v_color.xy;
-                    o_color = tex_crazy(v_style.z, tex_coord);
+                    vec4 normal_clamped = v_normal / 2 + 0.5;
+                    o_color = vec4(normal_clamped.xyz, 1);
                 }
                 else
                 {
-                /*
                     vec2 tex_coord = v_color.xy;
-                    vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
-                    vec3 bump_normal = normalize(bump_normal_raw * 2.0 - 1.0);
-                    vec3 normal = v_tbn_matrix * bump_normal;
-                    vec3 normal_clamped = normalize(normal) / 2 + 0.5;
-                    o_color = vec4(normal_clamped.xyz, 1);
-                    */
-
-                    vec4 normal_clamped = v_normal / 2 + 0.5;
-                    o_color = vec4(normal_clamped.xyz, 1);
+                    o_color = tex_crazy(v_style.z, tex_coord);
                 }
             }
         }
@@ -193,11 +185,6 @@ void main(void)
                     vec4 lightDirection = v_c_lightDirection;
                     if (u_shading_mode >= 2 && v_style.z >= 0)
                     {
-                    /*
-                        vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
-                        vec3 bump_normal = normalize(bump_normal_raw * 2.0 - 1.0);
-                        normal = v_tbn_matrix * bump_normal;
-                    */
                         vec2 tex_coord = v_color.xy;
                         vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
                         vec3 bump_normal = bump_normal_raw * 2.0 - 1.0;
