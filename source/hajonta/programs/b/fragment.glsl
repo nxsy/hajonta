@@ -200,11 +200,11 @@ void main(void)
                     if (u_shading_mode >= 1)
                     {
                         vec3 light_color = vec3(1.0f, 1.0f, 0.9f);
-                        float light_power = 90.0f;
+                        float light_power = 70.0f;
 
                         vec3 material_diffuse_color = o_color.rgb;
-                        vec3 material_ambient_color = material_diffuse_color * 0.1;
-                        vec3 material_specular_color = vec3(0.3, 0.3, 0.3);
+                        vec3 material_ambient_color = material_diffuse_color * 0.3;
+                        vec3 material_specular_color = vec3(0.01, 0.01, 0.01);
                         float distance = length(u_w_lightPosition - v_w_vertexPosition);
                         vec3 n = normalize(normal);
                         vec3 l = normalize(lightDirection.xyz);
