@@ -1213,7 +1213,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
     float ratio = (float)input->window.width / (float)input->window.height;
     m4 u_perspective = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
-    //m4 u_perspective = m4identity();
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
     glUniform1i(state->program_b.u_model_mode_id, state->model_mode);
     glUniform1i(state->program_b.u_shading_mode_id, state->shading_mode);
