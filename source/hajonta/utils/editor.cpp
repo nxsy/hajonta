@@ -610,10 +610,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             load_image(image, a_filesize, state->mouse_bitmap, sizeof(state->mouse_bitmap),
                     &x, &y, &actual_size);
 
-            char msg[1024];
-            sprintf(msg, "x, y, size: %d, %d, %d\n", x, y, actual_size);
-            memory->platform_debug_message(ctx, msg);
-
             glBindTexture(GL_TEXTURE_2D, state->mouse_texture);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                 x, y, 0,
