@@ -18,6 +18,13 @@ uniform sampler2D tex2;
 uniform sampler2D tex3;
 uniform sampler2D tex4;
 uniform sampler2D tex5;
+uniform sampler2D tex6;
+uniform sampler2D tex7;
+uniform sampler2D tex8;
+uniform sampler2D tex9;
+uniform sampler2D tex10;
+uniform sampler2D tex11;
+uniform sampler2D tex12;
 uniform vec4 u_mvp_enabled;
 uniform vec4 u_w_lightPosition;
 uniform int u_model_mode;
@@ -62,6 +69,41 @@ vec4 tex_crazy(float t, vec2 tex_coord)
     {
         o_color =
             vec4(texture(tex5, tex_coord));
+    }
+    else if (t < 6.5)
+    {
+        o_color =
+            vec4(texture(tex6, tex_coord));
+    }
+    else if (t < 7.5)
+    {
+        o_color =
+            vec4(texture(tex7, tex_coord));
+    }
+    else if (t < 8.5)
+    {
+        o_color =
+            vec4(texture(tex8, tex_coord));
+    }
+    else if (t < 9.5)
+    {
+        o_color =
+            vec4(texture(tex9, tex_coord));
+    }
+    else if (t < 10.5)
+    {
+        o_color =
+            vec4(texture(tex10, tex_coord));
+    }
+    else if (t < 11.5)
+    {
+        o_color =
+            vec4(texture(tex11, tex_coord));
+    }
+    else if (t < 12.5)
+    {
+        o_color =
+            vec4(texture(tex12, tex_coord));
     }
 
     return o_color;

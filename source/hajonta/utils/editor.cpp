@@ -74,7 +74,7 @@ struct game_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t line_ibo;
-    int32_t sampler_ids[6];
+    int32_t sampler_ids[13];
     uint32_t texture_ids[10];
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
@@ -624,6 +624,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->sampler_ids[3] = glGetUniformLocation(state->program_b.program, "tex3");
         state->sampler_ids[4] = glGetUniformLocation(state->program_b.program, "tex4");
         state->sampler_ids[5] = glGetUniformLocation(state->program_b.program, "tex5");
+        state->sampler_ids[6] = glGetUniformLocation(state->program_b.program, "tex6");
+        state->sampler_ids[7] = glGetUniformLocation(state->program_b.program, "tex7");
+        state->sampler_ids[8] = glGetUniformLocation(state->program_b.program, "tex8");
+        state->sampler_ids[9] = glGetUniformLocation(state->program_b.program, "tex9");
+        state->sampler_ids[10] = glGetUniformLocation(state->program_b.program, "tex10");
+        state->sampler_ids[11] = glGetUniformLocation(state->program_b.program, "tex11");
+        state->sampler_ids[12] = glGetUniformLocation(state->program_b.program, "tex12");
         glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
@@ -1163,6 +1170,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         glUniform1i(state->sampler_ids[idx], (GLint)idx);
         glActiveTexture(GL_TEXTURE0 + idx);
+        glErrorAssert();
         glBindTexture(GL_TEXTURE_2D, state->texture_ids[idx]);
         glErrorAssert();
     }
