@@ -75,7 +75,7 @@ struct game_state
     uint32_t ibo;
     uint32_t line_ibo;
     int32_t sampler_ids[13];
-    uint32_t texture_ids[10];
+    uint32_t texture_ids[13];
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
     uint32_t aabb_cube_ibo;
