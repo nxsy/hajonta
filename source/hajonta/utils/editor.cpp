@@ -358,6 +358,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         else if (starts_with(line, "bump "))
         {
         }
+        else if (starts_with(line, "map_Ns "))
+        {
+        }
         else
         {
             hassert(!"Invalid code path");
