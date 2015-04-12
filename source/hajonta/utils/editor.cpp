@@ -298,7 +298,8 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
                 hassert(loaded);
                 int32_t x, y, size;
-                load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+                hassert(loaded);
 
                 current_material->bump_texture_offset = (int32_t)(state->num_texture_ids++);
                 glErrorAssert();
