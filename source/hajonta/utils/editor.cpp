@@ -45,6 +45,7 @@ struct face_index
 {
     uint32_t vertex;
     uint32_t texture_coord;
+    uint32_t normal;
 };
 
 struct face
@@ -100,6 +101,8 @@ struct game_state
     uint32_t num_vertices;
     v3 texture_coords[100000];
     uint32_t num_texture_coords;
+    v3 normals[100000];
+    uint32_t num_normals;
     face faces[100000];
     uint32_t num_faces;
 
@@ -687,7 +690,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 }
                 else if (line[1] == 'n')
                 {
-
+                    float a, b, c;
+                    int num_found = sscanf(position + 2, "%f %f %f", &a, &b, &c);
+                    if (num_found == 3)
+                    {
+                        v3 normal = {a,b,c};
+                        state->normals[state->num_normals++] = normal;
+                    }
+                    else
+                    {
+                        hassert(!"Invalid code path");
+                    }
                 }
                 else if (line[1] == ' ')
                 {
@@ -791,8 +804,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 }
                 else if (num_found == 3)
                 {
-                    uint32_t t1, t2;
-                    int num_found2 = sscanf(a, "%d/%d", &t1, &t2);
+                    uint32_t t1, t2, t3;
+                    int num_found2 = sscanf(a, "%d/%d/%d", &t1, &t2, &t3);
                     if (num_found2 == 1)
                     {
 
@@ -814,6 +827,29 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {a_vertex_id, a_texture_coord_id},
                                 {b_vertex_id, b_texture_coord_id},
                                 {c_vertex_id, c_texture_coord_id},
+                            },
+                            current_material->texture_offset,
+                            current_material->bump_texture_offset,
+                        };
+                        state->faces[state->num_faces++] = face1;
+                    }
+                    else if (num_found2 == 3)
+                    {
+                        uint32_t a_vertex_id, a_texture_coord_id, a_normal_id;
+                        uint32_t b_vertex_id, b_texture_coord_id, b_normal_id;
+                        uint32_t c_vertex_id, c_texture_coord_id, c_normal_id;
+                        int num_found2;
+                        num_found2 = sscanf(a, "%d/%d/%d", &a_vertex_id, &a_texture_coord_id, &a_normal_id);
+                        hassert(num_found2 == 3);
+                        num_found2 = sscanf(b, "%d/%d/%d", &b_vertex_id, &b_texture_coord_id, &b_normal_id);
+                        hassert(num_found2 == 3);
+                        num_found2 = sscanf(c, "%d/%d/%d", &c_vertex_id, &c_texture_coord_id, &c_normal_id);
+                        hassert(num_found2 == 3);
+                        face face1 = {
+                            {
+                                {a_vertex_id, a_texture_coord_id, a_normal_id},
+                                {b_vertex_id, b_texture_coord_id, b_normal_id},
+                                {c_vertex_id, c_texture_coord_id, c_normal_id},
                             },
                             current_material->texture_offset,
                             current_material->bump_texture_offset,
@@ -949,15 +985,44 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {face_v2->x, face_v2->y, face_v2->z},
                 {face_v3->x, face_v3->y, face_v3->z},
             };
-            v3 normal3 = winded_triangle_normal(t);
 
-            v4 normal = {normal3.x, normal3.y, normal3.z, 1.0f};
+            v3 face_n1_v3;
+            v4 face_n1_v4;
+            v3 face_n2_v3;
+            v4 face_n2_v4;
+            v3 face_n3_v3;
+            v4 face_n3_v4;
+
+            if (f->indices[0].normal == 0)
+            {
+                v3 normal3 = winded_triangle_normal(t);
+                v4 normal = {normal3.x, normal3.y, normal3.z, 1.0f};
+                face_n1_v3 = normal3;
+                face_n2_v3 = normal3;
+                face_n3_v3 = normal3;
+                face_n1_v4 = normal;
+                face_n2_v4 = normal;
+                face_n3_v4 = normal;
+            }
+            else
+            {
+                face_n1_v3 = state->normals[f->indices[0].normal - 1];
+                face_n2_v3 = state->normals[f->indices[1].normal - 1];
+                face_n3_v3 = state->normals[f->indices[2].normal - 1];
+                face_n1_v4 = { face_n1_v3.x, face_n1_v3.y, face_n1_v3.z, 1.0f };
+                face_n2_v4 = { face_n2_v3.x, face_n2_v3.y, face_n2_v3.z, 1.0f };
+                face_n3_v4 = { face_n3_v3.x, face_n3_v3.y, face_n3_v3.z, 1.0f };
+            }
+
 
             v3 *face_vt1 = state->texture_coords + (f->indices[0].texture_coord - 1);
             v3 *face_vt2 = state->texture_coords + (f->indices[1].texture_coord - 1);
             v3 *face_vt3 = state->texture_coords + (f->indices[2].texture_coord - 1);
 
-            v4 tangent = {};
+            v4 face_t1;
+            v4 face_t2;
+            v4 face_t3;
+
             {
                 v3 q1 = v3sub(t.p1, t.p0);
                 v3 q2 = v3sub(t.p2, t.p0);
@@ -986,36 +1051,61 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     r * (s1 * z2 - s1 * z1),
                 };
 
-                v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
-                float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
-                tangent = {
-                    tangent3.x,
-                    tangent3.y,
-                    tangent3.z,
-                    w,
-                };
+                {
+                    v3 normal3 = face_n1_v3;
+                    v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
+                    float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
+                    face_t1 = {
+                        tangent3.x,
+                        tangent3.y,
+                        tangent3.z,
+                        w,
+                    };
+                }
+                {
+                    v3 normal3 = face_n2_v3;
+                    v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
+                    float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
+                    face_t2 = {
+                        tangent3.x,
+                        tangent3.y,
+                        tangent3.z,
+                        w,
+                    };
+                }
+                {
+                    v3 normal3 = face_n3_v3;
+                    v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
+                    float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
+                    face_t3 = {
+                        tangent3.x,
+                        tangent3.y,
+                        tangent3.z,
+                        w,
+                    };
+                }
             }
 
             vbo_v1->v.position[0] = face_v1->x;
             vbo_v1->v.position[1] = face_v1->y;
             vbo_v1->v.position[2] = face_v1->z;
             vbo_v1->v.position[3] = 1.0f;
-            vbo_v1->normal = normal;
-            vbo_v1->tangent = tangent;
+            vbo_v1->normal = face_n1_v4;
+            vbo_v1->tangent = face_t1;
 
             vbo_v2->v.position[0] = face_v2->x;
             vbo_v2->v.position[1] = face_v2->y;
             vbo_v2->v.position[2] = face_v2->z;
             vbo_v2->v.position[3] = 1.0f;
-            vbo_v2->normal = normal;
-            vbo_v2->tangent = tangent;
+            vbo_v2->normal = face_n2_v4;
+            vbo_v2->tangent = face_t2;
 
             vbo_v3->v.position[0] = face_v3->x;
             vbo_v3->v.position[1] = face_v3->y;
             vbo_v3->v.position[2] = face_v3->z;
             vbo_v3->v.position[3] = 1.0f;
-            vbo_v3->normal = normal;
-            vbo_v3->tangent = tangent;
+            vbo_v3->normal = face_n3_v4;
+            vbo_v3->tangent = face_t3;
 
             vbo_v1->v.color[0] = face_vt1->x;
             vbo_v1->v.color[1] = 1 - face_vt1->y;
