@@ -697,7 +697,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     wglSwapIntervalEXT(1);
 
     platform_memory memory = {};
-    memory.size = 64 * 1024 * 1024;
+    memory.size = 128 * 1024 * 1024;
     memory.memory = malloc(memory.size);
     memory.platform_fail = platform_fail;
     memory.platform_glgetprocaddress = platform_glgetprocaddress;

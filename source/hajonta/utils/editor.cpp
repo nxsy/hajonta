@@ -122,7 +122,7 @@ struct game_state
     v3 model_max;
     v3 model_min;
 
-    char bitmap_scratch[2048 * 2048 * 4];
+    char bitmap_scratch[4096 * 4096 * 4];
 
     bool hide_lines;
     int model_mode;
