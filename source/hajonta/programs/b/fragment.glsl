@@ -174,41 +174,8 @@ void main(void)
         }
         else if (u_model_mode == 7)
         {
-            if (v_w_vertexPosition.x > 0)
-            {
-                if (v_w_vertexPosition.y < 0)
-                {
-                    vec3 n = normalize(v_c_vertexNormal.xyz);
-                    vec3 normal_clamped = n / 2 + 0.5;
-                    o_color = vec4(normal_clamped, 1);
-                }
-                else
-                {
-                    vec2 tex_coord = v_color.xy;
-                    vec3 bump_normal_raw = tex_crazy(v_style.z, tex_coord).xyz;
-                    vec3 bump_normal = bump_normal_raw * 2.0 - 1.0;
-                    vec3 n = normalize(v_normal.xyz);
-                    vec3 t = normalize(v_tangent.xyz);
-                    t = normalize(t - dot(t, n) * n);
-                    vec3 b = cross(t, n);
-                    mat3 tbn_m = mat3(t, b, n);
-                    vec3 normal_clamped = normalize(tbn_m * bump_normal) / 2 + 0.5;
-                    o_color = vec4(normal_clamped, 1);
-                }
-            }
-            else
-            {
-                if (v_w_vertexPosition.y < 0)
-                {
-                    vec4 normal_clamped = v_normal / 2 + 0.5;
-                    o_color = vec4(normal_clamped.xyz, 1);
-                }
-                else
-                {
-                    vec2 tex_coord = v_color.xy;
-                    o_color = tex_crazy(v_style.z, tex_coord);
-                }
-            }
+            vec2 tex_coord = v_color.xy;
+            o_color = tex_crazy(v_style.w, tex_coord);
         }
         else
         {
@@ -262,6 +229,14 @@ void main(void)
                             // Specular : reflective highlight, like a mirror
                             material_specular_color * light_color * light_power * pow(cosAlpha,5) / (distance*distance),
                             1);
+                    }
+                    if (u_shading_mode >= 3 && v_style.w >= 0)
+                    {
+                        vec2 tex_coord = v_color.xy;
+                        vec4 emit_color = tex_crazy(v_style.w, tex_coord);
+                        o_color.r = max(o_color.r, emit_color.r);
+                        o_color.g = max(o_color.g, emit_color.g);
+                        o_color.b = max(o_color.b, emit_color.b);
                     }
                 }
             }

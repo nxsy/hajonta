@@ -53,6 +53,7 @@ struct face
     face_index indices[3];
     int texture_offset;
     int bump_texture_offset;
+    int emit_texture_offset;
 };
 
 struct material
@@ -60,6 +61,7 @@ struct material
     char name[100];
     int32_t texture_offset;
     int32_t bump_texture_offset;
+    int32_t emit_texture_offset;
 };
 
 struct kenpixel_future_14
@@ -250,6 +252,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
             current_material->texture_offset = -1;
             current_material->bump_texture_offset = -1;
+            current_material->emit_texture_offset = -1;
         }
         else if (starts_with(line, "Ns "))
         {
@@ -344,10 +347,35 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glErrorAssert();
             }
-
         }
         else if (starts_with(line, "map_Ke "))
         {
+            char *filename = line + sizeof("map_Ke ") - 1;
+            hassert(strlen(filename) > 0);
+            if (filename[0] == '.')
+            {
+
+            }
+            else
+            {
+                loaded_file texture;
+                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+                hassert(loaded);
+                int32_t x, y, size;
+                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+                hassert(loaded);
+
+                current_material->emit_texture_offset = (int32_t)(state->num_texture_ids++);
+                glErrorAssert();
+                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->emit_texture_offset]);
+                glErrorAssert();
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                    x, y, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+                glErrorAssert();
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glErrorAssert();
+            }
         }
         else if (starts_with(line, "map_Ks "))
         {
@@ -654,6 +682,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         material null_material = {};
         null_material.texture_offset = -1;
         null_material.bump_texture_offset = -1;
+        null_material.emit_texture_offset = -1;
         material *current_material = &null_material;
         while (position < eof)
         {
@@ -788,6 +817,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material->texture_offset,
                             current_material->bump_texture_offset,
+                            current_material->emit_texture_offset,
                         };
                         face face2 = {
                             {
@@ -797,6 +827,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material->texture_offset,
                             current_material->bump_texture_offset,
+                            current_material->emit_texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                         state->faces[state->num_faces++] = face2;
@@ -834,6 +865,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material->texture_offset,
                             current_material->bump_texture_offset,
+                            current_material->emit_texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                     }
@@ -857,6 +889,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material->texture_offset,
                             current_material->bump_texture_offset,
+                            current_material->emit_texture_offset,
                         };
                         state->faces[state->num_faces++] = face1;
                     }
@@ -1129,12 +1162,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v1->style[0] = 3.0f;
             vbo_v1->style[1] = (float)f->texture_offset;
             vbo_v1->style[2] = (float)f->bump_texture_offset;
+            vbo_v1->style[3] = (float)f->emit_texture_offset;
             vbo_v2->style[0] = 3.0f;
             vbo_v2->style[1] = (float)f->texture_offset;
             vbo_v2->style[2] = (float)f->bump_texture_offset;
+            vbo_v2->style[3] = (float)f->emit_texture_offset;
             vbo_v3->style[0] = 3.0f;
             vbo_v3->style[1] = (float)f->texture_offset;
             vbo_v3->style[2] = (float)f->bump_texture_offset;
+            vbo_v3->style[3] = (float)f->emit_texture_offset;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
@@ -1173,7 +1209,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
         {
-            state->shading_mode = (state->shading_mode + 1) % 3;
+            state->shading_mode = (state->shading_mode + 1) % 4;
         }
         if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
@@ -1401,7 +1437,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             } break;
             case 7:
             {
-                sprintf(msg + strlen(msg), "NORMAL.CAMERA.SPLIT");
+                sprintf(msg + strlen(msg), "EMIT");
             } break;
             default:
             {
@@ -1424,6 +1460,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             case 2:
             {
                 sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP");
+            } break;
+            case 3:
+            {
+                sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP.EMIT");
             } break;
             default:
             {
