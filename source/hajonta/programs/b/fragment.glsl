@@ -109,6 +109,25 @@ vec4 tex_crazy(float t, vec2 tex_coord)
     return o_color;
 }
 
+struct v_w_offsets {
+    float emit_texture_offset;
+    float ao_texture_offset;
+};
+
+v_w_offsets extract_v_w(float foo)
+{
+    v_w_offsets bar;
+
+    bar.ao_texture_offset = -1;
+    while (foo >= 100)
+    {
+        bar.ao_texture_offset++;
+        foo -= 100;
+    }
+    bar.emit_texture_offset = foo - 1;
+    return bar;
+}
+
 void main(void)
 {
     o_color = v_color;
@@ -175,7 +194,14 @@ void main(void)
         else if (u_model_mode == 7)
         {
             vec2 tex_coord = v_color.xy;
-            o_color = tex_crazy(v_style.w, tex_coord);
+            v_w_offsets offsets = extract_v_w(v_style.w);
+            o_color = tex_crazy(offsets.emit_texture_offset, tex_coord);
+        }
+        else if (u_model_mode == 8)
+        {
+            vec2 tex_coord = v_color.xy;
+            v_w_offsets offsets = extract_v_w(v_style.w);
+            o_color = tex_crazy(offsets.ao_texture_offset, tex_coord);
         }
         else
         {
@@ -233,7 +259,8 @@ void main(void)
                     if (u_shading_mode >= 3 && v_style.w >= 0)
                     {
                         vec2 tex_coord = v_color.xy;
-                        vec4 emit_color = tex_crazy(v_style.w, tex_coord);
+                        v_w_offsets offsets = extract_v_w(v_style.w);
+                        vec4 emit_color = tex_crazy(offsets.emit_texture_offset, tex_coord);
                         o_color.r = max(o_color.r, emit_color.r);
                         o_color.g = max(o_color.g, emit_color.g);
                         o_color.b = max(o_color.b, emit_color.b);
