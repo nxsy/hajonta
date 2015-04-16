@@ -1246,7 +1246,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
         {
-            state->shading_mode = (state->shading_mode + 1) % 4;
+            state->shading_mode = (state->shading_mode + 1) % 5;
         }
         if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
@@ -1478,7 +1478,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             } break;
             case 8:
             {
-                sprintf(msg + strlen(msg), "AMBIENT_OCCLUSION");
+                sprintf(msg + strlen(msg), "AMBIENT.OCCLUSION");
             } break;
             default:
             {
@@ -1505,6 +1505,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             case 3:
             {
                 sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP.EMIT");
+            } break;
+            case 4:
+            {
+                sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP.EMIT.AO");
             } break;
             default:
             {

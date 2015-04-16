@@ -218,6 +218,8 @@ void main(void)
                     o_color = tex_crazy(v_style.y, tex_coord);
                     vec3 normal = normalize(v_c_vertexNormal.xyz);
                     vec4 lightDirection = v_c_lightDirection;
+                    v_w_offsets offsets = extract_v_w(v_style.w);
+
                     if (u_shading_mode >= 2 && v_style.z >= 0)
                     {
                         vec2 tex_coord = v_color.xy;
@@ -247,19 +249,26 @@ void main(void)
                         vec3 E = normalize(v_c_eyeDirection.xyz);
                         vec3 R = reflect(-l, n);
                         float cosAlpha = clamp(dot(E, R), 0, 1);
+
+                        vec3 ambient_component = material_ambient_color;
+                        vec3 diffuse_component = material_diffuse_color *
+                            light_color * light_power * cosTheta /
+                            (distance*distance);
+                        vec3 specular_component = material_specular_color *
+                            light_color * light_power * pow(cosAlpha,5) /
+                            (distance*distance);
+
+                        if (u_shading_mode >= 4 && offsets.ao_texture_offset >= 0)
+                        {
+                            ambient_component *= max(0, tex_crazy(offsets.ao_texture_offset, tex_coord).r);
+                        }
                         o_color = vec4(
-                            // Ambient : simulates indirect lighting
-                            material_ambient_color +
-                            // Diffuse : "color" of the object
-                            material_diffuse_color * light_color * light_power * cosTheta / (distance*distance) +
-                            // Specular : reflective highlight, like a mirror
-                            material_specular_color * light_color * light_power * pow(cosAlpha,5) / (distance*distance),
+                            ambient_component + diffuse_component + specular_component,
                             1);
                     }
-                    if (u_shading_mode >= 3 && v_style.w >= 0)
+                    if (u_shading_mode >= 3 && offsets.emit_texture_offset >= 0)
                     {
                         vec2 tex_coord = v_color.xy;
-                        v_w_offsets offsets = extract_v_w(v_style.w);
                         vec4 emit_color = tex_crazy(offsets.emit_texture_offset, tex_coord);
                         o_color.r = max(o_color.r, emit_color.r);
                         o_color.g = max(o_color.g, emit_color.g);
