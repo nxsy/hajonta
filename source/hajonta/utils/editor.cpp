@@ -79,8 +79,8 @@ struct game_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t line_ibo;
-    int32_t sampler_ids[13];
-    uint32_t texture_ids[13];
+    int32_t sampler_ids[20];
+    uint32_t texture_ids[20];
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
     uint32_t aabb_cube_ibo;
@@ -699,6 +699,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->sampler_ids[10] = glGetUniformLocation(state->program_b.program, "tex10");
         state->sampler_ids[11] = glGetUniformLocation(state->program_b.program, "tex11");
         state->sampler_ids[12] = glGetUniformLocation(state->program_b.program, "tex12");
+        state->sampler_ids[13] = glGetUniformLocation(state->program_b.program, "tex13");
+        state->sampler_ids[14] = glGetUniformLocation(state->program_b.program, "tex14");
+        state->sampler_ids[15] = glGetUniformLocation(state->program_b.program, "tex15");
+        state->sampler_ids[16] = glGetUniformLocation(state->program_b.program, "tex16");
+        state->sampler_ids[17] = glGetUniformLocation(state->program_b.program, "tex17");
+        state->sampler_ids[18] = glGetUniformLocation(state->program_b.program, "tex18");
+        state->sampler_ids[19] = glGetUniformLocation(state->program_b.program, "tex19");
         glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
