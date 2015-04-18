@@ -64,6 +64,8 @@ struct ui2d_vertex_format
 {
     float position[2];
     float tex_coord[2];
+    uint32_t options;
+    v3 channel_color;
 };
 
 struct face
@@ -1708,26 +1710,34 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             uint16_t bl_vertex = num_vertices++;
             vertices[bl_vertex] =
             {
-                { q.x0, 540 - q.y0 },
+                { q.x0, input->window.height - q.y0 },
                 { q.s0, q.t0 },
+                1,
+                { 1, 1, 1 },
             };
             uint16_t br_vertex = num_vertices++;
             vertices[br_vertex] =
             {
-                { q.x1, 540 - q.y0 },
+                { q.x1, input->window.height - q.y0 },
                 { q.s1, q.t0 },
+                1,
+                { 1, 1, 0 },
             };
             uint16_t tr_vertex = num_vertices++;
             vertices[tr_vertex] =
             {
-                { q.x1, 540 - q.y1 },
+                { q.x1, input->window.height - q.y1 },
                 { q.s1, q.t1 },
+                1,
+                { 1, 1, 0 },
             };
             uint16_t tl_vertex = num_vertices++;
             vertices[tl_vertex] =
             {
-                { q.x0, 540 - q.y1 },
+                { q.x0, input->window.height - q.y1 },
                 { q.s0, q.t1 },
+                1,
+                { 1, 1, 0 },
             };
             elements[num_elements++] = bl_vertex;
             elements[num_elements++] = br_vertex;
@@ -1750,8 +1760,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         glEnableVertexAttribArray((GLuint)state->program_ui2d.a_pos_id);
         glEnableVertexAttribArray((GLuint)state->program_ui2d.a_tex_coord_id);
+        glEnableVertexAttribArray((GLuint)state->program_ui2d.a_options_id);
+        glEnableVertexAttribArray((GLuint)state->program_ui2d.a_channel_color_id);
         glVertexAttribPointer((GLuint)state->program_ui2d.a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), 0);
         glVertexAttribPointer((GLuint)state->program_ui2d.a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
+        glVertexAttribIPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_UNSIGNED_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
+        glVertexAttribPointer((GLuint)state->program_ui2d.a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
 
         glDrawElements(GL_TRIANGLES, (GLsizei)num_elements, GL_UNSIGNED_SHORT, 0);
     }

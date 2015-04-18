@@ -246,6 +246,7 @@ typedef void (APIENTRYP PFNGLUNIFORMMATRIX3FVPROC) (GLint location, GLsizei coun
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLACTIVETEXTUREPROC) (GLenum texture);
 typedef void (APIENTRYP PFNGLPRIMITIVERESTARTINDEXPROC) (GLuint index);
+typedef void (APIENTRYP PFNGLVERTEXATTRIBIPOINTERPROC) (GLuint index, GLint size, GLenum type, GLsizei stride, const void *pointer);
 #endif
 
 #ifndef GL_TEXTURE0
@@ -295,6 +296,7 @@ PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;
 PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 
 PFNGLPRIMITIVERESTARTINDEXPROC glPrimitiveRestartIndex;
+PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
 
 #ifndef GL_VERSION_1_3
 PFNGLACTIVETEXTUREPROC glActiveTexture;
@@ -364,6 +366,8 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
     glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)get_proc_address(ctx, (char *)"glUniformMatrix4fv");
 
     glPrimitiveRestartIndex = (PFNGLPRIMITIVERESTARTINDEXPROC)get_proc_address(ctx, (char*)"glPrimitiveRestartIndex");
+
+    glVertexAttribIPointer = (PFNGLVERTEXATTRIBIPOINTERPROC)get_proc_address(ctx, (char *)"glVertexAttribIPointer");
 
 #ifndef GL_VERSION_1_3
     glActiveTexture = (PFNGLACTIVETEXTUREPROC)get_proc_address(ctx, (char *)"glActiveTexture");
