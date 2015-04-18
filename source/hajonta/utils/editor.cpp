@@ -22,6 +22,18 @@
 #include "hajonta/bmp.cpp"
 #include "hajonta/font.cpp"
 
+#if defined(_MSC_VER)
+#pragma warning(push, 4)
+#pragma warning(disable: 4365 4312 4505)
+#endif
+#define STB_RECT_PACK_IMPLEMENTATION
+#include "hajonta/thirdparty/stb_rect_pack.h"
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "hajonta/thirdparty/stb_truetype.h"
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 #include "hajonta/programs/b.h"
 #include "hajonta/programs/ui2d.h"
 
@@ -48,6 +60,12 @@ struct face_index
     uint32_t normal;
 };
 
+struct ui2d_vertex_format
+{
+    float position[2];
+    float tex_coord[2];
+};
+
 struct face
 {
     face_index indices[3];
@@ -71,6 +89,14 @@ struct kenpixel_future_14
     uint8_t zfi[5159];
     uint8_t bmp[131210];
     font_data font;
+};
+
+struct stb_font_data
+{
+    stbtt_packedchar chardata[128];
+    GLuint font_tex;
+    uint32_t vbo;
+    uint32_t ibo;
 };
 
 struct game_state
@@ -144,7 +170,46 @@ struct game_state
 #define debug_buffer_width 960
 #define debug_buffer_height 14
     uint8_t debug_buffer[4 * debug_buffer_width * debug_buffer_height];
+
+    stb_font_data stb_font;
 };
+
+void load_fonts(hajonta_thread_context *ctx, platform_memory *memory)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    uint8_t ttf_buffer[158080];
+    unsigned char temp_bitmap[512][512];
+    char *filename = "fonts/AnonymousPro-1.002.001/Anonymous Pro.ttf";
+
+    if (!memory->platform_load_asset(ctx, filename, sizeof(ttf_buffer), ttf_buffer)) {
+        char msg[1024];
+        sprintf(msg, "Could not load %s\n", filename);
+        memory->platform_fail(ctx, msg);
+        memory->quit = true;
+        return;
+    }
+
+    stbtt_pack_context pc;
+
+    stbtt_PackBegin(&pc, (unsigned char *)temp_bitmap[0], 512, 512, 0, 1, NULL);
+    stbtt_PackSetOversampling(&pc, 1, 1);
+    stbtt_PackFontRange(&pc, ttf_buffer, 0, 12.0f, 32, 95, state->stb_font.chardata+32);
+    stbtt_PackEnd(&pc);
+
+    glGenTextures(1, &state->stb_font.font_tex);
+    glErrorAssert();
+    glBindTexture(GL_TEXTURE_2D, state->stb_font.font_tex);
+    glErrorAssert();
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
+    glErrorAssert();
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glErrorAssert();
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glErrorAssert();
+    glGenBuffers(1, &state->stb_font.vbo);
+    glGenBuffers(1, &state->stb_font.ibo);
+}
 
 bool
 gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
@@ -618,6 +683,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             return;
         }
+        load_fonts(ctx, memory);
         memory->initialized = 1;
 
         state->near_ = {5.0f};
@@ -1609,6 +1675,85 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
         glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
         glErrorAssert();
+    }
+
+    {
+        glDisable(GL_DEPTH_TEST);
+        glDepthFunc(GL_ALWAYS);
+        glUseProgram(state->program_ui2d.program);
+
+        float screen_pixel_size[] =
+        {
+            (float)input->window.width,
+            (float)input->window.height,
+        };
+        glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
+        ui2d_vertex_format vertices[100];
+        uint16_t num_vertices = 0;
+        GLushort elements[200];
+        uint16_t num_elements = 0;
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, state->stb_font.font_tex);
+        glUniform1i(
+            glGetUniformLocation(state->program_ui2d.program, "tex"),
+            0);
+
+        char full_text[] = "hello world";
+        char *text = (char *)full_text;
+        float x = 50;
+        float y = 50;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            uint16_t bl_vertex = num_vertices++;
+            vertices[bl_vertex] =
+            {
+                { q.x0, 540 - q.y0 },
+                { q.s0, q.t0 },
+            };
+            uint16_t br_vertex = num_vertices++;
+            vertices[br_vertex] =
+            {
+                { q.x1, 540 - q.y0 },
+                { q.s1, q.t0 },
+            };
+            uint16_t tr_vertex = num_vertices++;
+            vertices[tr_vertex] =
+            {
+                { q.x1, 540 - q.y1 },
+                { q.s1, q.t1 },
+            };
+            uint16_t tl_vertex = num_vertices++;
+            vertices[tl_vertex] =
+            {
+                { q.x0, 540 - q.y1 },
+                { q.s0, q.t1 },
+            };
+            elements[num_elements++] = bl_vertex;
+            elements[num_elements++] = br_vertex;
+            elements[num_elements++] = tr_vertex;
+            elements[num_elements++] = tr_vertex;
+            elements[num_elements++] = tl_vertex;
+            elements[num_elements++] = bl_vertex;
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, state->stb_font.vbo);
+        glBufferData(GL_ARRAY_BUFFER,
+                (GLsizei)(num_vertices * sizeof(vertices[0])),
+                vertices,
+                GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->stb_font.ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                (GLsizei)(num_elements * sizeof(elements[0])),
+                elements,
+                GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray((GLuint)state->program_ui2d.a_pos_id);
+        glEnableVertexAttribArray((GLuint)state->program_ui2d.a_tex_coord_id);
+        glVertexAttribPointer((GLuint)state->program_ui2d.a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), 0);
+        glVertexAttribPointer((GLuint)state->program_ui2d.a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
+
+        glDrawElements(GL_TRIANGLES, (GLsizei)num_elements, GL_UNSIGNED_SHORT, 0);
     }
 }
 
