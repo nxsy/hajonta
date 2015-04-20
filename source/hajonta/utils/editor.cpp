@@ -106,6 +106,8 @@ struct kenney_ui_data
     GLuint ui_tex;
     uint32_t vbo;
     uint32_t ibo;
+
+    v2 panel_dimensions;
 };
 
 struct game_state
@@ -718,6 +720,21 @@ push_quad(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *elemen
 }
 
 void
+push_panel(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *elements, uint16_t *num_elements, rectangle2 rect)
+{
+    stbtt_aligned_quad q;
+    q.x0 = rect.position.x;
+    q.x1 = rect.position.x + rect.dimension.x;
+    q.y0 = rect.position.y;
+    q.y1 = rect.position.y + rect.dimension.y;
+    q.s0 = 0.0;
+    q.s1 = 1.0;
+    q.t0 = 0.0;
+    q.t1 = 1.0f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+}
+
+void
 ui2d_render_elements(game_state *state, ui2d_vertex_format *vertices, uint16_t num_vertices, uint16_t *elements, uint16_t num_elements)
 {
     glBindBuffer(GL_ARRAY_BUFFER, state->stb_font.vbo);
@@ -845,6 +862,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             int32_t x, y, actual_size;
             load_image(image, sizeof(image), (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
                     &x, &y, &actual_size);
+
+            state->kenney_ui.panel_dimensions = {(float)x, (float)y};
 
             glGenTextures(1, &state->kenney_ui.ui_tex);
             glBindTexture(GL_TEXTURE_2D, state->kenney_ui.ui_tex);
@@ -1797,6 +1816,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         GLushort elements[200];
         uint16_t num_elements = 0;
 
+        /*
         {
             stbtt_aligned_quad q;
             q.x0 = 140;
@@ -1809,6 +1829,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             q.t1 = 1.0f;
             push_quad(vertices, &num_vertices, elements, &num_elements, q, 0);
         }
+        */
+        rectangle2 rect = {
+            { 35, 35},
+            {105, 40},
+        };
+        push_panel(vertices, &num_vertices, elements, &num_elements, rect);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, state->kenney_ui.ui_tex);
