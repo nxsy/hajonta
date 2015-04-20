@@ -723,14 +723,80 @@ void
 push_panel(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *elements, uint16_t *num_elements, rectangle2 rect)
 {
     stbtt_aligned_quad q;
+
+    // BL
     q.x0 = rect.position.x;
-    q.x1 = rect.position.x + rect.dimension.x;
+    q.x1 = rect.position.x + 8.0f;
     q.y0 = rect.position.y;
-    q.y1 = rect.position.y + rect.dimension.y;
-    q.s0 = 0.0;
-    q.s1 = 1.0;
-    q.t0 = 0.0;
-    q.t1 = 1.0f;
+    q.y1 = rect.position.y + 8.0f;
+    q.s0 = 0.00f;
+    q.s1 = 0.08f;
+    q.t0 = 0.00f;
+    q.t1 = 0.08f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // TL
+    q.y0 = rect.position.y + rect.dimension.y;
+    q.y1 = q.y0 - 8.0f;
+    q.t0 = 1.00f;
+    q.t1 = 0.92f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // TR
+    q.x0 = rect.position.x + rect.dimension.x;
+    q.x1 = q.x0 - 8.0f;
+    q.s0 = 1.00f;
+    q.s1 = 0.92f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // BR
+    q.y0 = rect.position.y;
+    q.y1 = rect.position.y + 8.0f;
+    q.t0 = 0.00f;
+    q.t1 = 0.08f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // TR-BR
+    q.y0 = rect.position.y + 8.0f;
+    q.y1 = rect.position.y + rect.dimension.y - 8.0f;
+    q.t0 = 0.08f;
+    q.t1 = 0.92f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // TL-BL
+    q.x0 = rect.position.x;
+    q.x1 = rect.position.x + 8.0f;
+    q.s0 = 0.00f;
+    q.s1 = 0.08f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // TL-TR
+    q.x0 = rect.position.x + 8.0f;
+    q.x1 = rect.position.x + rect.dimension.x - 8.0f;
+    q.y0 = rect.position.y + rect.dimension.y;
+    q.y1 = rect.position.y + rect.dimension.y - 8.0f;
+    q.s0 = 0.08f;
+    q.s1 = 0.92f;
+    q.t0 = 1.00f;
+    q.t1 = 0.92f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // BL-BR
+    q.y0 = rect.position.y;
+    q.y1 = rect.position.y + 8.0f;
+    q.t0 = 0.00f;
+    q.t1 = 0.08f;
+    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+
+    // CENTER
+    q.x0 = rect.position.x + 8.0f;
+    q.x1 = rect.position.x + rect.dimension.x - 8.0f;
+    q.y0 = rect.position.y + 8.0f;
+    q.y1 = rect.position.y + rect.dimension.y - 8.0f;
+    q.s0 = 0.08f;
+    q.s1 = 0.92f;
+    q.t0 = 0.08f;
+    q.t1 = 0.92f;
     push_quad(vertices, num_vertices, elements, num_elements, q, 0);
 }
 
