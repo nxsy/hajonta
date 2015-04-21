@@ -3,11 +3,13 @@ uniform vec2 screen_pixel_size;
 
 in vec2 a_pos;
 in vec2 a_tex_coord;
+in uint a_texid;
 in uint a_options;
 in vec3 a_channel_color;
 
 out vec2 v_tex_coord;
 out uint v_options;
+out uint v_texid;
 out vec3 v_channel_color;
 
 void main (void)
@@ -16,5 +18,6 @@ void main (void)
     gl_Position = vec4((a_pos - half_screen_pixel_size) / half_screen_pixel_size, 0, 1);
     v_tex_coord = a_tex_coord;
     v_options = a_options;
+    v_texid = a_texid;
     v_channel_color = a_channel_color;
 }
