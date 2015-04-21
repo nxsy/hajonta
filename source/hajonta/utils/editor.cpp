@@ -64,8 +64,22 @@ struct ui2d_vertex_format
 {
     float position[2];
     float tex_coord[2];
+    uint32_t texture_id;
     uint32_t options;
     v3 channel_color;
+};
+
+struct ui2d_push_context
+{
+    ui2d_vertex_format *vertices;
+    uint32_t num_vertices;
+    uint32_t max_vertices;
+    GLuint *elements;
+    uint32_t num_elements;
+    uint32_t max_elements;
+    uint32_t *textures;
+    uint32_t num_textures;
+    uint32_t max_textures;
 };
 
 struct face
@@ -103,7 +117,8 @@ struct stb_font_data
 
 struct kenney_ui_data
 {
-    GLuint ui_tex;
+    GLuint panel_tex;
+    GLuint ui_pack_tex;
     uint32_t vbo;
     uint32_t ibo;
 };
@@ -675,37 +690,46 @@ setup_vertex_attrib_array(game_state *state)
 }
 
 void
-push_quad(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *elements, uint16_t *num_elements, stbtt_aligned_quad q, uint32_t options)
+push_quad(ui2d_push_context *pushctx, stbtt_aligned_quad q, uint32_t options)
 {
-        uint16_t bl_vertex = (*num_vertices)++;
+        ui2d_vertex_format *vertices = pushctx->vertices;
+        uint32_t *num_vertices = &pushctx->num_vertices;
+        uint32_t *elements = pushctx->elements;
+        uint32_t *num_elements = &pushctx->num_elements;
+
+        uint32_t bl_vertex = (*num_vertices)++;
         vertices[bl_vertex] =
         {
             { q.x0, q.y0 },
             { q.s0, q.t0 },
+            0,
             options,
             { 1, 1, 1 },
         };
-        uint16_t br_vertex = (*num_vertices)++;
+        uint32_t br_vertex = (*num_vertices)++;
         vertices[br_vertex] =
         {
             { q.x1, q.y0 },
             { q.s1, q.t0 },
+            0,
             options,
             { 1, 1, 0 },
         };
-        uint16_t tr_vertex = (*num_vertices)++;
+        uint32_t tr_vertex = (*num_vertices)++;
         vertices[tr_vertex] =
         {
             { q.x1, q.y1 },
             { q.s1, q.t1 },
+            0,
             options,
             { 1, 1, 0 },
         };
-        uint16_t tl_vertex = (*num_vertices)++;
+        uint32_t tl_vertex = (*num_vertices)++;
         vertices[tl_vertex] =
         {
             { q.x0, q.y1 },
             { q.s0, q.t1 },
+            0,
             options,
             { 1, 1, 0 },
         };
@@ -718,7 +742,7 @@ push_quad(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *elemen
 }
 
 void
-push_panel(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *elements, uint16_t *num_elements, rectangle2 rect)
+push_panel(ui2d_push_context *pushctx, rectangle2 rect)
 {
     stbtt_aligned_quad q;
 
@@ -731,42 +755,42 @@ push_panel(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *eleme
     q.s1 = 0.08f;
     q.t0 = 0.00f;
     q.t1 = 0.08f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // TL
     q.y0 = rect.position.y + rect.dimension.y;
     q.y1 = q.y0 - 8.0f;
     q.t0 = 1.00f;
     q.t1 = 0.92f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // TR
     q.x0 = rect.position.x + rect.dimension.x;
     q.x1 = q.x0 - 8.0f;
     q.s0 = 1.00f;
     q.s1 = 0.92f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // BR
     q.y0 = rect.position.y;
     q.y1 = rect.position.y + 8.0f;
     q.t0 = 0.00f;
     q.t1 = 0.08f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // TR-BR
     q.y0 = rect.position.y + 8.0f;
     q.y1 = rect.position.y + rect.dimension.y - 8.0f;
     q.t0 = 0.08f;
     q.t1 = 0.92f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // TL-BL
     q.x0 = rect.position.x;
     q.x1 = rect.position.x + 8.0f;
     q.s0 = 0.00f;
     q.s1 = 0.08f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // TL-TR
     q.x0 = rect.position.x + 8.0f;
@@ -777,14 +801,14 @@ push_panel(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *eleme
     q.s1 = 0.92f;
     q.t0 = 1.00f;
     q.t1 = 0.92f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // BL-BR
     q.y0 = rect.position.y;
     q.y1 = rect.position.y + 8.0f;
     q.t0 = 0.00f;
     q.t1 = 0.08f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 
     // CENTER
     q.x0 = rect.position.x + 8.0f;
@@ -795,22 +819,22 @@ push_panel(ui2d_vertex_format *vertices, uint16_t *num_vertices, uint16_t *eleme
     q.s1 = 0.92f;
     q.t0 = 0.08f;
     q.t1 = 0.92f;
-    push_quad(vertices, num_vertices, elements, num_elements, q, 0);
+    push_quad(pushctx, q, 0);
 }
 
 void
-ui2d_render_elements(game_state *state, ui2d_vertex_format *vertices, uint16_t num_vertices, uint16_t *elements, uint16_t num_elements)
+ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
 {
     glBindBuffer(GL_ARRAY_BUFFER, state->stb_font.vbo);
     glBufferData(GL_ARRAY_BUFFER,
-            (GLsizei)(num_vertices * sizeof(vertices[0])),
-            vertices,
+            (GLsizei)(pushctx->num_vertices * sizeof(pushctx->vertices[0])),
+            pushctx->vertices,
             GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->stb_font.ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-            (GLsizei)(num_elements * sizeof(elements[0])),
-            elements,
+            (GLsizei)(pushctx->num_elements * sizeof(pushctx->elements[0])),
+            pushctx->elements,
             GL_STATIC_DRAW);
 
     glEnableVertexAttribArray((GLuint)state->program_ui2d.a_pos_id);
@@ -822,7 +846,7 @@ ui2d_render_elements(game_state *state, ui2d_vertex_format *vertices, uint16_t n
     glVertexAttribIPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_UNSIGNED_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
     glVertexAttribPointer((GLuint)state->program_ui2d.a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
 
-    glDrawElements(GL_TRIANGLES, (GLsizei)num_elements, GL_UNSIGNED_SHORT, 0);
+    glDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, 0);
 }
 
 bool
@@ -940,7 +964,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             uint8_t image[636];
             int32_t x, y;
             char filename[] = "ui/kenney/glassPanel.png";
-            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.ui_tex);
+            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.panel_tex);
             if (!loaded)
             {
                 char msg[1024];
@@ -1889,40 +1913,32 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         };
         glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
+        ui2d_push_context pushctx = {};
         ui2d_vertex_format vertices[100];
-        uint16_t num_vertices = 0;
-        GLushort elements[200];
-        uint16_t num_elements = 0;
+        uint32_t elements[200];
+        uint32_t textures[10];
+        pushctx.vertices = vertices;
+        pushctx.max_vertices = sizeof(vertices);
+        pushctx.elements = elements;
+        pushctx.max_elements = sizeof(elements);
+        pushctx.textures = textures;
+        pushctx.max_textures = sizeof(textures);
 
-        /*
-        {
-            stbtt_aligned_quad q;
-            q.x0 = 140;
-            q.x1 = 35;
-            q.y0 = 75;
-            q.y1 = 35;
-            q.s0 = 0.0;
-            q.s1 = 1.0;
-            q.t0 = 0.0;
-            q.t1 = 1.0f;
-            push_quad(vertices, &num_vertices, elements, &num_elements, q, 0);
-        }
-        */
         rectangle2 rect = {
             { 35, 35},
             {105, 40},
         };
-        push_panel(vertices, &num_vertices, elements, &num_elements, rect);
+        push_panel(&pushctx, rect);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, state->kenney_ui.ui_tex);
+        glBindTexture(GL_TEXTURE_2D, state->kenney_ui.panel_tex);
         glUniform1i(
             glGetUniformLocation(state->program_ui2d.program, "tex"),
             0);
-        ui2d_render_elements(state, vertices, num_vertices, elements, num_elements);
+        ui2d_render_elements(state, &pushctx);
 
-        num_vertices = 0;
-        num_elements = 0;
+        pushctx.num_vertices = 0;
+        pushctx.num_elements = 0;
 
         char full_text[] = "hello world";
         char *text = (char *)full_text;
@@ -1933,14 +1949,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
             q.y0 = input->window.height - q.y0;
             q.y1 = input->window.height - q.y1;
-            push_quad(vertices, &num_vertices, elements, &num_elements, q, 1);
+            push_quad(&pushctx, q, 1);
         }
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, state->stb_font.font_tex);
         glUniform1i(
             glGetUniformLocation(state->program_ui2d.program, "tex"),
             0);
-        ui2d_render_elements(state, vertices, num_vertices, elements, num_elements);
+        ui2d_render_elements(state, &pushctx);
     }
 }
 
