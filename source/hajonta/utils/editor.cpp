@@ -106,8 +106,6 @@ struct kenney_ui_data
     GLuint ui_tex;
     uint32_t vbo;
     uint32_t ibo;
-
-    v2 panel_dimensions;
 };
 
 struct game_state
@@ -827,6 +825,36 @@ ui2d_render_elements(game_state *state, ui2d_vertex_format *vertices, uint16_t n
     glDrawElements(GL_TRIANGLES, (GLsizei)num_elements, GL_UNSIGNED_SHORT, 0);
 }
 
+bool
+load_texture_asset(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    char *filename,
+    uint8_t *image_buffer,
+    uint32_t image_size,
+    int32_t *x,
+    int32_t *y,
+    GLuint *tex
+)
+{
+    game_state *state = (game_state *)memory->memory;
+    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
+        return false;
+    }
+
+    int32_t actual_size;
+    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
+            x, y, &actual_size);
+
+    glGenTextures(1, tex);
+    glBindTexture(GL_TEXTURE_2D, *tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+        *x, *y, 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    return true;
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -894,49 +922,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         {
-            char *filename = "ui/slick_arrows/slick_arrow-delta.png";
-            uint32_t a_filesize = 256;
-            uint8_t image[1000];
-            if (!memory->platform_load_asset(ctx, filename, a_filesize, image)) {
-                memory->platform_fail(ctx, "Could not load ui/slick_arrows/slick_arrow-delta.png");
-                memory->quit = true;
-                return;
-            }
-
-            int32_t x, y, actual_size;
-            load_image(image, a_filesize, state->mouse_bitmap, sizeof(state->mouse_bitmap),
-                    &x, &y, &actual_size);
-
-            glBindTexture(GL_TEXTURE_2D, state->mouse_texture);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                x, y, 0,
-                GL_RGBA, GL_UNSIGNED_BYTE, state->mouse_bitmap);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        }
-
-        {
-            char *filename = "ui/kenney/glassPanel.png";
-            uint8_t image[636];
-            if (!memory->platform_load_asset(ctx, filename, sizeof(image), image)) {
+            uint8_t image[256];
+            int32_t x, y;
+            char filename[] = "ui/slick_arrows/slick_arrow-delta.png";
+            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->mouse_texture);
+            if (!loaded)
+            {
                 char msg[1024];
                 sprintf(msg, "Could not load %s\n", filename);
                 memory->platform_fail(ctx, msg);
                 memory->quit = true;
                 return;
             }
+        }
 
-            int32_t x, y, actual_size;
-            load_image(image, sizeof(image), (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
-                    &x, &y, &actual_size);
-
-            state->kenney_ui.panel_dimensions = {(float)x, (float)y};
-
-            glGenTextures(1, &state->kenney_ui.ui_tex);
-            glBindTexture(GL_TEXTURE_2D, state->kenney_ui.ui_tex);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                x, y, 0,
-                GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        {
+            uint8_t image[636];
+            int32_t x, y;
+            char filename[] = "ui/kenney/glassPanel.png";
+            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.ui_tex);
+            if (!loaded)
+            {
+                char msg[1024];
+                sprintf(msg, "Could not load %s\n", filename);
+                memory->platform_fail(ctx, msg);
+                memory->quit = true;
+                return;
+            }
         }
 
         glErrorAssert();
