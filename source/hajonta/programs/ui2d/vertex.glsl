@@ -3,13 +3,13 @@ uniform vec2 screen_pixel_size;
 
 in vec2 a_pos;
 in vec2 a_tex_coord;
-in uint a_texid;
-in uint a_options;
+in int a_texid;
+in int a_options;
 in vec3 a_channel_color;
 
 out vec2 v_tex_coord;
-out uint v_options;
-out uint v_texid;
+flat out int v_options;
+flat out int v_texid;
 out vec3 v_channel_color;
 
 void main (void)

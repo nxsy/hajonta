@@ -1,8 +1,8 @@
 #version 150
 
 in vec2 v_tex_coord;
-in uint v_texid;
-in uint v_options;
+flat in int v_texid;
+flat in int v_options;
 in vec3 v_channel_color;
 out vec4 o_color;
 
@@ -24,7 +24,7 @@ void main(void)
         o_color = vec4(1.0, 0, 1.0, 1.0);
     }
 
-    if (v_options & 1)
+    if ((v_options & 1) == 1)
     {
         if (o_color.r == 0)
         {

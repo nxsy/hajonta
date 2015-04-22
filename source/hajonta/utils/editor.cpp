@@ -131,7 +131,7 @@ struct game_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t line_ibo;
-    int32_t sampler_ids[20];
+    int32_t sampler_ids[16];
     uint32_t texture_ids[20];
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
@@ -866,8 +866,8 @@ ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
     glEnableVertexAttribArray((GLuint)state->program_ui2d.a_channel_color_id);
     glVertexAttribPointer((GLuint)state->program_ui2d.a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), 0);
     glVertexAttribPointer((GLuint)state->program_ui2d.a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
-    glVertexAttribIPointer((GLuint)state->program_ui2d.a_texid_id, 1, GL_UNSIGNED_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
-    glVertexAttribIPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_UNSIGNED_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
+    glVertexAttribIPointer((GLuint)state->program_ui2d.a_texid_id, 1, GL_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
+    glVertexAttribIPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
     glVertexAttribPointer((GLuint)state->program_ui2d.a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
 
     GLint tex_location = glGetUniformLocation(state->program_ui2d.program, "tex");
@@ -1027,10 +1027,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->sampler_ids[13] = glGetUniformLocation(state->program_b.program, "tex13");
         state->sampler_ids[14] = glGetUniformLocation(state->program_b.program, "tex14");
         state->sampler_ids[15] = glGetUniformLocation(state->program_b.program, "tex15");
-        state->sampler_ids[16] = glGetUniformLocation(state->program_b.program, "tex16");
-        state->sampler_ids[17] = glGetUniformLocation(state->program_b.program, "tex17");
-        state->sampler_ids[18] = glGetUniformLocation(state->program_b.program, "tex18");
-        state->sampler_ids[19] = glGetUniformLocation(state->program_b.program, "tex19");
         glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
