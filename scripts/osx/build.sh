@@ -4,7 +4,7 @@ set -e
 set -u
 
 CC=clang
-WARNFLAGS="-Wall -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-missing-braces -Werror -ferror-limit=3"
+WARNFLAGS="-Wall -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-missing-braces -Werror -ferror-limit=3 -Wno-unused-function"
 DEBUG_FLAGS="-DDEBUG -g"
 CPPFLAGS="-std=c++0x -DHAJONTA_DEBUG=1"
 INCLUDES="-Isource -Ibuild/debug/generated"
