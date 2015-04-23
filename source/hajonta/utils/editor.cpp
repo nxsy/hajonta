@@ -909,6 +909,19 @@ load_texture_asset(
     return true;
 }
 
+void
+load_texture_asset_failed(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    char *filename
+)
+{
+    char msg[1024];
+    sprintf(msg, "Could not load %s\n", filename);
+    memory->platform_fail(ctx, msg);
+    memory->quit = true;
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -982,11 +995,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->mouse_texture);
             if (!loaded)
             {
-                char msg[1024];
-                sprintf(msg, "Could not load %s\n", filename);
-                memory->platform_fail(ctx, msg);
-                memory->quit = true;
-                return;
+                return load_texture_asset_failed(ctx, memory, filename);
             }
         }
 
@@ -997,11 +1006,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.panel_tex);
             if (!loaded)
             {
-                char msg[1024];
-                sprintf(msg, "Could not load %s\n", filename);
-                memory->platform_fail(ctx, msg);
-                memory->quit = true;
-                return;
+                return load_texture_asset_failed(ctx, memory, filename);
             }
         }
 
