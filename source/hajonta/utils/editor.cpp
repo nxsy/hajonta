@@ -311,11 +311,6 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         strncpy(_line, position, (size_t)(eol - position));
         _line[eol - position] = '\0';
         char *line = _line;
-        /*
-        char msg[1024];
-        sprintf(msg, "position: %d; eol: %d; line: %s\n", position - state->mtl_file.contents, eol - position, line);
-        memory->platform_debug_message(ctx, msg);
-        */
 
         for(;;)
         {
@@ -1052,11 +1047,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             char line[1024];
             strncpy(line, position, (size_t)(eol - position));
             line[eol - position] = '\0';
-            /*
-            char msg[1024];
-            sprintf(msg, "position: %d; eol: %d; line: %s\n", position - state->model_file.contents, eol - position, line);
-            memory->platform_debug_message(ctx, msg);
-            */
 
             if (line[0] == '\0')
             {
@@ -1263,11 +1253,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                         hassert(!"Invalid number of face attributes");
                     }
                 }
-                /*
-                char msg[100];
-                sprintf(msg, "Found %d face positions\n", num_found);
-                memory->platform_debug_message(ctx, msg);
-                */
             }
             else if (line[0] == '#')
             {
@@ -1961,18 +1946,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         };
         push_panel(state, &pushctx, rect);
 
-        /*
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, state->kenney_ui.panel_tex);
-        glUniform1i(
-            glGetUniformLocation(state->program_ui2d.program, "tex"),
-            0);
-        ui2d_render_elements(state, &pushctx);
-
-        pushctx.num_vertices = 0;
-        pushctx.num_elements = 0;
-        */
-
         char full_text[] = "hello world";
         char *text = (char *)full_text;
         float x = 50;
@@ -1984,13 +1957,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             q.y1 = input->window.height - q.y1;
             push_quad(&pushctx, q, state->stb_font.font_tex, 1);
         }
-        /*
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, state->stb_font.font_tex);
-        glUniform1i(
-            glGetUniformLocation(state->program_ui2d.program, "tex"),
-            0);
-        */
+
         ui2d_render_elements(state, &pushctx);
     }
 }
