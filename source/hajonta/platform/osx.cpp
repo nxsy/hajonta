@@ -107,6 +107,10 @@ PLATFORM_LOAD_ASSET(osx_load_asset)
     snprintf(full_pathname, sizeof(full_pathname), "%s/%s", state->asset_path, asset_path);
 
     FILE *asset = fopen(full_pathname, "r");
+    if (!asset)
+    {
+        return false;
+    }
     fseek(asset, 0, SEEK_END);
     uint32_t file_size = ftell(asset);
     fseek(asset, 0, SEEK_SET);
