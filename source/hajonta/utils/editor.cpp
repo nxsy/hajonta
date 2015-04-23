@@ -1010,6 +1010,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
+        {
+            uint8_t image[25459];
+            int32_t x, y;
+            char filename[] = "ui/kenney/UIpackSheet_transparent.png";
+            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.ui_pack_tex);
+            if (!loaded)
+            {
+                return load_texture_asset_failed(ctx, memory, filename);
+            }
+        }
+
         glErrorAssert();
         state->sampler_ids[0] = glGetUniformLocation(state->program_b.program, "tex");
         state->sampler_ids[1] = glGetUniformLocation(state->program_b.program, "tex1");
