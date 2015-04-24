@@ -1948,11 +1948,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         uint32_t elements[200];
         uint32_t textures[10];
         pushctx.vertices = vertices;
-        pushctx.max_vertices = sizeof(vertices);
+        pushctx.max_vertices = harray_count(vertices);
         pushctx.elements = elements;
-        pushctx.max_elements = sizeof(elements);
+        pushctx.max_elements = harray_count(elements);
         pushctx.textures = textures;
-        pushctx.max_textures = sizeof(textures);
+        pushctx.max_textures = harray_count(textures);
 
         rectangle2 rect = {
             { 35, 35},
