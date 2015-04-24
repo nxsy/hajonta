@@ -865,18 +865,25 @@ ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
     glVertexAttribPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
     glVertexAttribPointer((GLuint)state->program_ui2d.a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
 
-    GLint tex_location = glGetUniformLocation(state->program_ui2d.program, "tex");
-    hassert(tex_location >= 0);
+    GLint uniform_locations[10] = {};
+    char msg[] = "tex[xx]";
+    for (int idx = 0; idx < harray_count(uniform_locations); ++idx)
+    {
+        sprintf(msg, "tex[%d]", idx);
+        uniform_locations[idx] = glGetUniformLocation(state->program_ui2d.program, msg);
+
+    }
     for (uint32_t i = 0; i < pushctx->num_textures; ++i)
     {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, pushctx->textures[i]);
         glUniform1i(
-            (GLint)(tex_location + i),
+            uniform_locations[i],
             (GLint)i);
     }
 
     glDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, 0);
+    glErrorAssert();
 }
 
 bool
