@@ -861,8 +861,8 @@ ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
     glEnableVertexAttribArray((GLuint)state->program_ui2d.a_channel_color_id);
     glVertexAttribPointer((GLuint)state->program_ui2d.a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), 0);
     glVertexAttribPointer((GLuint)state->program_ui2d.a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
-    glVertexAttribIPointer((GLuint)state->program_ui2d.a_texid_id, 1, GL_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
-    glVertexAttribIPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_INT, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
+    glVertexAttribPointer((GLuint)state->program_ui2d.a_texid_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
+    glVertexAttribPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
     glVertexAttribPointer((GLuint)state->program_ui2d.a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
 
     GLint tex_location = glGetUniformLocation(state->program_ui2d.program, "tex");
