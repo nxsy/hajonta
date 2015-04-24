@@ -926,8 +926,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
 
-    static uint32_t last_active_demo = UINT32_MAX;
-
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
     if (!glCreateProgram)
     {
