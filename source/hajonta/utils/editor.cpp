@@ -117,12 +117,33 @@ struct stb_font_data
     uint32_t ibo;
 };
 
+struct sprite
+{
+    uint32_t width;
+    uint32_t height;
+    float s0;
+    float s1;
+    float t0;
+    float t1;
+};
+
+struct spritesheet
+{
+    uint32_t tex;
+    uint32_t width;
+    uint32_t height;
+    sprite *sprites;
+};
+
+
 struct kenney_ui_data
 {
     GLuint panel_tex;
-    GLuint ui_pack_tex;
     uint32_t vbo;
     uint32_t ibo;
+
+    spritesheet ui_pack_sheet;
+    sprite ui_pack_sprites[12];
 };
 
 struct game_state
@@ -758,6 +779,23 @@ push_quad(ui2d_push_context *pushctx, stbtt_aligned_quad q, uint32_t tex, uint32
 }
 
 void
+push_sprite(ui2d_push_context *pushctx, sprite *s, uint32_t tex, v2 pos_bl)
+{
+    stbtt_aligned_quad q;
+
+    // BL
+    q.x0 = pos_bl.x;
+    q.x1 = q.x0 + s->width;
+    q.y0 = pos_bl.y;
+    q.y1 = q.y0 + s->height;
+    q.s0 = s->s0;
+    q.s1 = s->s1;
+    q.t0 = s->t0;
+    q.t1 = s->t1;
+    push_quad(pushctx, q, tex, 0);
+}
+
+void
 push_panel(game_state *state, ui2d_push_context *pushctx, rectangle2 rect)
 {
     uint32_t tex = state->kenney_ui.panel_tex;
@@ -929,6 +967,37 @@ load_texture_asset_failed(
     memory->quit = true;
 }
 
+struct sprite_config
+{
+    // top left = 0,0
+    uint32_t x;
+    uint32_t y;
+
+    uint32_t width;
+    uint32_t height;
+};
+
+void
+populate_spritesheet(spritesheet *sp, sprite *s0, uint32_t num_sprites, sprite_config *sc0, uint32_t num_sprite_configs)
+{
+    sp->sprites = s0;
+    hassert(num_sprites >= num_sprite_configs);
+    for (uint32_t idx = 0; idx < num_sprite_configs; ++idx)
+    {
+        sprite *s = s0 + idx;
+        sprite_config *sc = sc0 + idx;
+
+        *s = {
+            sc->width,
+            sc->height,
+            (float)sc->x / sp->width,
+            (float)(sc->x + sc->width) / sp->width,
+            (float)(sc->y + sc->height) / sp->height,
+            (float)sc->y / sp->height,
+        };
+    }
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -1019,11 +1088,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             uint8_t image[25459];
             int32_t x, y;
             char filename[] = "ui/kenney/UIpackSheet_transparent.png";
-            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.ui_pack_tex);
+            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->kenney_ui.ui_pack_sheet.tex);
             if (!loaded)
             {
                 return load_texture_asset_failed(ctx, memory, filename);
             }
+            state->kenney_ui.ui_pack_sheet.width = x;
+            state->kenney_ui.ui_pack_sheet.height = y;
+
+            sprite_config configs[] =
+            {
+                {485, 89, 16, 16},
+                {485, 89 + 18, 16, 16},
+                {234, 360, 16, 16},
+                {234 + 18, 360, 16, 16},
+                {234 + 36, 360, 16, 16},
+                {234, 360 + 18, 16, 16},
+                {234 + 18, 360 + 18, 16, 16},
+                {234 + 36, 360 + 18, 16, 16},
+                {234, 360 + 36, 16, 16},
+                {234 + 18, 360 + 36, 16, 16},
+                {234 + 36, 360 + 36, 16, 16},
+            };
+            populate_spritesheet(&state->kenney_ui.ui_pack_sheet,
+                state->kenney_ui.ui_pack_sprites,
+                harray_count(state->kenney_ui.ui_pack_sprites),
+                configs,
+                harray_count(configs));
         }
 
         glErrorAssert();
@@ -1597,6 +1688,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ((float)input->mouse.y / ((float)input->window.height / 2.0f) - 1.0f) * -1.0f,
     };
 
+    if (input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false)
+    {
+        v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+        rectangle2 r = {{88,100},{16,16}};
+        if (point_in_rectangle(m, r))
+        {
+            state->hide_lines ^= true;
+        }
+    }
+
     {
         glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
         float height = (float)debug_buffer_height / ((float)input->window.height / 2.0f);
@@ -1651,7 +1752,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     glErrorAssert();
 
-    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1977,6 +2078,41 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             q.y0 = input->window.height - q.y0;
             q.y1 = input->window.height - q.y1;
             push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 8, state->kenney_ui.ui_pack_sheet.tex, v2{84, 92});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 2, state->kenney_ui.ui_pack_sheet.tex, v2{84, 108});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{100, 92});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{100, 108});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{116, 92});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{116, 108});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{132, 92});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{132, 108});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{148, 92});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{148, 108});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 10, state->kenney_ui.ui_pack_sheet.tex, v2{164, 92});
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 4, state->kenney_ui.ui_pack_sheet.tex, v2{164, 108});
+        if (state->hide_lines)
+        {
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{88, 100});
+        }
+        else
+        {
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{88, 100});
+        }
+
+        {
+            char full_text[] = "hide lines";
+            char *text = (char *)full_text;
+            float x = 108;
+            float y = input->window.height - 103.0f;
+            while (*text) {
+                stbtt_aligned_quad q;
+                stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+                q.y0 = input->window.height - q.y0;
+                q.y1 = input->window.height - q.y1;
+                push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+            }
         }
 
         ui2d_render_elements(state, &pushctx);
