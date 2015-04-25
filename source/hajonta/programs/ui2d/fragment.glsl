@@ -22,6 +22,14 @@ void main(void)
     {
         o_color = vec4(texture(tex[2], v_tex_coord));
     }
+    else if (v_texid == 4)
+    {
+        o_color = vec4(texture(tex[3], v_tex_coord));
+    }
+    else if (v_texid == 5)
+    {
+        o_color = vec4(texture(tex[4], v_tex_coord));
+    }
     else
     {
         // Something hideously obviously broken

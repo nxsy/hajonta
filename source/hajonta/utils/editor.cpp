@@ -717,6 +717,7 @@ push_texture(ui2d_push_context *pushctx, uint32_t tex)
         return pushctx->seen_textures[tex];
     }
 
+    hassert(pushctx->num_textures + 4 <= pushctx->max_textures);
     pushctx->textures[pushctx->num_textures++] = tex;
 
     // Yes, this is post-increment.  It is decremented in the shader.
@@ -733,6 +734,8 @@ push_quad(ui2d_push_context *pushctx, stbtt_aligned_quad q, uint32_t tex, uint32
         uint32_t *num_elements = &pushctx->num_elements;
 
         uint32_t tex_handle = push_texture(pushctx, tex);
+
+        hassert(pushctx->num_vertices + 4 <= pushctx->max_vertices);
 
         uint32_t bl_vertex = (*num_vertices)++;
         vertices[bl_vertex] =
@@ -770,9 +773,11 @@ push_quad(ui2d_push_context *pushctx, stbtt_aligned_quad q, uint32_t tex, uint32
             options,
             { 1, 1, 0 },
         };
+        hassert(pushctx->num_elements + 6 <= pushctx->max_elements);
         elements[(*num_elements)++] = bl_vertex;
         elements[(*num_elements)++] = br_vertex;
         elements[(*num_elements)++] = tr_vertex;
+
         elements[(*num_elements)++] = tr_vertex;
         elements[(*num_elements)++] = tl_vertex;
         elements[(*num_elements)++] = bl_vertex;
@@ -1683,11 +1688,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    v2 mouse_loc = {
-        (float)input->mouse.x / ((float)input->window.width / 2.0f) - 1.0f,
-        ((float)input->mouse.y / ((float)input->window.height / 2.0f) - 1.0f) * -1.0f,
-    };
-
     if (input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false)
     {
         v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
@@ -1987,61 +1987,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         glDisable(GL_DEPTH_TEST);
         glDepthFunc(GL_ALWAYS);
-        glUniform1i(state->program_b.u_model_mode_id, 0);
-        glUniform1i(state->program_b.u_shading_mode_id, 0);
-        float mouse_width = 16.0f / ((float)input->window.width / 2.0f);
-        float mouse_height = 16.0f / ((float)input->window.height / 2.0f);
-        editor_vertex_format vertices[] =
-        {
-            {
-                {
-                    {mouse_loc.x, mouse_loc.y, 0.0, 1.0},
-                    {0.0, 0.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-            {
-                {
-                    {mouse_loc.x + mouse_width, mouse_loc.y, 0.0, 1.0},
-                    {1.0, 0.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-            {
-                {
-                    {mouse_loc.x + mouse_width, mouse_loc.y - mouse_height, 0.0, 1.0},
-                    {1.0, 1.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-            {
-                {
-                    {mouse_loc.x, mouse_loc.y - mouse_height, 0.0, 1.0},
-                    {0.0, 1.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-        };
-        glBindBuffer(GL_ARRAY_BUFFER, state->mouse_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        setup_vertex_attrib_array(state);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, state->mouse_texture);
-        glUniform1i(
-            glGetUniformLocation(state->program_b.program, "tex"),
-            0);
-        u_mvp_enabled = {0.0f, 0.0f, 0.0f, 0.0f};
-        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-        v2 position = {0, 0};
-        glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-        glErrorAssert();
-    }
-
-    {
-        glDisable(GL_DEPTH_TEST);
-        glDepthFunc(GL_ALWAYS);
         glUseProgram(state->program_ui2d.program);
 
         float screen_pixel_size[] =
@@ -2052,8 +1997,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
         ui2d_push_context pushctx = {};
-        ui2d_vertex_format vertices[100];
-        uint32_t elements[200];
+        ui2d_vertex_format vertices[300];
+        uint32_t elements[harray_count(vertices) / 3 * 4];
         uint32_t textures[10];
         pushctx.vertices = vertices;
         pushctx.max_vertices = harray_count(vertices);
@@ -2113,6 +2058,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 q.y1 = input->window.height - q.y1;
                 push_quad(&pushctx, q, state->stb_font.font_tex, 1);
             }
+        }
+
+        {
+            stbtt_aligned_quad q = {};
+            q.x0 = (float)input->mouse.x;
+            q.x1 = (float)input->mouse.x + 16;
+
+            q.y0 = (float)(input->window.height - input->mouse.y);
+            q.y1 = (float)(input->window.height - input->mouse.y) - 16;
+            q.s0 = 0;
+            q.s1 = 1;
+            q.t0 = 0;
+            q.t1 = 1;
+            push_quad(&pushctx, q, state->mouse_texture, 0);
         }
 
         ui2d_render_elements(state, &pushctx);
