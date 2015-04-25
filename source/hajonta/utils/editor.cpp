@@ -889,13 +889,13 @@ ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
     glBufferData(GL_ARRAY_BUFFER,
             (GLsizei)(pushctx->num_vertices * sizeof(pushctx->vertices[0])),
             pushctx->vertices,
-            GL_STATIC_DRAW);
+            GL_DYNAMIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->stb_font.ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             (GLsizei)(pushctx->num_elements * sizeof(pushctx->elements[0])),
             pushctx->elements,
-            GL_STATIC_DRAW);
+            GL_DYNAMIC_DRAW);
 
     glEnableVertexAttribArray((GLuint)state->program_ui2d.a_pos_id);
     glEnableVertexAttribArray((GLuint)state->program_ui2d.a_tex_coord_id);
