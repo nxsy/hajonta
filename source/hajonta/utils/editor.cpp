@@ -206,7 +206,7 @@ struct game_state
     int shading_mode;
 
     int x_rotation;
-    int y_rotation;
+    int z_rotation;
 
     uint8_t mouse_bitmap[4096];
 
@@ -1684,7 +1684,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_left.ended_down && !controller->buttons.move_left.repeat)
         {
-            state->y_rotation = (state->y_rotation + 1) % 4;
+            state->z_rotation = (state->z_rotation + 1) % 4;
         }
     }
 
@@ -1799,11 +1799,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 axis = {0.0f, 1.0f, 0.0f};
     m4 rotate = m4rotation(axis, state->delta_t);
     v3 x_axis = {1.0f, 0.0f, 0.0f};
-    v3 y_axis = {0.0f, 0.0f, 1.0f};
+    v3 z_axis = {0.0f, 0.0f, 1.0f};
     m4 x_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation);
-    m4 y_rotate = m4rotation(y_axis, (pi / 2) * state->y_rotation);
+    m4 z_rotate = m4rotation(z_axis, (pi / 2) * state->z_rotation);
     rotate = m4mul(rotate, x_rotate);
-    rotate = m4mul(rotate, y_rotate);
+    rotate = m4mul(rotate, z_rotate);
 
     m4 scale = m4identity();
     scale.cols[0].E[0] = 2.0f / max_dimension;
