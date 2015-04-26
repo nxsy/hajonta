@@ -143,7 +143,7 @@ struct kenney_ui_data
     uint32_t ibo;
 
     spritesheet ui_pack_sheet;
-    sprite ui_pack_sprites[12];
+    sprite ui_pack_sprites[20];
 };
 
 struct game_state
@@ -242,7 +242,7 @@ void load_fonts(hajonta_thread_context *ctx, platform_memory *memory)
 
     stbtt_PackBegin(&pc, (unsigned char *)temp_bitmap[0], 512, 512, 0, 1, NULL);
     stbtt_PackSetOversampling(&pc, 1, 1);
-    stbtt_PackFontRange(&pc, ttf_buffer, 0, 12.0f, 32, 95, state->stb_font.chardata+32);
+    stbtt_PackFontRange(&pc, ttf_buffer, 0, 10.0f, 32, 95, state->stb_font.chardata+32);
     stbtt_PackEnd(&pc);
 
     glGenTextures(1, &state->stb_font.font_tex);
@@ -1098,14 +1098,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 return load_texture_asset_failed(ctx, memory, filename);
             }
-            state->kenney_ui.ui_pack_sheet.width = x;
-            state->kenney_ui.ui_pack_sheet.height = y;
+            state->kenney_ui.ui_pack_sheet.width = (uint32_t)x;
+            state->kenney_ui.ui_pack_sheet.height = (uint32_t)abs(y);
 
             sprite_config configs[] =
             {
-                {485, 89, 16, 16},
-                {485, 89 + 18, 16, 16},
-                {234, 360, 16, 16},
+                {485, 89, 16, 16}, // checkbox empty
+                {485, 89 + 18, 16, 16}, // checkbox checked
+                {234, 360, 16, 16}, // top left blue dungeon tile
                 {234 + 18, 360, 16, 16},
                 {234 + 36, 360, 16, 16},
                 {234, 360 + 18, 16, 16},
@@ -1114,6 +1114,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {234, 360 + 36, 16, 16},
                 {234 + 18, 360 + 36, 16, 16},
                 {234 + 36, 360 + 36, 16, 16},
+                {485 + 18, 89, 16, 16}, // radio empty
+                {485 + 36, 89, 16, 16}, // radio selected
             };
             populate_spritesheet(&state->kenney_ui.ui_pack_sheet,
                 state->kenney_ui.ui_pack_sprites,
@@ -1651,6 +1653,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         load_aabb_buffer_objects(state, state->model_min, state->model_max);
         load_bounding_sphere(state, state->model_min, state->model_max);
+        state->hide_lines = true;
     }
 
     for (uint32_t i = 0;
@@ -1688,10 +1691,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    if (input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false)
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+
+    if (mouse_pressed)
     {
         v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
-        rectangle2 r = {{88,100},{16,16}};
+        rectangle2 r = {{38,100},{16,16}};
         if (point_in_rectangle(m, r))
         {
             state->hide_lines ^= true;
@@ -1997,8 +2002,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
         ui2d_push_context pushctx = {};
-        ui2d_vertex_format vertices[300];
-        uint32_t elements[harray_count(vertices) / 3 * 4];
+        ui2d_vertex_format vertices[1000];
+        uint32_t elements[harray_count(vertices) / 4 * 6];
         uint32_t textures[10];
         pushctx.vertices = vertices;
         pushctx.max_vertices = harray_count(vertices);
@@ -2007,49 +2012,59 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         pushctx.textures = textures;
         pushctx.max_textures = harray_count(textures);
 
-        rectangle2 rect = {
-            { 35, 35},
-            {105, 40},
-        };
-        push_panel(state, &pushctx, rect);
+        uint32_t width = 6;
+        for (uint32_t idx = 0; idx < width; ++idx)
+        {
+            uint32_t sprite1 = 9;
+            uint32_t sprite2 = 3;
+            if (idx == 0)
+            {
+                --sprite1;
+                --sprite2;
+            }
+            else if (idx == width - 1)
+            {
+                ++sprite1;
+                ++sprite2;
 
-        char full_text[] = "hello world";
-        char *text = (char *)full_text;
-        float x = 50;
-        float y = input->window.height - 50.0f;
-        while (*text) {
-            stbtt_aligned_quad q;
-            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
-            q.y0 = input->window.height - q.y0;
-            q.y1 = input->window.height - q.y1;
-            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+            }
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite1, state->kenney_ui.ui_pack_sheet.tex, v2{34 + (float)(idx * 16), 92});
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite2, state->kenney_ui.ui_pack_sheet.tex, v2{34 + (float)(idx * 16), 108});
         }
 
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 8, state->kenney_ui.ui_pack_sheet.tex, v2{84, 92});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 2, state->kenney_ui.ui_pack_sheet.tex, v2{84, 108});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{100, 92});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{100, 108});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{116, 92});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{116, 108});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{132, 92});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{132, 108});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 9, state->kenney_ui.ui_pack_sheet.tex, v2{148, 92});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 3, state->kenney_ui.ui_pack_sheet.tex, v2{148, 108});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 10, state->kenney_ui.ui_pack_sheet.tex, v2{164, 92});
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 4, state->kenney_ui.ui_pack_sheet.tex, v2{164, 108});
+        width = 51;
+        for (uint32_t idx = 0; idx < width; ++idx)
+        {
+            uint32_t sprite1 = 9;
+            uint32_t sprite2 = 3;
+            if (idx == 0)
+            {
+                --sprite1;
+                --sprite2;
+            }
+            else if (idx == width - 1)
+            {
+                ++sprite1;
+                ++sprite2;
+
+            }
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite1, state->kenney_ui.ui_pack_sheet.tex, v2{30 + (float)(idx * 16), 42});
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite2, state->kenney_ui.ui_pack_sheet.tex, v2{30 + (float)(idx * 16), 58});
+        }
+
         if (state->hide_lines)
         {
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{88, 100});
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
         }
         else
         {
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{88, 100});
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
         }
 
         {
             char full_text[] = "hide lines";
             char *text = (char *)full_text;
-            float x = 108;
+            float x = 58;
             float y = input->window.height - 103.0f;
             while (*text) {
                 stbtt_aligned_quad q;
@@ -2058,6 +2073,56 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 q.y1 = input->window.height - q.y1;
                 push_quad(&pushctx, q, state->stb_font.font_tex, 1);
             }
+        }
+
+        float x = 38;
+        char *model_mode_names[] =
+        {
+            "standard",
+            "discard",
+            "vertex normals",
+            "reflection",
+            "normal map",
+            "mapped normals",
+            "camera normals",
+            "emission",
+            "occlusion",
+        };
+        for (int32_t idx = 0; idx < harray_count(model_mode_names); ++idx)
+        {
+            char *text = model_mode_names[idx];
+            float y = input->window.height - 53.0f;
+
+            if (state->model_mode == idx)
+            {
+                push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, 50});
+            }
+            else
+            {
+                push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, 50});
+            }
+
+            if (mouse_pressed)
+            {
+                v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+                rectangle2 r = {{x,53},{16,16}};
+                if (point_in_rectangle(m, r))
+                {
+                    state->model_mode = idx;
+                }
+            }
+
+            x += 22;
+
+            while (*text) {
+                stbtt_aligned_quad q;
+                stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+                q.y0 = input->window.height - q.y0;
+                q.y1 = input->window.height - q.y1;
+                push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+            }
+
+            x += 10;
         }
 
         {
