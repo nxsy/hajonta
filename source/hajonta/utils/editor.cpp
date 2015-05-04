@@ -914,6 +914,35 @@ push_panel(game_state *state, ui2d_push_context *pushctx, rectangle2 rect)
 }
 
 void
+push_window(game_state *state, ui2d_push_context *pushctx, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    for (uint32_t hidx = 0; hidx < height; ++hidx)
+    {
+        for (uint32_t idx = 0; idx < width; ++idx)
+        {
+            uint32_t sprite = 6;
+            if (hidx == 0)
+            {
+                sprite += 3;
+            }
+            else if (hidx == height - 1)
+            {
+                sprite -= 3;
+            }
+            if (idx == 0)
+            {
+                --sprite;
+            }
+            else if (idx == width - 1)
+            {
+                ++sprite;
+            }
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x + (float)(idx * 16), y + (float)(hidx * 16)});
+        }
+    }
+}
+
+void
 ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
 {
     glBindBuffer(GL_ARRAY_BUFFER, state->stb_font.vbo);
@@ -2235,45 +2264,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         pushctx.textures = textures;
         pushctx.max_textures = harray_count(textures);
 
-        uint32_t width = 6;
-        for (uint32_t idx = 0; idx < width; ++idx)
-        {
-            uint32_t sprite1 = 9;
-            uint32_t sprite2 = 3;
-            if (idx == 0)
-            {
-                --sprite1;
-                --sprite2;
-            }
-            else if (idx == width - 1)
-            {
-                ++sprite1;
-                ++sprite2;
-
-            }
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite1, state->kenney_ui.ui_pack_sheet.tex, v2{34 + (float)(idx * 16), 92});
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite2, state->kenney_ui.ui_pack_sheet.tex, v2{34 + (float)(idx * 16), 108});
-        }
-
-        width = 51;
-        for (uint32_t idx = 0; idx < width; ++idx)
-        {
-            uint32_t sprite1 = 9;
-            uint32_t sprite2 = 3;
-            if (idx == 0)
-            {
-                --sprite1;
-                --sprite2;
-            }
-            else if (idx == width - 1)
-            {
-                ++sprite1;
-                ++sprite2;
-
-            }
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite1, state->kenney_ui.ui_pack_sheet.tex, v2{30 + (float)(idx * 16), 42});
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite2, state->kenney_ui.ui_pack_sheet.tex, v2{30 + (float)(idx * 16), 58});
-        }
+        push_window(state, &pushctx, 34, 92, 6, 2);
+        push_window(state, &pushctx, 30, 42, 51, 2);
 
         if (state->hide_lines)
         {
@@ -2362,38 +2354,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             push_quad(&pushctx, q, state->mouse_texture, 0);
         }
 
-        {
-            uint32_t height = 3;
-            uint32_t width = 4;
-            uint32_t x = 34;
-            uint32_t y = 140;
-
-            for (uint32_t hidx = 0; hidx < height; ++hidx)
-            {
-                for (uint32_t idx = 0; idx < width; ++idx)
-                {
-                    uint32_t sprite = 6;
-                    if (hidx == 0)
-                    {
-                        sprite += 3;
-                    }
-                    else if (hidx == height - 1)
-                    {
-                        sprite -= 3;
-                    }
-                    if (idx == 0)
-                    {
-                        --sprite;
-                    }
-                    else if (idx == width - 1)
-                    {
-                        ++sprite;
-                    }
-                    push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x + (float)(idx * 16), y + (float)(hidx * 16)});
-                }
-            }
-        }
-
+        push_window(state, &pushctx, 34, 140, 4, 3);
         {
             uint32_t xbase = 34 + 8;
             uint32_t ybase = 140 + 8;
