@@ -20,6 +20,7 @@ clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/p
 ( cd build/debug && ./program ../../source hajonta/programs debug_font )
 ( cd build/debug && ./program ../../source hajonta/programs b )
 ( cd build/debug && ./program ../../source hajonta/programs ui2d )
+( cd build/debug && ./program ../../source hajonta/programs skybox )
 
 # unit tests
 clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/unit source/hajonta/bootstrap/unit.cpp ${DEBUG_FLAGS} ${INCLUDES}

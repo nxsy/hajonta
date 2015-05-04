@@ -36,6 +36,7 @@
 
 #include "hajonta/programs/b.h"
 #include "hajonta/programs/ui2d.h"
+#include "hajonta/programs/skybox.h"
 
 static float pi = 3.14159265358979f;
 
@@ -146,6 +147,28 @@ struct kenney_ui_data
     sprite ui_pack_sprites[20];
 };
 
+struct skybox_vertex_format
+{
+    float position[3];
+};
+
+struct skybox_faces
+{
+    uint32_t vertex_ids[3];
+};
+
+struct skybox_data
+{
+    skybox_vertex_format vertices[12];
+    skybox_faces faces[20];
+
+    uint32_t tex;
+    uint32_t vbo;
+    uint32_t ibo;
+
+    float y_rotation;
+};
+
 struct game_state
 {
     uint32_t vao;
@@ -195,6 +218,7 @@ struct game_state
 
     b_program_struct program_b;
     ui2d_program_struct program_ui2d;
+    skybox_program_struct program_skybox;
 
     v3 model_max;
     v3 model_min;
@@ -220,6 +244,7 @@ struct game_state
 
     stb_font_data stb_font;
     kenney_ui_data kenney_ui;
+    skybox_data skybox;
 };
 
 void load_fonts(hajonta_thread_context *ctx, platform_memory *memory)
@@ -285,6 +310,12 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     }
 
     loaded = ui2d_program(&state->program_ui2d, ctx, memory);
+    if (!loaded)
+    {
+        return loaded;
+    }
+
+    loaded = skybox_program(&state->program_skybox, ctx, memory);
     if (!loaded)
     {
         return loaded;
@@ -928,6 +959,43 @@ ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
     glDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, 0);
     glErrorAssert();
 }
+bool
+load_texture_asset(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    char *filename,
+    uint8_t *image_buffer,
+    uint32_t image_size,
+    int32_t *x,
+    int32_t *y,
+    GLuint *tex,
+    GLenum target
+)
+{
+    game_state *state = (game_state *)memory->memory;
+    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
+        return false;
+    }
+
+    int32_t actual_size;
+    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
+            x, y, &actual_size);
+
+    if (tex)
+    {
+        if (!*tex)
+        {
+            glGenTextures(1, tex);
+        }
+        glBindTexture(GL_TEXTURE_2D, *tex);
+    }
+
+    glTexImage2D(target, 0, GL_RGBA,
+        *x, *y, 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    return true;
+}
 
 bool
 load_texture_asset(
@@ -941,22 +1009,7 @@ load_texture_asset(
     GLuint *tex
 )
 {
-    game_state *state = (game_state *)memory->memory;
-    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
-        return false;
-    }
-
-    int32_t actual_size;
-    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
-            x, y, &actual_size);
-
-    glGenTextures(1, tex);
-    glBindTexture(GL_TEXTURE_2D, *tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-        *x, *y, 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    return true;
+    return load_texture_asset(ctx, memory, filename, image_buffer, image_size, x, y, tex, GL_TEXTURE_2D);
 }
 
 void
@@ -1001,6 +1054,142 @@ populate_spritesheet(spritesheet *sp, sprite *s0, uint32_t num_sprites, sprite_c
             (float)sc->y / sp->height,
         };
     }
+}
+
+bool
+populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_data *skybox)
+{
+    glErrorAssert();
+    glGenBuffers(1, &skybox->vbo);
+    glGenBuffers(1, &skybox->ibo);
+
+    glErrorAssert();
+
+    skybox_vertex_format vertices[] = {
+        { 0.000,  0.000,  1.000 },
+        { 0.894,  0.000,  0.447 },
+        { 0.276,  0.851,  0.447 },
+        {-0.724,  0.526,  0.447 },
+        {-0.724, -0.526,  0.447 },
+        { 0.276, -0.851,  0.447 },
+        { 0.724,  0.526, -0.447 },
+        {-0.276,  0.851, -0.447 },
+        {-0.894,  0.000, -0.447 },
+        {-0.276, -0.851, -0.447 },
+        { 0.724, -0.526, -0.447 },
+        { 0.000,  0.000, -1.000 },
+    };
+    memcpy(skybox->vertices, vertices, sizeof(vertices));
+    glBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            sizeof(skybox->vertices),
+            skybox->vertices,
+            GL_STATIC_DRAW);
+
+    glErrorAssert();
+
+    skybox_faces faces[] = {
+        { 0, 1, 2},
+        { 0, 2, 3},
+        { 0, 3, 4},
+        { 0, 4, 5},
+        { 0, 5, 1},
+        {11, 6, 7},
+        {11, 7, 8},
+        {11, 8, 9},
+        {11, 9,10},
+        {11,10, 6},
+        { 1, 2, 6},
+        { 2, 3, 7},
+        { 3, 4, 8},
+        { 4, 5, 9},
+        { 5, 1,10},
+        { 6, 7, 2},
+        { 7, 8, 3},
+        { 8, 9, 4},
+        { 9,10, 5},
+        {10, 6, 1},
+    };
+    memcpy(skybox->faces, faces, sizeof(faces));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
+    glErrorAssert();
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            sizeof(skybox->faces),
+            skybox->faces,
+            GL_STATIC_DRAW);
+
+    glErrorAssert();
+
+    glGenTextures(1, &skybox->tex);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox->tex);
+
+    uint8_t image[162019]; // maximum size
+    struct _assets {
+        char *filename;
+        GLenum target;
+    } assets[] = {
+        { "skybox/miramar/miramar_rt.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_Z },
+        { "skybox/miramar/miramar_lf.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_Z },
+        { "skybox/miramar/miramar_up.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_Y },
+        { "skybox/miramar/miramar_dn.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_Y },
+        { "skybox/miramar/miramar_bk.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_X },
+        { "skybox/miramar/miramar_ft.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_X },
+    };
+
+    for (uint32_t i = 0; i < harray_count(assets); ++i)
+    {
+        _assets *asset = assets + i;
+        int32_t x;
+        int32_t y;
+        bool loaded = load_texture_asset(ctx, memory, asset->filename, image, sizeof(image), &x, &y, 0, asset->target);
+        hassert(loaded);
+        if (!loaded)
+        {
+            return false;
+        }
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return true;
+}
+
+void
+draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_data *skybox, m4 u_model, m4 u_view, m4 u_projection)
+{
+    glErrorAssert();
+
+    game_state *state = (game_state *)memory->memory;
+
+    glUseProgram(state->program_skybox.program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
+
+    glUniformMatrix4fv(state->program_skybox.u_model_id, 1, false, (float *)&u_model);
+    glUniformMatrix4fv(state->program_skybox.u_view_id, 1, false, (float *)&u_view);
+    glUniformMatrix4fv(state->program_skybox.u_projection_id, 1, false, (float *)&u_projection);
+
+    glEnableVertexAttribArray((GLuint)state->program_skybox.a_pos_id);
+    glVertexAttribPointer((GLuint)state->program_skybox.a_pos_id, 3, GL_FLOAT, GL_FALSE, sizeof(skybox_vertex_format), 0);
+
+    glErrorAssert();
+    int32_t tex = glGetUniformLocation(state->program_skybox.program, "u_cube_tex");
+    glUniform1i(tex, 0);
+    glErrorAssert();
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox->tex);
+
+    glErrorAssert();
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDrawElements(GL_TRIANGLES, harray_count(skybox->faces) * 3, GL_UNSIGNED_INT, 0);
+
+    glErrorAssert();
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -1116,12 +1305,24 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {234 + 36, 360 + 36, 16, 16},
                 {485 + 18, 89, 16, 16}, // radio empty
                 {485 + 36, 89, 16, 16}, // radio selected
+                {396, 414, 16, 16}, // top left green long arrow ("up")
+                {396 + 18, 414, 16, 16}, // top right green long arrow ("down")
+                {396, 414 + 18, 16, 16}, // bottom left green long arrow ("left")
+                {396 + 18, 414 + 18, 16, 16}, // bottom right green long arrow ("right")
             };
             populate_spritesheet(&state->kenney_ui.ui_pack_sheet,
                 state->kenney_ui.ui_pack_sprites,
                 harray_count(state->kenney_ui.ui_pack_sprites),
                 configs,
                 harray_count(configs));
+        }
+
+        bool loaded = populate_skybox(ctx, memory, &state->skybox);
+        if (!loaded)
+        {
+            memory->platform_fail(ctx, "Could not populate skybox");
+            memory->quit = true;
+            return;
         }
 
         glErrorAssert();
@@ -1692,12 +1893,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    v2 mouse_loc = {
+        (float)input->mouse.x,
+        (float)input->window.height - (float)input->mouse.y,
+    };
 
     if (mouse_pressed)
     {
-        v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
         rectangle2 r = {{38,100},{16,16}};
-        if (point_in_rectangle(m, r))
+        if (point_in_rectangle(mouse_loc, r))
         {
             state->hide_lines ^= true;
         }
@@ -1832,8 +2036,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_view = m4identity();
     glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
     float ratio = (float)input->window.width / (float)input->window.height;
-    m4 u_perspective = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
-    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_perspective);
+    m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
+    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_projection);
     glUniform1i(state->program_b.u_model_mode_id, state->model_mode);
     glUniform1i(state->program_b.u_shading_mode_id, state->shading_mode);
 
@@ -1990,6 +2194,25 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     {
+        m4 u_view = m4identity();
+        m4 u_model = m4identity();
+        float scale = 100.0f;
+        u_model.cols[0].E[0] *= scale;
+        u_model.cols[1].E[1] *= scale;
+        u_model.cols[2].E[2] *= scale;
+
+        v3 axis = {0.0f, 1.0f, 0.0f};
+        m4 rotate = m4rotation(axis, state->delta_t / 10.0f);
+
+        u_model = m4mul(rotate, u_model);
+
+        m4 u_projection = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+        glErrorAssert();
+        draw_skybox(ctx, memory, &state->skybox, u_model, u_view, u_projection);
+        glErrorAssert();
+    }
+
+    {
         glDisable(GL_DEPTH_TEST);
         glDepthFunc(GL_ALWAYS);
         glUseProgram(state->program_ui2d.program);
@@ -2137,6 +2360,68 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             q.t0 = 0;
             q.t1 = 1;
             push_quad(&pushctx, q, state->mouse_texture, 0);
+        }
+
+        {
+            uint32_t height = 3;
+            uint32_t width = 4;
+            uint32_t x = 34;
+            uint32_t y = 140;
+
+            for (uint32_t hidx = 0; hidx < height; ++hidx)
+            {
+                for (uint32_t idx = 0; idx < width; ++idx)
+                {
+                    uint32_t sprite = 6;
+                    if (hidx == 0)
+                    {
+                        sprite += 3;
+                    }
+                    else if (hidx == height - 1)
+                    {
+                        sprite -= 3;
+                    }
+                    if (idx == 0)
+                    {
+                        --sprite;
+                    }
+                    else if (idx == width - 1)
+                    {
+                        ++sprite;
+                    }
+                    push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x + (float)(idx * 16), y + (float)(hidx * 16)});
+                }
+            }
+        }
+
+        {
+            uint32_t xbase = 34 + 8;
+            uint32_t ybase = 140 + 8;
+
+            struct {
+                uint32_t sprite;
+                uint32_t x;
+                uint32_t y;
+            } sprites[] =
+            {
+                { 13, 1, 1 },
+                { 14, 1, 0 },
+                { 15, 0, 0 },
+                { 16, 2, 0 },
+            };
+            for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
+            {
+                auto sprite = sprites + idx;
+                float x = (float)(xbase + (sprite->x * 16));
+                float y = (float)(ybase + (sprite->y * 16));
+                push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
+
+                rectangle2 r = {{x,y},{16,16}};
+                if (point_in_rectangle(mouse_loc, r))
+                {
+                    state->model_mode = idx;
+                }
+            }
         }
 
         ui2d_render_elements(state, &pushctx);
