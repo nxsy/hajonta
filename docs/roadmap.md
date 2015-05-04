@@ -23,6 +23,7 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Emission maps
 * Ambient Occlusion maps (pre-computed, texture)
 * ui2d shader for text, windows, &c.
+* Basic skybox
 
 == To do (short-term)
 
@@ -41,7 +42,7 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Ambient light factor control
 * Specular material
 * Non-texture materials (plain old color)
-* Skybox(es)
+* Better skybox
 
 == Ideas for later
 
