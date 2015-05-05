@@ -1325,8 +1325,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
             sprite_config configs[] =
             {
-                {485, 89, 16, 16}, // checkbox empty
-                {485, 89 + 18, 16, 16}, // checkbox checked
+                {486, 90, 16, 16}, // checkbox empty
+                {486, 90 + 18, 16, 16}, // checkbox checked
                 {234, 360, 16, 16}, // top left blue dungeon tile
                 {234 + 18, 360, 16, 16},
                 {234 + 36, 360, 16, 16},
@@ -1336,8 +1336,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {234, 360 + 36, 16, 16},
                 {234 + 18, 360 + 36, 16, 16},
                 {234 + 36, 360 + 36, 16, 16},
-                {485 + 18, 89, 16, 16}, // radio empty
-                {485 + 36, 89, 16, 16}, // radio selected
+                {486 + 18, 90, 16, 16}, // radio empty
+                {486 + 36, 90, 16, 16}, // radio selected
                 {396, 414, 16, 16}, // top left green long arrow ("up")
                 {396 + 18, 414, 16, 16}, // top right green long arrow ("down")
                 {396, 414 + 18, 16, 16}, // bottom left green long arrow ("left")
