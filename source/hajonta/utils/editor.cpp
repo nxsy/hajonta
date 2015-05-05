@@ -229,8 +229,12 @@ struct game_state
     int model_mode;
     int shading_mode;
 
-    int x_rotation;
-    int z_rotation;
+    int x_rotation_correction;
+    int z_rotation_correction;
+
+    float x_rotation;
+    float y_rotation;
+    float z_rotation;
 
     uint8_t mouse_bitmap[4096];
 
@@ -1913,11 +1917,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
-            state->x_rotation = (state->x_rotation + 1) % 4;
+            state->x_rotation_correction = (state->x_rotation_correction + 1) % 4;
         }
         if (controller->buttons.move_left.ended_down && !controller->buttons.move_left.repeat)
         {
-            state->z_rotation = (state->z_rotation + 1) % 4;
+            state->z_rotation_correction = (state->z_rotation_correction + 1) % 4;
         }
     }
 
@@ -2035,13 +2039,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     v3 axis = {0.0f, 1.0f, 0.0f};
-    m4 rotate = m4rotation(axis, state->delta_t);
+    m4 rotate = m4rotation(axis, state->y_rotation);
     v3 x_axis = {1.0f, 0.0f, 0.0f};
     v3 z_axis = {0.0f, 0.0f, 1.0f};
-    m4 x_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation);
-    m4 z_rotate = m4rotation(z_axis, (pi / 2) * state->z_rotation);
+    m4 x_rotate = m4rotation(x_axis, state->x_rotation);
+    m4 x_correction_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation_correction);
+    m4 z_correction_rotate = m4rotation(z_axis, (pi / 2) * state->z_rotation_correction);
     rotate = m4mul(rotate, x_rotate);
-    rotate = m4mul(rotate, z_rotate);
+    rotate = m4mul(rotate, x_correction_rotate);
+    rotate = m4mul(rotate, z_correction_rotate);
 
     m4 scale = m4identity();
     scale.cols[0].E[0] = 2.0f / max_dimension;
@@ -2230,10 +2236,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         u_model.cols[1].E[1] *= scale;
         u_model.cols[2].E[2] *= scale;
 
-        v3 axis = {0.0f, 1.0f, 0.0f};
-        m4 rotate = m4rotation(axis, state->delta_t / 10.0f);
+        v3 y_axis = {0.0f, 1.0f, 0.0f};
+        m4 y_rotate = m4rotation(y_axis, state->y_rotation);
+        v3 x_axis = {1.0f, 0.0f, 0.0f};
+        m4 x_rotate = m4rotation(x_axis, state->x_rotation);
 
-        u_model = m4mul(rotate, u_model);
+        u_model = m4mul(x_rotate, u_model);
+        u_model = m4mul(y_rotate, u_model);
 
         m4 u_projection = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
         glErrorAssert();
@@ -2363,12 +2372,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 uint32_t sprite;
                 uint32_t x;
                 uint32_t y;
+                float *axis;
+                float iter;
             } sprites[] =
             {
-                { 13, 1, 1 },
-                { 14, 1, 0 },
-                { 15, 0, 0 },
-                { 16, 2, 0 },
+                { 13, 1, 1, &state->x_rotation, 0.005 },
+                { 14, 1, 0, &state->x_rotation,-0.005 },
+                { 15, 0, 0, &state->y_rotation, 0.005 },
+                { 16, 2, 0, &state->y_rotation,-0.005 },
             };
             for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
             {
@@ -2380,7 +2391,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 rectangle2 r = {{x,y},{16,16}};
                 if (point_in_rectangle(mouse_loc, r))
                 {
-                    state->model_mode = idx;
+                    *(sprite->axis) += sprite->iter;
                 }
             }
         }
