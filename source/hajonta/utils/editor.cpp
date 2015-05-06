@@ -206,7 +206,7 @@ struct game_state
     face faces[100000];
     uint32_t num_faces;
 
-    material materials[10];
+    material materials[15];
     uint32_t num_materials;
 
     GLushort faces_array[300000];
@@ -393,6 +393,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         }
         else if (starts_with(line, "newmtl "))
         {
+            hassert(state->num_materials < harray_count(state->materials));
             current_material = state->materials + state->num_materials++;
             strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
             current_material->texture_offset = -1;
