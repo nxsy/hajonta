@@ -209,9 +209,9 @@ struct game_state
     material materials[15];
     uint32_t num_materials;
 
-    GLushort faces_array[300000];
+    uint32_t faces_array[300000];
     uint32_t num_faces_array;
-    GLushort line_elements[600000];
+    uint32_t line_elements[600000];
     uint32_t num_line_elements;
     editor_vertex_format vbo_vertices[300000];
     uint32_t num_vbo_vertices;
@@ -563,6 +563,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         {
         }
         else if (starts_with(line, "map_Ns "))
+        {
+        }
+        else if (starts_with(line, "Km "))
         {
         }
         else
@@ -1675,19 +1678,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 ++face_idx)
         {
             state->num_faces_array++;
-            state->faces_array[face_idx] = (GLushort)face_idx;
+            state->faces_array[face_idx] = face_idx;
         }
 
 
-        for (GLushort face_array_idx = 0;
+        for (uint32_t face_array_idx = 0;
                 face_array_idx < state->num_faces_array;
                 face_array_idx += 3)
         {
             state->line_elements[state->num_line_elements++] = face_array_idx;
-            state->line_elements[state->num_line_elements++] = (GLushort)(face_array_idx + 1);
-            state->line_elements[state->num_line_elements++] = (GLushort)(face_array_idx + 1);
-            state->line_elements[state->num_line_elements++] = (GLushort)(face_array_idx + 2);
-            state->line_elements[state->num_line_elements++] = (GLushort)(face_array_idx + 2);
+            state->line_elements[state->num_line_elements++] = face_array_idx + 1;
+            state->line_elements[state->num_line_elements++] = face_array_idx + 1;
+            state->line_elements[state->num_line_elements++] = face_array_idx + 2;
+            state->line_elements[state->num_line_elements++] = face_array_idx + 2;
             state->line_elements[state->num_line_elements++] = face_array_idx;
         }
 
@@ -2077,7 +2080,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniform1i(state->program_b.u_model_mode_id, state->model_mode);
     glUniform1i(state->program_b.u_shading_mode_id, state->shading_mode);
 
-    glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_SHORT, 0);
+    glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_INT, 0);
     glErrorAssert();
 
     if (!state->hide_lines)
@@ -2088,7 +2091,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-        glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_SHORT, 0);
+        glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_INT, 0);
     }
 
     {
