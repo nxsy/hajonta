@@ -1106,18 +1106,18 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_dat
     glErrorAssert();
 
     skybox_vertex_format vertices[] = {
-        { 0.000,  0.000,  1.000 },
-        { 0.894,  0.000,  0.447 },
-        { 0.276,  0.851,  0.447 },
-        {-0.724,  0.526,  0.447 },
-        {-0.724, -0.526,  0.447 },
-        { 0.276, -0.851,  0.447 },
-        { 0.724,  0.526, -0.447 },
-        {-0.276,  0.851, -0.447 },
-        {-0.894,  0.000, -0.447 },
-        {-0.276, -0.851, -0.447 },
-        { 0.724, -0.526, -0.447 },
-        { 0.000,  0.000, -1.000 },
+        { 0.000f,  0.000f,  1.000f },
+        { 0.894f,  0.000f,  0.447f },
+        { 0.276f,  0.851f,  0.447f },
+        {-0.724f,  0.526f,  0.447f },
+        {-0.724f, -0.526f,  0.447f },
+        { 0.276f, -0.851f,  0.447f },
+        { 0.724f,  0.526f, -0.447f },
+        {-0.276f,  0.851f, -0.447f },
+        {-0.894f,  0.000f, -0.447f },
+        {-0.276f, -0.851f, -0.447f },
+        { 0.724f, -0.526f, -0.447f },
+        { 0.000f,  0.000f, -1.000f },
     };
     memcpy(skybox->vertices, vertices, sizeof(vertices));
     glBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
@@ -1167,13 +1167,14 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_dat
     struct _assets {
         char *filename;
         GLenum target;
+        uint32_t filesize;
     } assets[] = {
-        { "skybox/miramar/miramar_rt.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_Z },
-        { "skybox/miramar/miramar_lf.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_Z },
-        { "skybox/miramar/miramar_up.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_Y },
-        { "skybox/miramar/miramar_dn.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_Y },
-        { "skybox/miramar/miramar_bk.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_X },
-        { "skybox/miramar/miramar_ft.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_X },
+        { "skybox/miramar/miramar_rt.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 141442 },
+        { "skybox/miramar/miramar_lf.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 130511 },
+        { "skybox/miramar/miramar_up.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 81931 },
+        { "skybox/miramar/miramar_dn.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 23437 },
+        { "skybox/miramar/miramar_bk.jpg", GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 162019 },
+        { "skybox/miramar/miramar_ft.jpg", GL_TEXTURE_CUBE_MAP_POSITIVE_X, 151010 },
     };
 
     for (uint32_t i = 0; i < harray_count(assets); ++i)
@@ -1181,7 +1182,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_dat
         _assets *asset = assets + i;
         int32_t x;
         int32_t y;
-        bool loaded = load_texture_asset(ctx, memory, asset->filename, image, sizeof(image), &x, &y, 0, asset->target);
+        bool loaded = load_texture_asset(ctx, memory, asset->filename, image, asset->filesize, &x, &y, 0, asset->target);
         hassert(loaded);
         if (!loaded)
         {
@@ -1242,6 +1243,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
     }
 #endif
+
+    glErrorAssert();
 
     if (!memory->initialized)
     {
@@ -1986,6 +1989,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
     }
 
+    glErrorAssert();
+
     glBindVertexArray(state->vao);
 
     glErrorAssert();
@@ -2383,10 +2388,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 float iter;
             } sprites[] =
             {
-                { 13, 1, 1, &state->x_rotation, 0.005 },
-                { 14, 1, 0, &state->x_rotation,-0.005 },
-                { 15, 0, 0, &state->y_rotation, 0.005 },
-                { 16, 2, 0, &state->y_rotation,-0.005 },
+                { 13, 1, 1, &state->x_rotation, 0.005f },
+                { 14, 1, 0, &state->x_rotation,-0.005f },
+                { 15, 0, 0, &state->y_rotation, 0.005f },
+                { 16, 2, 0, &state->y_rotation,-0.005f },
             };
             for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
             {
@@ -2405,5 +2410,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         ui2d_render_elements(state, &pushctx);
     }
+
+    glErrorAssert();
 }
 
