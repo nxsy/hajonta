@@ -37,6 +37,7 @@
 #include "hajonta/programs/b.h"
 #include "hajonta/programs/ui2d.h"
 #include "hajonta/programs/skybox.h"
+#include "hajonta/programs/c.h"
 
 static float pi = 3.14159265358979f;
 
@@ -219,6 +220,7 @@ struct game_state
     b_program_struct program_b;
     ui2d_program_struct program_ui2d;
     skybox_program_struct program_skybox;
+    c_program_struct program_c;
 
     v3 model_max;
     v3 model_min;
@@ -320,6 +322,12 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     }
 
     loaded = skybox_program(&state->program_skybox, ctx, memory);
+    if (!loaded)
+    {
+        return loaded;
+    }
+
+    loaded = c_program(&state->program_c, ctx, memory);
     if (!loaded)
     {
         return loaded;
