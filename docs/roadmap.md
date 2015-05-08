@@ -1,10 +1,10 @@
-= Roadmap
+# Roadmap
 
 Mostly a list of things to try implement in demos/stand-alone apps for now.
 
-== Done (at least first pass)
+## Done (at least first pass)
 
-=== Demos
+### Demos
 
 * Basic rainbow quad (“Hello World” for OpenGL)
 * Unified controller/keyboard input
@@ -15,7 +15,7 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * MVP matrices
 * Texture loading
 
-=== Model Editor
+### Model Editor
 
 * .obj/.mtl file reading
 * Basic Phong shading
@@ -25,13 +25,13 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * ui2d shader for text, windows, &c.
 * Basic skybox
 
-== To do (short-term)
+## To do (short-term)
 
-=== Demos
+### Demos
 
 * Full scene from editor asset export
 
-=== Model Editor
+### Model Editor
 
 * “Resize” to common (1 = 1m) format
 * Export to asset structure
@@ -44,9 +44,9 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Non-texture materials (plain old color)
 * Better skybox
 
-== Ideas for later
+## Ideas for later
 
-=== Demos
+### Demos
 
 * Planet demo
     * “Static” Earth-like world
@@ -62,7 +62,7 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Pathfinding demo
 
 
-=== Model Editor
+### Model Editor
 
 * Center-point selection?
 * Scene editor mode?
