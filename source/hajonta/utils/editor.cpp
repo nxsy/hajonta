@@ -47,12 +47,20 @@ struct vertex
     float color[4];
 };
 
-struct editor_vertex_format
+struct editor_vertex_format_b
 {
     vertex v;
     float style[4];
     v4 normal;
     v4 tangent;
+};
+
+struct editor_vertex_format_c
+{
+    v4 position;
+    v4 normal;
+    v4 tangent;
+    v2 tex_coord;
 };
 
 struct face_index
@@ -86,15 +94,6 @@ struct ui2d_push_context
     uint32_t seen_textures[1024];
 };
 
-struct face
-{
-    face_index indices[3];
-    int texture_offset;
-    int bump_texture_offset;
-    int emit_texture_offset;
-    int ao_texture_offset;
-};
-
 struct material
 {
     char name[100];
@@ -102,6 +101,18 @@ struct material
     int32_t bump_texture_offset;
     int32_t emit_texture_offset;
     int32_t ao_texture_offset;
+};
+
+struct face
+{
+    face_index indices[3];
+    material *current_material;
+};
+
+struct editor_vertex_indices
+{
+    material *current_material;
+    editor_vertex_format_c *final_vertex;
 };
 
 struct kenpixel_future_14
@@ -214,7 +225,7 @@ struct game_state
     uint32_t num_faces_array;
     uint32_t line_elements[600000];
     uint32_t num_line_elements;
-    editor_vertex_format vbo_vertices[300000];
+    editor_vertex_format_c vbo_vertices[300000];
     uint32_t num_vbo_vertices;
 
     b_program_struct program_b;
@@ -605,7 +616,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
 void
 load_aabb_buffer_objects(game_state *state, v3 model_min, v3 model_max)
 {
-    editor_vertex_format vertices[] = {
+    editor_vertex_format_b vertices[] = {
         {
             {model_min.x, model_min.y, model_min.z, 1.0},
         },
@@ -671,12 +682,12 @@ load_bounding_sphere(game_state *state, v3 model_min, v3 model_max)
     v3 diff = v3sub(center, state->model_min);
     float size = v3length(diff);
 
-    editor_vertex_format vertices[64 * 3] = {};
+    editor_vertex_format_b vertices[64 * 3] = {};
     for (uint32_t idx = 0;
             idx < harray_count(vertices);
             ++idx)
     {
-        editor_vertex_format *v = vertices + idx;
+        editor_vertex_format_b *v = vertices + idx;
         if (idx < 64)
         {
             float a = idx * (2.0f * pi) / (harray_count(vertices) / 3 - 1);
@@ -742,17 +753,33 @@ load_bounding_sphere(game_state *state, v3 model_min, v3 model_max)
 }
 
 void
-setup_vertex_attrib_array(game_state *state)
+setup_vertex_attrib_array_b(game_state *state)
 {
     glEnableVertexAttribArray((GLuint)state->program_b.a_pos_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_color_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_style_id);
     glEnableVertexAttribArray((GLuint)state->program_b.a_normal_id);
-    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), 0);
-    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(vertex, color));
-    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, style));
-    glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, normal));
-    glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format), (void *)offsetof(editor_vertex_format, tangent));
+    glVertexAttribPointer((GLuint)state->program_b.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_b), 0);
+    glVertexAttribPointer((GLuint)state->program_b.a_color_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_b), (void *)offsetof(vertex, color));
+    glVertexAttribPointer((GLuint)state->program_b.a_style_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_b), (void *)offsetof(editor_vertex_format_b, style));
+    glVertexAttribPointer((GLuint)state->program_b.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_b), (void *)offsetof(editor_vertex_format_b, normal));
+    glVertexAttribPointer((GLuint)state->program_b.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_b), (void *)offsetof(editor_vertex_format_b, tangent));
+
+    glErrorAssert();
+}
+
+void
+setup_vertex_attrib_array_c(game_state *state)
+{
+    glEnableVertexAttribArray((GLuint)state->program_c.a_pos_id);
+    glEnableVertexAttribArray((GLuint)state->program_c.a_normal_id);
+    glEnableVertexAttribArray((GLuint)state->program_c.a_tangent_id);
+    glEnableVertexAttribArray((GLuint)state->program_c.a_tex_coord_id);
+
+    glVertexAttribPointer((GLuint)state->program_c.a_pos_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_c), 0);
+    glVertexAttribPointer((GLuint)state->program_c.a_normal_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_c), (void *)offsetof(editor_vertex_format_c, normal));
+    glVertexAttribPointer((GLuint)state->program_c.a_tangent_id, 4, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_c), (void *)offsetof(editor_vertex_format_c, tangent));
+    glVertexAttribPointer((GLuint)state->program_c.a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(editor_vertex_format_c), (void *)offsetof(editor_vertex_format_c, tex_coord));
 
     glErrorAssert();
 }
@@ -1537,10 +1564,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {b_vertex_id, b_texture_coord_id},
                                 {c_vertex_id, c_texture_coord_id},
                             },
-                            current_material->texture_offset,
-                            current_material->bump_texture_offset,
-                            current_material->emit_texture_offset,
-                            current_material->ao_texture_offset,
+                            current_material,
                         };
                         face face2 = {
                             {
@@ -1548,10 +1572,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {d_vertex_id, d_texture_coord_id},
                                 {a_vertex_id, a_texture_coord_id},
                             },
-                            current_material->texture_offset,
-                            current_material->bump_texture_offset,
-                            current_material->emit_texture_offset,
-                            current_material->ao_texture_offset,
+                            current_material,
                         };
                         state->faces[state->num_faces++] = face1;
                         state->faces[state->num_faces++] = face2;
@@ -1587,10 +1608,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {b_vertex_id, b_texture_coord_id},
                                 {c_vertex_id, c_texture_coord_id},
                             },
-                            current_material->texture_offset,
-                            current_material->bump_texture_offset,
-                            current_material->emit_texture_offset,
-                            current_material->ao_texture_offset,
+                            current_material,
                         };
                         state->faces[state->num_faces++] = face1;
                     }
@@ -1612,10 +1630,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 {b_vertex_id, b_texture_coord_id, b_normal_id},
                                 {c_vertex_id, c_texture_coord_id, c_normal_id},
                             },
-                            current_material->texture_offset,
-                            current_material->bump_texture_offset,
-                            current_material->emit_texture_offset,
-                            current_material->ao_texture_offset,
+                            current_material,
                         };
                         state->faces[state->num_faces++] = face1;
                     }
@@ -1730,9 +1745,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 ++face_idx)
         {
             state->num_vbo_vertices += 3;
-            editor_vertex_format *vbo_v1 = state->vbo_vertices + (3 * face_idx);
-            editor_vertex_format *vbo_v2 = vbo_v1 + 1;
-            editor_vertex_format *vbo_v3 = vbo_v2 + 1;
+            editor_vertex_format_c *vbo_v1 = state->vbo_vertices + (3 * face_idx);
+            editor_vertex_format_c *vbo_v2 = vbo_v1 + 1;
+            editor_vertex_format_c *vbo_v3 = vbo_v2 + 1;
             face *f = state->faces + face_idx;
             v3 *face_v1 = state->vertices + (f->indices[0].vertex - 1);
             v3 *face_v2 = state->vertices + (f->indices[1].vertex - 1);
@@ -1844,54 +1859,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 }
             }
 
-            vbo_v1->v.position[0] = face_v1->x;
-            vbo_v1->v.position[1] = face_v1->y;
-            vbo_v1->v.position[2] = face_v1->z;
-            vbo_v1->v.position[3] = 1.0f;
+            vbo_v1->position.x = face_v1->x;
+            vbo_v1->position.y = face_v1->y;
+            vbo_v1->position.z = face_v1->z;
+            vbo_v1->position.w = 1.0f;
             vbo_v1->normal = face_n1_v4;
             vbo_v1->tangent = face_t1;
 
-            vbo_v2->v.position[0] = face_v2->x;
-            vbo_v2->v.position[1] = face_v2->y;
-            vbo_v2->v.position[2] = face_v2->z;
-            vbo_v2->v.position[3] = 1.0f;
+            vbo_v2->position.x = face_v2->x;
+            vbo_v2->position.y = face_v2->y;
+            vbo_v2->position.z = face_v2->z;
+            vbo_v2->position.w = 1.0f;
             vbo_v2->normal = face_n2_v4;
             vbo_v2->tangent = face_t2;
 
-            vbo_v3->v.position[0] = face_v3->x;
-            vbo_v3->v.position[1] = face_v3->y;
-            vbo_v3->v.position[2] = face_v3->z;
-            vbo_v3->v.position[3] = 1.0f;
+            vbo_v3->position.x = face_v3->x;
+            vbo_v3->position.y = face_v3->y;
+            vbo_v3->position.z = face_v3->z;
+            vbo_v3->position.w = 1.0f;
             vbo_v3->normal = face_n3_v4;
             vbo_v3->tangent = face_t3;
 
-            vbo_v1->v.color[0] = face_vt1->x;
-            vbo_v1->v.color[1] = 1 - face_vt1->y;
-            vbo_v1->v.color[2] = 0.0f;
-            vbo_v1->v.color[3] = 1.0f;
+            vbo_v1->tex_coord.x = face_vt1->x;
+            vbo_v1->tex_coord.y = 1 - face_vt1->y;
 
-            vbo_v2->v.color[0] = face_vt2->x;
-            vbo_v2->v.color[1] = 1 - face_vt2->y;
-            vbo_v2->v.color[2] = 0.0f;
-            vbo_v2->v.color[3] = 1.0f;
+            vbo_v2->tex_coord.x = face_vt2->x;
+            vbo_v2->tex_coord.y = 1 - face_vt2->y;
 
-            vbo_v3->v.color[0] = face_vt3->x;
-            vbo_v3->v.color[1] = 1 - face_vt3->y;
-            vbo_v3->v.color[2] = 0.0f;
-            vbo_v3->v.color[3] = 1.0f;
-
-            vbo_v1->style[0] = 3.0f;
-            vbo_v1->style[1] = (float)f->texture_offset;
-            vbo_v1->style[2] = (float)f->bump_texture_offset;
-            vbo_v1->style[3] = (100.0f * (f->ao_texture_offset + 1)) + ((float)f->emit_texture_offset + 1);
-            vbo_v2->style[0] = 3.0f;
-            vbo_v2->style[1] = (float)f->texture_offset;
-            vbo_v2->style[2] = (float)f->bump_texture_offset;
-            vbo_v2->style[3] = (100.0f * (f->ao_texture_offset + 1)) + ((float)f->emit_texture_offset + 1);
-            vbo_v3->style[0] = 3.0f;
-            vbo_v3->style[1] = (float)f->texture_offset;
-            vbo_v3->style[2] = (float)f->bump_texture_offset;
-            vbo_v3->style[3] = (100.0f * (f->ao_texture_offset + 1)) + ((float)f->emit_texture_offset + 1);
+            vbo_v3->tex_coord.x = face_vt3->x;
+            vbo_v3->tex_coord.y = 1 - face_vt3->y;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
@@ -1964,7 +1960,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         float top = -(1-height);
         float width = (float)debug_buffer_width / ((float)input->window.width / 2.0f);
         float left = 1 - width;
-        editor_vertex_format font_vertices[4] = {
+        editor_vertex_format_b font_vertices[4] = {
             {
                 {
                     {left, top, 0.0, 1.0},
@@ -2027,7 +2023,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     glErrorAssert();
 
-    setup_vertex_attrib_array(state);
+    setup_vertex_attrib_array_b(state);
 
     for (uint32_t idx = 0;
             idx < state->num_texture_ids;
@@ -2083,24 +2079,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
 
+    glUseProgram(state->program_c.program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, state->texture_ids[0]);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, state->texture_ids[1]);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "tex"),
+        0);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "normal_texture"),
+        1);
+    setup_vertex_attrib_array_c(state);
     v4 light_position = {-5.0f, -3.0f, -12.0f, 1.0f};
-    glUniform4fv(state->program_b.u_w_lightPosition_id, 1, (float *)&light_position);
-    v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 0.0f};
-    glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
+    glUniform4fv(state->program_c.u_w_lightPosition_id, 1, (float *)&light_position);
+    glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&u_model);
     m4 u_view = m4identity();
-    glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
+    glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&u_view);
     float ratio = (float)input->window.width / (float)input->window.height;
     m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
-    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_projection);
-    glUniform1i(state->program_b.u_model_mode_id, state->model_mode);
-    glUniform1i(state->program_b.u_shading_mode_id, state->shading_mode);
+    glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&u_projection);
 
     glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_INT, 0);
     glErrorAssert();
 
+    glUseProgram(state->program_b.program);
+    m4 u_mvp_enabled;
     if (!state->hide_lines)
     {
+        setup_vertex_attrib_array_b(state);
         glUniform1i(state->program_b.u_model_mode_id, 0);
         glUniform1i(state->program_b.u_shading_mode_id, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
@@ -2115,7 +2122,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform1i(state->program_b.u_shading_mode_id, 0);
         glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
-        setup_vertex_attrib_array(state);
+        setup_vertex_attrib_array_b(state);
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
@@ -2128,7 +2135,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform1i(state->program_b.u_shading_mode_id, 0);
         glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
-        setup_vertex_attrib_array(state);
+        setup_vertex_attrib_array_b(state);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
         glPrimitiveRestartIndex(65535);
@@ -2225,7 +2232,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform1i(state->program_b.u_shading_mode_id, 0);
 
         glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
-        setup_vertex_attrib_array(state);
+        setup_vertex_attrib_array_b(state);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);

@@ -3,7 +3,6 @@
 in vec4 v_normal;
 in vec4 v_tangent;
 in vec2 v_tex_coord;
-flat in int v_material_id;
 
 in vec4 v_w_vertexPosition;
 in vec4 v_c_vertexNormal;
@@ -12,92 +11,12 @@ in vec4 v_c_lightDirection;
 
 out vec4 o_color;
 
-uniform sampler2D tex[16];
+uniform sampler2D tex;
+uniform sampler2D normal_texture;
 
 uniform vec4 u_w_lightPosition;
 uniform mat4 u_model;
 uniform mat4 u_view;
-
-struct Material {
-    int diffuse_texture;
-    int normal_texture;
-    int specular_texture;
-    int ao_texture;
-    int emit_texture;
-};
-
-uniform Material materials[16];
-
-vec4 texture_load(int texture_id, vec2 tex_coord)
-{
-    vec4 o_color;
-    if (texture_id == 1)
-    {
-        o_color = vec4(texture(tex[0], tex_coord));
-    }
-    else if (texture_id == 2)
-    {
-        o_color = vec4(texture(tex[1], tex_coord));
-    }
-    else if (texture_id == 3)
-    {
-        o_color = vec4(texture(tex[2], tex_coord));
-    }
-    else if (texture_id == 4)
-    {
-        o_color = vec4(texture(tex[3], tex_coord));
-    }
-    else if (texture_id == 5)
-    {
-        o_color = vec4(texture(tex[4], tex_coord));
-    }
-    else if (texture_id == 6)
-    {
-        o_color = vec4(texture(tex[5], tex_coord));
-    }
-    else if (texture_id == 7)
-    {
-        o_color = vec4(texture(tex[6], tex_coord));
-    }
-    else if (texture_id == 8)
-    {
-        o_color = vec4(texture(tex[7], tex_coord));
-    }
-    else if (texture_id == 9)
-    {
-        o_color = vec4(texture(tex[8], tex_coord));
-    }
-    else if (texture_id == 10)
-    {
-        o_color = vec4(texture(tex[9], tex_coord));
-    }
-    else if (texture_id == 11)
-    {
-        o_color = vec4(texture(tex[10], tex_coord));
-    }
-    else if (texture_id == 12)
-    {
-        o_color = vec4(texture(tex[11], tex_coord));
-    }
-    else if (texture_id == 13)
-    {
-        o_color = vec4(texture(tex[12], tex_coord));
-    }
-    else if (texture_id == 14)
-    {
-        o_color = vec4(texture(tex[13], tex_coord));
-    }
-    else if (texture_id == 15)
-    {
-        o_color = vec4(texture(tex[14], tex_coord));
-    }
-    else
-    {
-        // Something hideously obviously broken
-        o_color = vec4(1.0, 0, 1.0, 1.0);
-    }
-    return o_color;
-}
 
 struct ShaderConfig
 {
@@ -121,17 +40,28 @@ bool use_emit_texture(ShaderConfig config)
     return (config.config & 4) == 0;
 }
 
+bool enabled(in sampler2D texture)
+{
+    ivec2 size = textureSize(texture, 0);
+    return (size.x > 0);
+}
+
 void main(void)
 {
-    if (v_material_id == 0)
+    o_color = vec4(1.0, 0, 1.0, 1.0);
+    o_color = vec4(v_tex_coord, 0.0, 1.0);
+    o_color = texture(tex, v_tex_coord);
+    vec4 normal = texture(normal_texture, v_tex_coord);
+
+    if (enabled(normal_texture))
     {
-        o_color = vec4(1.0, 0, 1.0, 1.0);
-        return;
+        o_color = normal;
     }
 
-    Material material = materials[v_material_id];
-    o_color = texture_load(material.diffuse_texture, v_tex_coord);
+    return;
 
+
+    /*
     vec3 normal = normalize(v_c_vertexNormal.xyz);
     vec4 lightDirection = v_c_lightDirection;
 
@@ -186,4 +116,5 @@ void main(void)
         o_color.g = max(o_color.g, emit_color.g);
         o_color.b = max(o_color.b, emit_color.b);
     }
+    */
 }
