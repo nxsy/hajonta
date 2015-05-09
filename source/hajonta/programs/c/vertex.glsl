@@ -30,7 +30,6 @@ out vec4 v_w_vertexPosition;
 out vec4 v_c_vertexNormal;
 out vec4 v_c_vertexTangent;
 out vec4 v_c_eyeDirection;
-out vec4 v_c_lightDirection;
 
 void main (void)
 {
@@ -44,9 +43,6 @@ void main (void)
     vec4 c_vertexPosition = u_view * u_model * a_pos;
 
     v_c_eyeDirection = vec4(vec3(0,0,0) - c_vertexPosition.xyz, 1);
-    vec4 c_lightPosition = u_view * u_w_lightPosition;
-
-    v_c_lightDirection = c_lightPosition + v_c_eyeDirection;
     v_c_vertexNormal = u_view * inverse(transpose(u_model)) * a_normal;
     v_c_vertexTangent = u_view * inverse(transpose(u_model)) * a_tangent;
 }

@@ -39,6 +39,30 @@
 #include "hajonta/programs/skybox.h"
 #include "hajonta/programs/c.h"
 
+struct directional_light
+{
+    v3 direction;
+    v3 color;
+    float ambient_intensity;
+    float diffuse_intensity;
+};
+
+struct attenuation_config
+{
+    float constant;
+    float linear;
+    float exponential;
+};
+
+struct point_light
+{
+    v3 position;
+    v3 color;
+    float ambient_intensity;
+    float diffuse_intensity;
+    attenuation_config attenuation;
+};
+
 static float pi = 3.14159265358979f;
 
 struct vertex
@@ -2133,6 +2157,81 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniform1i(
         glGetUniformLocation(state->program_c.program, "emit_texture"),
         3);
+
+    directional_light sun = {
+        {0.0f, 1.0f, 0.0f},
+        {1.0f, 1.0f, 0.9f},
+        0.3f,
+        1.0f,
+    };
+
+    glUniform3fv(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.direction"), 1,
+        (float *)&sun.direction);
+    glUniform3fv(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.color"), 1,
+        (float *)&sun.color);
+    glUniform1f(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.ambient_intensity"),
+        sun.ambient_intensity);
+    glUniform1f(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.diffuse_intensity"),
+        sun.diffuse_intensity);
+
+    point_light lights[] = {
+        {
+            {-5.0f, -3.0f, -12.0f},
+            {1.0f, 0.0f, 0.0f},
+            0.0f,
+            1.0f,
+            { 0.0f, 0.0f, 0.03f },
+        },
+        {
+            {8.0f, -3.0f, -8.0f},
+            {0.0f, 0.0f, 1.0f},
+            0.0f,
+            1.0f,
+            { 0.0f, 0.0f, 0.03f },
+        },
+    };
+    uint32_t num_point_lights = harray_count(lights);
+    for (uint32_t idx = 0; idx < num_point_lights; ++idx)
+    {
+        point_light *l = lights + idx;
+        uint32_t program = state->program_c.program;
+        char un[100];
+        sprintf(un, "u_point_lights[%d].position", idx);
+        glUniform3fv(
+            glGetUniformLocation(program, un), 1,
+            (float *)&l->position);
+        sprintf(un, "u_point_lights[%d].color", idx);
+        glUniform3fv(
+            glGetUniformLocation(program, un), 1,
+            (float *)&l->color);
+        sprintf(un, "u_point_lights[%d].ambient_intensity", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->ambient_intensity);
+        sprintf(un, "u_point_lights[%d].diffuse_intensity", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->diffuse_intensity);
+        sprintf(un, "u_point_lights[%d].attenuation.constant", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->attenuation.constant);
+        sprintf(un, "u_point_lights[%d].attenuation.linear", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->attenuation.linear);
+        sprintf(un, "u_point_lights[%d].attenuation.exponential", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->attenuation.exponential);
+    }
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "u_num_point_lights"),
+        (GLint)num_point_lights);
 
     uint32_t last_vertex = 0;
     for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)

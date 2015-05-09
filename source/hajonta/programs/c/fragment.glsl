@@ -9,6 +9,7 @@ in vec4 v_c_vertexNormal;
 in vec4 v_c_vertexTangent;
 in vec4 v_c_eyeDirection;
 in vec4 v_c_lightDirection;
+in vec4 v_c_lightPosition;
 
 out vec4 o_color;
 
@@ -16,6 +17,8 @@ uniform sampler2D tex;
 uniform sampler2D normal_texture;
 uniform sampler2D ao_texture;
 uniform sampler2D emit_texture;
+uniform float specular_intensity = 0.01;
+uniform float specular_power = 2.0;
 
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
@@ -24,6 +27,34 @@ uniform mat4 u_model;
 uniform mat4 u_view;
 
 uniform bool DONOTRUN = false;
+
+struct DirectionalLight
+{
+    vec3 direction;
+    vec3 color;
+    float ambient_intensity;
+    float diffuse_intensity;
+};
+
+struct Attenuation
+{
+    float constant;
+    float linear;
+    float exponential;
+};
+
+struct PointLight
+{
+    vec3 position;
+    vec3 color;
+    float ambient_intensity;
+    float diffuse_intensity;
+    Attenuation attenuation;
+};
+
+uniform DirectionalLight u_directional_light;
+uniform PointLight u_point_lights[8];
+uniform int u_num_point_lights = 0;
 
 struct ShaderConfig
 {
@@ -69,44 +100,77 @@ vec3 get_normal(ShaderConfig config)
     return normal;
 }
 
+vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
+{
+    float cosTheta = clamp(dot(n, l.direction), 0, 1);
+
+    vec4 ambient_color = vec4(l.color, 1) * l.ambient_intensity;
+    vec4 diffuse_color = vec4(0);
+    vec4 specular_color = vec4(0);
+
+    if (cosTheta > 0)
+    {
+        diffuse_color = vec4(l.color, 1) * l.diffuse_intensity * cosTheta;
+
+        vec3 E = normalize(v_c_eyeDirection.xyz);
+        vec3 R = reflect(-l.direction, n);
+        float cosAlpha = clamp(dot(E, R), 0, 1);
+
+        if (cosAlpha > 0)
+        {
+            specular_color = vec4(l.color, 1) * specular_intensity * pow(cosAlpha, specular_power);
+        }
+    }
+
+    if (!ignore_ao_texture(config) && enabled(ao_texture))
+    {
+        ambient_color *= max(0, texture(ao_texture, v_tex_coord).r);
+    }
+
+    return ambient_color + diffuse_color + specular_color;
+}
+
+vec4 apply_attenuation(vec4 light, Attenuation a, float distance)
+{
+    return light / (
+        a.constant +
+        a.linear * distance +
+        a.exponential * distance * distance
+        );
+}
+
+vec4 point_light_contribution(ShaderConfig config, PointLight p, vec3 n, float distance)
+{
+    vec3 lightDirection = p.position + v_c_eyeDirection.xyz;
+
+    DirectionalLight dl;
+    dl.direction = (u_view * vec4(lightDirection, 1.0)).xyz;
+    dl.color = p.color;
+    dl.ambient_intensity = p.ambient_intensity;
+    dl.diffuse_intensity = p.diffuse_intensity;
+    vec4 light = light_contribution(config, dl, n);
+
+    return apply_attenuation(light, p.attenuation, distance);
+}
+
 vec4 blinn_phong_shading(ShaderConfig config)
 {
     vec4 o_color = texture(tex, v_tex_coord);
 
-    vec4 lightDirection = v_c_lightDirection;
-
-    vec3 light_color = vec3(1.0f, 1.0f, 0.9f);
-    float light_power = 70.0f;
-
     vec3 normal = get_normal(config);
 
-    vec3 material_diffuse_color = o_color.rgb;
-    vec3 material_ambient_color = material_diffuse_color * 0.3;
-    vec3 material_specular_color = vec3(0.01, 0.01, 0.01);
     float distance = length(u_w_lightPosition - v_w_vertexPosition);
-    vec3 n = normalize(normal);
-    vec3 l = normalize(lightDirection.xyz);
-    float cosTheta = clamp(dot(n, l), 0, 1);
-    vec3 E = normalize(v_c_eyeDirection.xyz);
-    vec3 R = reflect(-l, n);
-    float cosAlpha = clamp(dot(E, R), 0, 1);
 
-    vec3 ambient_component = material_ambient_color;
-    vec3 diffuse_component = material_diffuse_color *
-        light_color * light_power * cosTheta /
-        (distance*distance);
-    vec3 specular_component = material_specular_color *
-        light_color * light_power * pow(cosAlpha,5) /
-        (distance*distance);
+    vec4 light = vec4(0);
+    light += light_contribution(config, u_directional_light, normal);
 
-    if (!ignore_ao_texture(config) && enabled(ao_texture))
+    for (int i = 0; i < u_num_point_lights; ++i)
     {
-        ambient_component *= max(0, texture(ao_texture, v_tex_coord).r);
+        light += point_light_contribution(config, u_point_lights[i], normal, distance);
     }
 
-    o_color = vec4(
-        ambient_component + diffuse_component + specular_component,
-        1);
+    light.w = 1.0;
+    o_color *= light;
 
     if (!ignore_emit_texture(config) && enabled(emit_texture))
     {
