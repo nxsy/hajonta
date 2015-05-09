@@ -16,13 +16,15 @@ uniform mat4 u_projection;
 uniform vec4 u_w_lightPosition;
 
 in vec4 a_pos;
-in int a_material_id;
 in vec4 a_normal;
 in vec4 a_tangent;
+in vec2 a_tex_coord;
+in int a_material_id;
 
-flat out int v_material_id;
 out vec4 v_normal;
 out vec4 v_tangent;
+out vec2 v_tex_coord;
+flat out int v_material_id;
 
 out vec4 v_w_vertexPosition;
 out vec4 v_c_vertexNormal;
@@ -33,6 +35,7 @@ void main (void)
 {
     v_material_id = a_material_id;
     v_normal = a_normal;
+    v_tex_coord = a_tex_coord;
 
     gl_Position = u_projection * u_view * u_model * a_pos;
     v_tangent = u_model * a_tangent;
