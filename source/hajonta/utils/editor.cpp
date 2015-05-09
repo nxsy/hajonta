@@ -112,7 +112,7 @@ struct face
 struct editor_vertex_indices
 {
     material *current_material;
-    editor_vertex_format_c *final_vertex;
+    uint32_t final_vertex_id;
 };
 
 struct kenpixel_future_14
@@ -227,6 +227,9 @@ struct game_state
     uint32_t num_line_elements;
     editor_vertex_format_c vbo_vertices[300000];
     uint32_t num_vbo_vertices;
+
+    editor_vertex_indices material_indices[100];
+    uint32_t num_material_indices;
 
     b_program_struct program_b;
     ui2d_program_struct program_ui2d;
@@ -1740,18 +1743,31 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 GL_STATIC_DRAW);
         glErrorAssert();
 
+        material *last_material = 0;
         for (uint32_t face_idx = 0;
                 face_idx < state->num_faces;
                 ++face_idx)
         {
+            face *f = state->faces + face_idx;
+            if (f->current_material != last_material) {
+                if (last_material)
+                {
+                    state->material_indices[state->num_material_indices++] =
+                    {
+                        last_material,
+                        3 * face_idx,
+                    };
+                }
+                last_material = f->current_material;
+            }
+            v3 *face_v1 = state->vertices + (f->indices[0].vertex - 1);
+            v3 *face_v2 = state->vertices + (f->indices[1].vertex - 1);
+            v3 *face_v3 = state->vertices + (f->indices[2].vertex - 1);
+
             state->num_vbo_vertices += 3;
             editor_vertex_format_c *vbo_v1 = state->vbo_vertices + (3 * face_idx);
             editor_vertex_format_c *vbo_v2 = vbo_v1 + 1;
             editor_vertex_format_c *vbo_v3 = vbo_v2 + 1;
-            face *f = state->faces + face_idx;
-            v3 *face_v1 = state->vertices + (f->indices[0].vertex - 1);
-            v3 *face_v2 = state->vertices + (f->indices[1].vertex - 1);
-            v3 *face_v3 = state->vertices + (f->indices[2].vertex - 1);
 
             triangle3 t = {
                 {face_v1->x, face_v1->y, face_v1->z},
@@ -1889,6 +1905,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v3->tex_coord.x = face_vt3->x;
             vbo_v3->tex_coord.y = 1 - face_vt3->y;
         }
+
+        state->material_indices[state->num_material_indices++] =
+        {
+            last_material,
+            state->num_vbo_vertices,
+        };
 
         glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
         glErrorAssert();
@@ -2080,16 +2102,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
 
     glUseProgram(state->program_c.program);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, state->texture_ids[0]);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, state->texture_ids[1]);
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "tex"),
-        0);
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "normal_texture"),
-        1);
     setup_vertex_attrib_array_c(state);
     v4 light_position = {-5.0f, -3.0f, -12.0f, 1.0f};
     glUniform4fv(state->program_c.u_w_lightPosition_id, 1, (float *)&light_position);
@@ -2100,7 +2112,42 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
     glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&u_projection);
 
-    glDrawElements(GL_TRIANGLES, (GLsizei)state->num_faces_array, GL_UNSIGNED_INT, 0);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "tex"),
+        0);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "normal_texture"),
+        1);
+
+    uint32_t last_vertex = 0;
+    for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)
+    {
+        editor_vertex_indices *i = state->material_indices + idx;
+
+        glActiveTexture(GL_TEXTURE0);
+        if (i->current_material->texture_offset >= 0)
+        {
+            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->texture_offset]);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glActiveTexture(GL_TEXTURE1);
+        if (i->current_material->bump_texture_offset >= 0)
+        {
+            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->bump_texture_offset]);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glDrawElements(GL_TRIANGLES, (i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
+        last_vertex = i->final_vertex_id;
+    }
+
     glErrorAssert();
 
     glUseProgram(state->program_b.program);

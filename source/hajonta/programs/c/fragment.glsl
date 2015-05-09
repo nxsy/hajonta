@@ -43,7 +43,7 @@ bool use_emit_texture(ShaderConfig config)
 bool enabled(in sampler2D texture)
 {
     ivec2 size = textureSize(texture, 0);
-    return (size.x > 0);
+    return (size.x > 1);
 }
 
 void main(void)
