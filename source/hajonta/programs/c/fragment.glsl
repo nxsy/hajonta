@@ -18,6 +18,8 @@ uniform vec4 u_w_lightPosition;
 uniform mat4 u_model;
 uniform mat4 u_view;
 
+uniform bool DONOTRUN = false;
+
 struct ShaderConfig
 {
     int config;
@@ -56,6 +58,10 @@ void main(void)
     if (enabled(normal_texture))
     {
         o_color = normal;
+    }
+    else if (DONOTRUN)
+    {
+        o_color = u_w_lightPosition;
     }
 
     return;

@@ -340,7 +340,7 @@ main(int argc, char **argv)
     state->%s_id = glGetUniformLocation(state->program, "%s");
     if (state->%s_id < 0) {
         char info_log[1024];
-        sprintf(info_log, "Could not locate %s uniform - glGetUniformLocation returned %%d", state->%s_id);
+        sprintf(info_log, PROGRAM_NAME ": Could not locate %s uniform - glGetUniformLocation returned %%d", state->%s_id);
         memory->platform_fail(ctx, info_log);
         return false;
     }
@@ -356,7 +356,7 @@ main(int argc, char **argv)
         sprintf(attrib_location_string, R"EOF(
     state->%s_id = glGetAttribLocation(state->program, "%s");
     if (state->%s_id < 0) {
-        char info_log[] = "Could not locate %s attribute";
+        char info_log[] = PROGRAM_NAME ": Could not locate %s attribute";
         memory->platform_fail(ctx, info_log);
         return false;
     }

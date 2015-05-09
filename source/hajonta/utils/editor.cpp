@@ -2134,7 +2134,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             glBindTexture(GL_TEXTURE_2D, 0);
         }
 
-        glActiveTexture(GL_TEXTURE1);
+        glActiveTexture(GL_TEXTURE0 + 1);
         if (i->current_material->bump_texture_offset >= 0)
         {
             glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->bump_texture_offset]);
@@ -2144,7 +2144,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             glBindTexture(GL_TEXTURE_2D, 0);
         }
 
-        glDrawElements(GL_TRIANGLES, (i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
+        glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
         last_vertex = i->final_vertex_id;
     }
 
