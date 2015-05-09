@@ -181,6 +181,21 @@ struct skybox_data
     float y_rotation;
 };
 
+enum struct shader_config_flags {
+    ignore_normal_texture = (1<<0),
+    ignore_ao_texture = (1<<1),
+    ignore_emit_texture = (1<<2),
+};
+
+enum struct shader_mode {
+    standard,
+    diffuse_texture,
+    normal_texture,
+    ao_texture,
+    emit_texture,
+    blinn_phong,
+};
+
 struct game_state
 {
     uint32_t vao;
@@ -242,8 +257,8 @@ struct game_state
     char bitmap_scratch[4096 * 4096 * 4];
 
     bool hide_lines;
-    int model_mode;
-    int shading_mode;
+    int shader_mode;
+    int shader_config_flags;
 
     int x_rotation_correction;
     int z_rotation_correction;
@@ -266,6 +281,7 @@ struct game_state
     kenney_ui_data kenney_ui;
     skybox_data skybox;
 };
+
 
 void load_fonts(hajonta_thread_context *ctx, platform_memory *memory)
 {
@@ -1943,14 +1959,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->hide_lines ^= true;
         }
-        if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
-        {
-            state->model_mode = (state->model_mode + 1) % 9;
-        }
-        if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
-        {
-            state->shading_mode = (state->shading_mode + 1) % 5;
-        }
         if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
             state->x_rotation_correction = (state->x_rotation_correction + 1) % 4;
@@ -2102,6 +2110,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
 
     glUseProgram(state->program_c.program);
+    glUniform1i(state->program_c.u_shader_mode_id, state->shader_mode);
     setup_vertex_attrib_array_c(state);
     v4 light_position = {-5.0f, -3.0f, -12.0f, 1.0f};
     glUniform4fv(state->program_c.u_w_lightPosition_id, 1, (float *)&light_position);
@@ -2118,6 +2127,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniform1i(
         glGetUniformLocation(state->program_c.program, "normal_texture"),
         1);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "ao_texture"),
+        2);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "emit_texture"),
+        3);
 
     uint32_t last_vertex = 0;
     for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)
@@ -2144,6 +2159,26 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             glBindTexture(GL_TEXTURE_2D, 0);
         }
 
+        glActiveTexture(GL_TEXTURE0 + 2);
+        if (i->current_material->ao_texture_offset >= 0)
+        {
+            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->ao_texture_offset]);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glActiveTexture(GL_TEXTURE0 + 3);
+        if (i->current_material->emit_texture_offset >= 0)
+        {
+            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->emit_texture_offset]);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
         glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
         last_vertex = i->final_vertex_id;
     }
@@ -2151,6 +2186,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glErrorAssert();
 
     glUseProgram(state->program_b.program);
+    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_projection);
+    glUniform4fv(state->program_b.u_w_lightPosition_id, 1, (float *)&light_position);
+    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
+    glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
+
     m4 u_mvp_enabled;
     if (!state->hide_lines)
     {
@@ -2188,118 +2228,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glPrimitiveRestartIndex(65535);
         glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
         glErrorAssert();
-    }
-
-    {
-
-        memset(state->debug_buffer, 0, sizeof(state->debug_buffer));
-        char msg[1024] = {};
-        sprintf(msg + strlen(msg), "MODEL MODE:...");
-        switch (state->model_mode)
-        {
-            case 0:
-            {
-                sprintf(msg + strlen(msg), "STD");
-            } break;
-            case 1:
-            {
-                sprintf(msg + strlen(msg), "DISCARD");
-            } break;
-            case 2:
-            {
-                sprintf(msg + strlen(msg), "NORMAL");
-            } break;
-            case 3:
-            {
-                sprintf(msg + strlen(msg), "LIGHT.REFLECT");
-            } break;
-            case 4:
-            {
-                sprintf(msg + strlen(msg), "BUMP.MAP");
-            } break;
-            case 5:
-            {
-                sprintf(msg + strlen(msg), "BUMP.NORMAL");
-            } break;
-            case 6:
-            {
-                sprintf(msg + strlen(msg), "NORMAL.CAMERA");
-            } break;
-            case 7:
-            {
-                sprintf(msg + strlen(msg), "EMIT");
-            } break;
-            case 8:
-            {
-                sprintf(msg + strlen(msg), "AMBIENT.OCCLUSION");
-            } break;
-            default:
-            {
-                sprintf(msg + strlen(msg), "UNKNOWN");
-            } break;
-        }
-        sprintf(msg + strlen(msg), "...");
-
-        sprintf(msg + strlen(msg), "SHADING MODE...");
-        switch (state->shading_mode)
-        {
-            case 0:
-            {
-                sprintf(msg + strlen(msg), "DIFFUSE");
-            } break;
-            case 1:
-            {
-                sprintf(msg + strlen(msg), "LIGHTING.NOBUMP");
-            } break;
-            case 2:
-            {
-                sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP");
-            } break;
-            case 3:
-            {
-                sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP.EMIT");
-            } break;
-            case 4:
-            {
-                sprintf(msg + strlen(msg), "LIGHTING.WITHBUMP.EMIT.AO");
-            } break;
-            default:
-            {
-                sprintf(msg + strlen(msg), "UNKNOWN");
-            } break;
-        }
-        sprintf(msg + strlen(msg), "...");
-        sprintf(msg + strlen(msg), "%d x %d", input->window.width, input->window.height);
-        sprintf(msg + strlen(msg), "(%0.4f)", ratio);
-        write_to_buffer(&state->debug_draw_buffer, &state->debug_font.font, msg);
-
-        glDisable(GL_DEPTH_TEST);
-        glDepthFunc(GL_ALWAYS);
-        glUniform1i(state->program_b.u_model_mode_id, 0);
-        glUniform1i(state->program_b.u_shading_mode_id, 0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
-        setup_vertex_attrib_array_b(state);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);
-        glUniform1i(
-            glGetUniformLocation(state->program_b.program, "tex"),
-            0);
-        glTexSubImage2D(GL_TEXTURE_2D,
-            0,
-            0,
-            0,
-            (GLsizei)debug_buffer_width,
-            (GLsizei)debug_buffer_height,
-            GL_RGBA,
-            GL_UNSIGNED_BYTE,
-            state->debug_buffer);
-        u_mvp_enabled = {0.0f, 0.0f, 0.0f, 0.0f};
-        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-        v2 position = {0, 0};
-        glUniform2fv(state->program_b.u_offset_id, 1, (float *)&position);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
     }
 
     {
@@ -2374,24 +2302,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         float x = 38;
-        char *model_mode_names[] =
+        char *shader_mode_names[] =
         {
             "standard",
-            "discard",
-            "vertex normals",
-            "reflection",
-            "normal map",
-            "mapped normals",
-            "camera normals",
-            "emission",
-            "occlusion",
+            "diffuse tex",
+            "normal tex",
+            "ao tex",
+            "emit tex",
+            "blinn phong",
         };
-        for (int32_t idx = 0; idx < harray_count(model_mode_names); ++idx)
+        for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
         {
-            char *text = model_mode_names[idx];
+            char *text = shader_mode_names[idx];
             float y = input->window.height - 53.0f;
 
-            if (state->model_mode == idx)
+            if (state->shader_mode == idx)
             {
                 push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, 50});
             }
@@ -2406,7 +2331,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 rectangle2 r = {{x,53},{16,16}};
                 if (point_in_rectangle(m, r))
                 {
-                    state->model_mode = idx;
+                    state->shader_mode = idx;
                 }
             }
 
@@ -2421,20 +2346,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
 
             x += 10;
-        }
-
-        {
-            stbtt_aligned_quad q = {};
-            q.x0 = (float)input->mouse.x;
-            q.x1 = (float)input->mouse.x + 16;
-
-            q.y0 = (float)(input->window.height - input->mouse.y);
-            q.y1 = (float)(input->window.height - input->mouse.y) - 16;
-            q.s0 = 0;
-            q.s1 = 1;
-            q.t0 = 0;
-            q.t1 = 1;
-            push_quad(&pushctx, q, state->mouse_texture, 0);
         }
 
         push_window(state, &pushctx, 34, 140, 4, 3);
@@ -2470,6 +2381,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
+        // Mouse should be last
+        {
+            stbtt_aligned_quad q = {};
+            q.x0 = (float)input->mouse.x;
+            q.x1 = (float)input->mouse.x + 16;
+
+            q.y0 = (float)(input->window.height - input->mouse.y);
+            q.y1 = (float)(input->window.height - input->mouse.y) - 16;
+            q.s0 = 0;
+            q.s1 = 1;
+            q.t0 = 0;
+            q.t1 = 1;
+            push_quad(&pushctx, q, state->mouse_texture, 0);
+        }
         ui2d_render_elements(state, &pushctx);
     }
 

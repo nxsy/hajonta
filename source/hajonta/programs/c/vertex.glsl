@@ -14,6 +14,8 @@ uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
 uniform vec4 u_w_lightPosition;
+uniform int u_shader_mode;
+uniform int u_shader_config_flags;
 
 in vec4 a_pos;
 in vec4 a_normal;
@@ -26,6 +28,7 @@ out vec2 v_tex_coord;
 
 out vec4 v_w_vertexPosition;
 out vec4 v_c_vertexNormal;
+out vec4 v_c_vertexTangent;
 out vec4 v_c_eyeDirection;
 out vec4 v_c_lightDirection;
 
@@ -44,5 +47,6 @@ void main (void)
     vec4 c_lightPosition = u_view * u_w_lightPosition;
 
     v_c_lightDirection = c_lightPosition + v_c_eyeDirection;
-    v_c_vertexNormal = normalize(u_view * inverse(transpose(u_model)) * a_normal);
+    v_c_vertexNormal = u_view * inverse(transpose(u_model)) * a_normal;
+    v_c_vertexTangent = u_view * inverse(transpose(u_model)) * a_tangent;
 }
