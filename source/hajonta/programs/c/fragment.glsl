@@ -8,8 +8,6 @@ in vec4 v_w_vertexPosition;
 in vec4 v_c_vertexNormal;
 in vec4 v_c_vertexTangent;
 in vec4 v_c_eyeDirection;
-in vec4 v_c_lightDirection;
-in vec4 v_c_lightPosition;
 
 out vec4 o_color;
 
