@@ -194,8 +194,6 @@ struct skybox_data
     uint32_t tex;
     uint32_t vbo;
     uint32_t ibo;
-
-    float y_rotation;
 };
 
 enum struct shader_config_flags {
@@ -219,7 +217,6 @@ struct game_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t line_ibo;
-    int32_t sampler_ids[16];
     uint32_t texture_ids[20];
     uint32_t num_texture_ids;
     uint32_t aabb_cube_vbo;
@@ -237,27 +234,24 @@ struct game_state
     loaded_file model_file;
     loaded_file mtl_file;
 
-    char *objfile;
-    uint32_t objfile_size;
-
-    v3 vertices[100000];
     uint32_t num_vertices;
-    v3 texture_coords[100000];
+    v3 vertices[100000];
     uint32_t num_texture_coords;
-    v3 normals[100000];
+    v3 texture_coords[100000];
     uint32_t num_normals;
-    face faces[100000];
+    v3 normals[100000];
     uint32_t num_faces;
+    face faces[100000];
 
-    material materials[15];
     uint32_t num_materials;
+    material materials[15];
 
-    uint32_t faces_array[300000];
     uint32_t num_faces_array;
-    uint32_t line_elements[600000];
+    uint32_t faces_array[300000];
     uint32_t num_line_elements;
-    editor_vertex_format_c vbo_vertices[300000];
+    uint32_t line_elements[600000];
     uint32_t num_vbo_vertices;
+    editor_vertex_format_c vbo_vertices[300000];
 
     editor_vertex_indices material_indices[100];
     uint32_t num_material_indices;
@@ -1401,23 +1395,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         glErrorAssert();
-        state->sampler_ids[0] = glGetUniformLocation(state->program_b.program, "tex");
-        state->sampler_ids[1] = glGetUniformLocation(state->program_b.program, "tex1");
-        state->sampler_ids[2] = glGetUniformLocation(state->program_b.program, "tex2");
-        state->sampler_ids[3] = glGetUniformLocation(state->program_b.program, "tex3");
-        state->sampler_ids[4] = glGetUniformLocation(state->program_b.program, "tex4");
-        state->sampler_ids[5] = glGetUniformLocation(state->program_b.program, "tex5");
-        state->sampler_ids[6] = glGetUniformLocation(state->program_b.program, "tex6");
-        state->sampler_ids[7] = glGetUniformLocation(state->program_b.program, "tex7");
-        state->sampler_ids[8] = glGetUniformLocation(state->program_b.program, "tex8");
-        state->sampler_ids[9] = glGetUniformLocation(state->program_b.program, "tex9");
-        state->sampler_ids[10] = glGetUniformLocation(state->program_b.program, "tex10");
-        state->sampler_ids[11] = glGetUniformLocation(state->program_b.program, "tex11");
-        state->sampler_ids[12] = glGetUniformLocation(state->program_b.program, "tex12");
-        state->sampler_ids[13] = glGetUniformLocation(state->program_b.program, "tex13");
-        state->sampler_ids[14] = glGetUniformLocation(state->program_b.program, "tex14");
-        state->sampler_ids[15] = glGetUniformLocation(state->program_b.program, "tex15");
-        glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
         {
@@ -1987,23 +1964,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     state->delta_t += input->delta_t;
 
-    glUseProgram(state->program_b.program);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
 
     glErrorAssert();
-
-    setup_vertex_attrib_array_b(state);
-
-    for (uint32_t idx = 0;
-            idx < state->num_texture_ids;
-            ++idx)
-    {
-        glUniform1i(state->sampler_ids[idx], (GLint)idx);
-        glActiveTexture(GL_TEXTURE0 + idx);
-        glErrorAssert();
-        glBindTexture(GL_TEXTURE_2D, state->texture_ids[idx]);
-        glErrorAssert();
-    }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
     glErrorAssert();
