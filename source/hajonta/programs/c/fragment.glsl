@@ -189,7 +189,9 @@ vec4 standard_shading(ShaderConfig config)
 
 void main(void)
 {
-    ShaderConfig config = { u_shader_mode, u_shader_config_flags };
+    ShaderConfig config;
+    config.mode = u_shader_mode;
+    config.config = u_shader_config_flags;
     switch (config.mode)
     {
         case 0:

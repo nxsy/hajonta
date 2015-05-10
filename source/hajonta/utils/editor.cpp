@@ -139,13 +139,6 @@ struct editor_vertex_indices
     uint32_t final_vertex_id;
 };
 
-struct kenpixel_future_14
-{
-    uint8_t zfi[5159];
-    uint8_t bmp[131210];
-    font_data font;
-};
-
 struct stb_font_data
 {
     stbtt_packedchar chardata[128];
@@ -233,7 +226,6 @@ struct game_state
     uint32_t aabb_cube_ibo;
     uint32_t bounding_sphere_vbo;
     uint32_t bounding_sphere_ibo;
-    uint32_t mouse_vbo;
     uint32_t mouse_texture;
 
     uint32_t num_bounding_sphere_elements;
@@ -290,16 +282,6 @@ struct game_state
     float x_rotation;
     float y_rotation;
     float z_rotation;
-
-    uint8_t mouse_bitmap[4096];
-
-    uint32_t debug_texture_id;
-    uint32_t debug_vbo;
-    kenpixel_future_14 debug_font;
-    draw_buffer debug_draw_buffer;
-#define debug_buffer_width 960
-#define debug_buffer_height 14
-    uint8_t debug_buffer[4 * debug_buffer_width * debug_buffer_height];
 
     stb_font_data stb_font;
     kenney_ui_data kenney_ui;
@@ -1347,35 +1329,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glGenBuffers(1, &state->bounding_sphere_ibo);
         glErrorAssert();
         glGenTextures(harray_count(state->texture_ids), state->texture_ids);
-        glGenBuffers(1, &state->mouse_vbo);
         glGenTextures(1, &state->mouse_texture);
-
-        {
-            if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.zfi", sizeof(state->debug_font.zfi), state->debug_font.zfi))
-            {
-                memory->platform_fail(ctx, "Failed to open zfi file");
-                return;
-            }
-            if (!memory->platform_load_asset(ctx, "fonts/kenpixel_future/kenpixel_future_regular_14.bmp", sizeof(state->debug_font.bmp), state->debug_font.bmp))
-            {
-                memory->platform_fail(ctx, "Failed to open bmp file");
-                return;
-            }
-            load_font(state->debug_font.zfi, state->debug_font.bmp, &state->debug_font.font, ctx, memory);
-
-            state->debug_draw_buffer.memory = state->debug_buffer;
-            state->debug_draw_buffer.width = debug_buffer_width;
-            state->debug_draw_buffer.height = debug_buffer_height;
-            state->debug_draw_buffer.pitch = 4 * debug_buffer_width;
-
-            glGenBuffers(1, &state->debug_vbo);
-            glGenTextures(1, &state->debug_texture_id);
-            glBindTexture(GL_TEXTURE_2D, state->debug_texture_id);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                debug_buffer_width, debug_buffer_height, 0,
-                GL_RGBA, GL_UNSIGNED_BYTE, state->debug_buffer);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        }
 
         {
             uint8_t image[256];
@@ -2006,45 +1960,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->hide_lines ^= true;
         }
-    }
-
-    {
-        glBindBuffer(GL_ARRAY_BUFFER, state->debug_vbo);
-        float height = (float)debug_buffer_height / ((float)input->window.height / 2.0f);
-        float top = -(1-height);
-        float width = (float)debug_buffer_width / ((float)input->window.width / 2.0f);
-        float left = 1 - width;
-        editor_vertex_format_b font_vertices[4] = {
-            {
-                {
-                    {left, top, 0.0, 1.0},
-                    { 0.0, 1.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-            {
-                {
-                    { 1.0, top, 0.0, 1.0},
-                    { 1.0, 1.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-            {
-                {
-                    { 1.0,-1.0, 0.0, 1.0},
-                    {1.0, 0.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-            {
-                {
-                    {left,-1.0, 0.0, 1.0},
-                    {0.0, 0.0, 1.0, 1.0},
-                },
-                {2.0, 0.0, 0.0, 0.0},
-            },
-        };
-        glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
     }
 
     glErrorAssert();
