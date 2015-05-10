@@ -15,8 +15,8 @@ uniform sampler2D tex;
 uniform sampler2D normal_texture;
 uniform sampler2D ao_texture;
 uniform sampler2D emit_texture;
-uniform float specular_intensity = 0.01;
-uniform float specular_power = 2.0;
+uniform sampler2D specular_exponent_texture;
+uniform float u_specular_exponent = 32;
 
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
@@ -75,6 +75,11 @@ bool ignore_emit_texture(ShaderConfig config)
     return (config.config & 4) == 4;
 }
 
+bool ignore_specular_exponent_texture(ShaderConfig config)
+{
+    return (config.config & 8) == 8;
+}
+
 bool enabled(in sampler2D texture)
 {
     ivec2 size = textureSize(texture, 0);
@@ -98,6 +103,13 @@ vec3 get_normal(ShaderConfig config)
     return normal;
 }
 
+float blinn_phong_specular_component(vec3 light_direction, vec3 eye_direction, vec3 normal, float shininess)
+{
+  vec3 half_dir = normalize(eye_direction + light_direction);
+
+  return pow(max(0.0, dot(normal, half_dir)), shininess);
+}
+
 vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
 {
     float cosTheta = clamp(dot(n, l.direction), 0, 1);
@@ -110,14 +122,14 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
     {
         diffuse_color = vec4(l.color, 1) * l.diffuse_intensity * cosTheta;
 
-        vec3 E = normalize(v_c_eyeDirection.xyz);
-        vec3 R = reflect(-l.direction, n);
-        float cosAlpha = clamp(dot(E, R), 0, 1);
-
-        if (cosAlpha > 0)
+        float shininess = u_specular_exponent;
+        if (!ignore_specular_exponent_texture(config) && enabled(specular_exponent_texture))
         {
-            specular_color = vec4(l.color, 1) * specular_intensity * pow(cosAlpha, specular_power);
+            shininess = texture(specular_exponent_texture, v_tex_coord).r * 255.0;
         }
+
+        float specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+        specular_color = vec4(vec3(1) * specular_component, 1);
     }
 
     if (!ignore_ao_texture(config) && enabled(ao_texture))
@@ -215,6 +227,10 @@ void main(void)
         case 5:
         {
             o_color = blinn_phong_shading(config);
+        } break;
+        case 6:
+        {
+            o_color = texture(specular_exponent_texture, v_tex_coord);
         } break;
     }
 }

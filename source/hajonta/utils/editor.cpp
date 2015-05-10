@@ -125,6 +125,7 @@ struct material
     int32_t bump_texture_offset;
     int32_t emit_texture_offset;
     int32_t ao_texture_offset;
+    int32_t specular_exponent_texture_offset;
 };
 
 struct face
@@ -200,6 +201,7 @@ enum struct shader_config_flags {
     ignore_normal_texture = (1<<0),
     ignore_ao_texture = (1<<1),
     ignore_emit_texture = (1<<2),
+    ignore_specular_exponent_texture = (1<<3),
 };
 
 enum struct shader_mode {
@@ -209,6 +211,7 @@ enum struct shader_mode {
     ao_texture,
     emit_texture,
     blinn_phong,
+    specular_exponent_texture,
 };
 
 struct game_state
@@ -438,6 +441,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             current_material->bump_texture_offset = -1;
             current_material->emit_texture_offset = -1;
             current_material->ao_texture_offset = -1;
+            current_material->specular_exponent_texture_offset = -1;
         }
         else if (starts_with(line, "Ns "))
         {
@@ -605,6 +609,32 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         }
         else if (starts_with(line, "map_Ns "))
         {
+            char *filename = line + sizeof("map_Ns ") - 1;
+            hassert(strlen(filename) > 0);
+            if (filename[0] == '.')
+            {
+
+            }
+            else
+            {
+                loaded_file texture;
+                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+                hassert(loaded);
+                int32_t x, y, size;
+                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+                hassert(loaded);
+
+                current_material->specular_exponent_texture_offset = (int32_t)(state->num_texture_ids++);
+                glErrorAssert();
+                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->specular_exponent_texture_offset]);
+                glErrorAssert();
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                    x, y, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+                glErrorAssert();
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glErrorAssert();
+            }
         }
         else if (starts_with(line, "Km "))
         {
@@ -1254,6 +1284,122 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_dat
 }
 
 void
+draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    float x = 38;
+    float y_base = 12;
+    push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 51, 2);
+    char *shader_mode_names[] =
+    {
+        "standard",
+        "diffuse tex",
+        "normal tex",
+        "ao tex",
+        "emit tex",
+        "blinn phong",
+        "spec. exp.",
+    };
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
+    {
+        char *text = shader_mode_names[idx];
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (state->shader_mode == idx)
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+        else
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                state->shader_mode = idx;
+            }
+        }
+
+        x += 22;
+
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        x += 10;
+    }
+}
+
+void
+draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    float x = 38;
+    float y_base = 50;
+    push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 51, 2);
+    char *shader_config_names[] =
+    {
+        "diffuse tex",
+        "normal tex",
+        "ao tex",
+        "emit tex",
+        "spec. exp.",
+    };
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+
+    for (int32_t idx = 0; idx < harray_count(shader_config_names); ++idx)
+    {
+        char *text = shader_config_names[idx];
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (idx > 0)
+        {
+            if (state->shader_config_flags & (1<<(idx-1)))
+            {
+                push_sprite(pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+            }
+            else
+            {
+                push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+            }
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                state->shader_config_flags ^= (1<<(idx-1));
+            }
+        }
+
+        x += 22;
+
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        x += 10;
+    }
+}
+
+void
 draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_data *skybox, m4 u_model, m4 u_view, m4 u_projection)
 {
     glErrorAssert();
@@ -1411,6 +1557,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         null_material.bump_texture_offset = -1;
         null_material.emit_texture_offset = -1;
         null_material.ao_texture_offset = -1;
+        null_material.specular_exponent_texture_offset = -1;
         material *current_material = &null_material;
         while (position < eof)
         {
@@ -2013,6 +2160,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     glUseProgram(state->program_c.program);
     glUniform1i(state->program_c.u_shader_mode_id, state->shader_mode);
+    glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config_flags);
     setup_vertex_attrib_array_c(state);
     v4 light_position = {-5.0f, -3.0f, -12.0f, 1.0f};
     glUniform4fv(state->program_c.u_w_lightPosition_id, 1, (float *)&light_position);
@@ -2035,11 +2183,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniform1i(
         glGetUniformLocation(state->program_c.program, "emit_texture"),
         3);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "specular_exponent_texture"),
+        4);
 
     directional_light sun = {
         {0.0f, 1.0f, 0.0f},
-        {1.0f, 1.0f, 0.9f},
-        0.3f,
+        {0.9f, 0.8f, 0.7f},
+        0.4f,
         1.0f,
     };
 
@@ -2059,17 +2210,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     point_light lights[] = {
         {
             {-5.0f, -3.0f, -12.0f},
-            {1.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 0.9f},
             0.0f,
             1.0f,
             { 0.0f, 0.0f, 0.03f },
         },
         {
             {8.0f, -3.0f, -8.0f},
-            {0.0f, 0.0f, 1.0f},
+            {0.9f, 0.9f, 1.0f},
             0.0f,
             1.0f,
-            { 0.0f, 0.0f, 0.03f },
+            { 0.0f, 0.0f, 0.05f },
         },
     };
     uint32_t num_point_lights = harray_count(lights);
@@ -2150,6 +2301,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         if (i->current_material->emit_texture_offset >= 0)
         {
             glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->emit_texture_offset]);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glActiveTexture(GL_TEXTURE0 + 4);
+        if (i->current_material->specular_exponent_texture_offset >= 0)
+        {
+            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->specular_exponent_texture_offset]);
         }
         else
         {
@@ -2242,7 +2403,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
         ui2d_push_context pushctx = {};
-        ui2d_vertex_format vertices[1000];
+        ui2d_vertex_format vertices[2000];
         uint32_t elements[harray_count(vertices) / 4 * 6];
         uint32_t textures[10];
         pushctx.vertices = vertices;
@@ -2253,7 +2414,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         pushctx.max_textures = harray_count(textures);
 
         push_window(state, &pushctx, 34, 92, 6, 2);
-        push_window(state, &pushctx, 30, 42, 51, 2);
 
         if (state->hide_lines)
         {
@@ -2278,52 +2438,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
-        float x = 38;
-        char *shader_mode_names[] =
-        {
-            "standard",
-            "diffuse tex",
-            "normal tex",
-            "ao tex",
-            "emit tex",
-            "blinn phong",
-        };
-        for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
-        {
-            char *text = shader_mode_names[idx];
-            float y = input->window.height - 53.0f;
-
-            if (state->shader_mode == idx)
-            {
-                push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, 50});
-            }
-            else
-            {
-                push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, 50});
-            }
-
-            if (mouse_pressed)
-            {
-                v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
-                rectangle2 r = {{x,53},{16,16}};
-                if (point_in_rectangle(m, r))
-                {
-                    state->shader_mode = idx;
-                }
-            }
-
-            x += 22;
-
-            while (*text) {
-                stbtt_aligned_quad q;
-                stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
-                q.y0 = input->window.height - q.y0;
-                q.y1 = input->window.height - q.y1;
-                push_quad(&pushctx, q, state->stb_font.font_tex, 1);
-            }
-
-            x += 10;
-        }
+        draw_shader_config(ctx, memory, input, &pushctx);
+        draw_shader_mode(ctx, memory, input, &pushctx);
 
         push_window(state, &pushctx, 34, 140, 4, 3);
         {
