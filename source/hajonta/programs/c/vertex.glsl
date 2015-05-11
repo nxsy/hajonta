@@ -15,6 +15,7 @@ uniform mat4 u_view;
 uniform mat4 u_projection;
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
+uniform int u_ambient_mode;
 uniform int u_diffuse_mode;
 uniform int u_specular_mode;
 

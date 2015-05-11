@@ -231,6 +231,7 @@ struct shader_configuration
 {
     int shader_mode;
     int shader_config_flags;
+    int ambient_mode;
     int diffuse_mode;
     int specular_mode;
 };
@@ -1361,7 +1362,7 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
 }
 
 void
-draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+draw_ambient_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
 {
     game_state *state = (game_state *)memory->memory;
 
@@ -1371,6 +1372,59 @@ draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     char *shader_mode_names[] =
     {
         "standard",
+        "none",
+    };
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
+    {
+        char *text = shader_mode_names[idx];
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (state->shader_config.ambient_mode == idx)
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+        else
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                state->shader_config.ambient_mode = idx;
+            }
+        }
+
+        x += 22;
+
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        x += 10;
+    }
+}
+
+void
+draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    float x = 38;
+    float y_base = (float)input->window.height - 100.0f;
+    push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
+    char *shader_mode_names[] =
+    {
+        "standard",
+        "none",
         "lambert",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
@@ -1418,12 +1472,14 @@ draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_in
     game_state *state = (game_state *)memory->memory;
 
     float x = 38;
-    float y_base = (float)input->window.height - 100.0f;
+    float y_base = (float)input->window.height - 150.0f;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
     char *shader_mode_names[] =
     {
         "standard",
+        "none",
         "blinn-phong",
+        "gaussian",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
@@ -2285,6 +2341,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUseProgram(state->program_c.program);
     glUniform1i(state->program_c.u_shader_mode_id, state->shader_config.shader_mode);
     glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config.shader_config_flags);
+    glUniform1i(state->program_c.u_ambient_mode_id, state->shader_config.ambient_mode);
     glUniform1i(state->program_c.u_diffuse_mode_id, state->shader_config.diffuse_mode);
     glUniform1i(state->program_c.u_specular_mode_id, state->shader_config.specular_mode);
     setup_vertex_attrib_array_c(state);
@@ -2314,7 +2371,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     directional_light sun = {
         {0.0f, 1.0f, 0.0f},
         {1.0f, 1.0f, 1.0f},
-        0.4f,
+        0.3f,
         1.0f,
     };
 
@@ -2563,6 +2620,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         draw_shader_config(ctx, memory, input, &pushctx);
         draw_shader_mode(ctx, memory, input, &pushctx);
+        draw_ambient_mode(ctx, memory, input, &pushctx);
         draw_diffuse_mode(ctx, memory, input, &pushctx);
         draw_specular_mode(ctx, memory, input, &pushctx);
 

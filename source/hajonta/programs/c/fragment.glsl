@@ -20,6 +20,7 @@ uniform float u_specular_exponent = 32;
 
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
+uniform int u_ambient_mode;
 uniform int u_diffuse_mode;
 uniform int u_specular_mode;
 uniform mat4 u_model;
@@ -113,6 +114,14 @@ float blinn_phong_specular_component(vec3 light_direction, vec3 eye_direction, v
   return pow(max(0.0, dot(normal, half_dir)), shininess);
 }
 
+float gaussian_specular_component(vec3 light_direction, vec3 eye_direction, vec3 normal, float shininess)
+{
+  vec3 half_dir = normalize(light_direction + eye_direction);
+  float theta = acos(dot(half_dir, normal));
+  float w = theta / shininess;
+  return exp(-w*w);
+}
+
 float lambert_diffuse_component(vec3 light_direction, vec3 normal)
 {
     return max(0.0, dot(light_direction, normal));
@@ -120,14 +129,33 @@ float lambert_diffuse_component(vec3 light_direction, vec3 normal)
 
 vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
 {
-    vec4 ambient_color = vec4(l.color, 1) * l.ambient_intensity;
+    vec4 ambient_color = vec4(0);
     vec4 diffuse_color = vec4(0);
     vec4 specular_color = vec4(0);
+
+    switch (u_ambient_mode)
+    {
+        case 0:
+        {
+            ambient_color = vec4(l.color, 1) * l.ambient_intensity;
+        } break;
+        case 1:
+        {
+        } break;
+    }
 
     float diffuse_component;
     switch (u_diffuse_mode)
     {
         case 0:
+        {
+            diffuse_component = lambert_diffuse_component(l.direction, n);
+        } break;
+        case 1:
+        {
+            diffuse_component = 0.0001f;
+        } break;
+        case 2:
         {
             diffuse_component = lambert_diffuse_component(l.direction, n);
         } break;
@@ -157,7 +185,15 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
                 } break;
                 case 1:
                 {
+                    specular_component = 0.0f;
+                } break;
+                case 2:
+                {
                     specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                } break;
+                case 3:
+                {
+                    specular_component = gaussian_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess / 512.0);
                 } break;
                 default:
                 {
