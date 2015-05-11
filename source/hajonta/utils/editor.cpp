@@ -197,14 +197,27 @@ struct skybox_data
     uint32_t ibo;
 };
 
-enum struct shader_config_flags {
+enum struct shader_config_flags
+{
     ignore_normal_texture = (1<<0),
     ignore_ao_texture = (1<<1),
     ignore_emit_texture = (1<<2),
     ignore_specular_exponent_texture = (1<<3),
 };
 
-enum struct shader_mode {
+enum struct diffuse_mode {
+    standard,
+    lambert,
+};
+
+enum struct specular_mode
+{
+    standard,
+    blinn_phong,
+};
+
+enum struct shader_mode
+{
     standard,
     diffuse_texture,
     normal_texture,
@@ -212,6 +225,14 @@ enum struct shader_mode {
     emit_texture,
     blinn_phong,
     specular_exponent_texture,
+};
+
+struct shader_configuration
+{
+    int shader_mode;
+    int shader_config_flags;
+    int diffuse_mode;
+    int specular_mode;
 };
 
 struct game_state
@@ -270,8 +291,7 @@ struct game_state
     char bitmap_scratch[4096 * 4096 * 4];
 
     bool hide_lines;
-    int shader_mode;
-    int shader_config_flags;
+    shader_configuration shader_config;
 
     int x_rotation_correction;
     int z_rotation_correction;
@@ -1307,7 +1327,7 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
         char *text = shader_mode_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
-        if (state->shader_mode == idx)
+        if (state->shader_config.shader_mode == idx)
         {
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
@@ -1322,7 +1342,111 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_mode = idx;
+                state->shader_config.shader_mode = idx;
+            }
+        }
+
+        x += 22;
+
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        x += 10;
+    }
+}
+
+void
+draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    float x = 38;
+    float y_base = (float)input->window.height - 50.0f;
+    push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
+    char *shader_mode_names[] =
+    {
+        "standard",
+        "lambert",
+    };
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
+    {
+        char *text = shader_mode_names[idx];
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (state->shader_config.diffuse_mode == idx)
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+        else
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                state->shader_config.diffuse_mode = idx;
+            }
+        }
+
+        x += 22;
+
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        x += 10;
+    }
+}
+
+void
+draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    float x = 38;
+    float y_base = (float)input->window.height - 100.0f;
+    push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
+    char *shader_mode_names[] =
+    {
+        "standard",
+        "blinn-phong",
+    };
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
+    {
+        char *text = shader_mode_names[idx];
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (state->shader_config.specular_mode == idx)
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+        else
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                state->shader_config.specular_mode = idx;
             }
         }
 
@@ -1365,7 +1489,7 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
 
         if (idx > 0)
         {
-            if (state->shader_config_flags & (1<<(idx-1)))
+            if (state->shader_config.shader_config_flags & (1<<(idx-1)))
             {
                 push_sprite(pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
             }
@@ -1381,7 +1505,7 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config_flags ^= (1<<(idx-1));
+                state->shader_config.shader_config_flags ^= (1<<(idx-1));
             }
         }
 
@@ -2159,11 +2283,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
 
     glUseProgram(state->program_c.program);
-    glUniform1i(state->program_c.u_shader_mode_id, state->shader_mode);
-    glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config_flags);
+    glUniform1i(state->program_c.u_shader_mode_id, state->shader_config.shader_mode);
+    glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config.shader_config_flags);
+    glUniform1i(state->program_c.u_diffuse_mode_id, state->shader_config.diffuse_mode);
+    glUniform1i(state->program_c.u_specular_mode_id, state->shader_config.specular_mode);
     setup_vertex_attrib_array_c(state);
-    v4 light_position = {-5.0f, -3.0f, -12.0f, 1.0f};
-    glUniform4fv(state->program_c.u_w_lightPosition_id, 1, (float *)&light_position);
     glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&u_model);
     m4 u_view = m4identity();
     glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&u_view);
@@ -2189,7 +2313,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     directional_light sun = {
         {0.0f, 1.0f, 0.0f},
-        {0.9f, 0.8f, 0.7f},
+        {1.0f, 1.0f, 1.0f},
         0.4f,
         1.0f,
     };
@@ -2210,17 +2334,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     point_light lights[] = {
         {
             {-5.0f, -3.0f, -12.0f},
-            {1.0f, 1.0f, 0.9f},
+            {1.0f, 1.0f, 0.8f},
             0.0f,
             1.0f,
-            { 0.0f, 0.0f, 0.03f },
+            { 0.0f, 0.0f, 0.07f },
         },
         {
             {8.0f, -3.0f, -8.0f},
-            {0.9f, 0.9f, 1.0f},
+            {0.8f, 1.0f, 1.0f},
             0.0f,
             1.0f,
-            { 0.0f, 0.0f, 0.05f },
+            { 0.0f, 0.0f, 0.2f },
         },
     };
     uint32_t num_point_lights = harray_count(lights);
@@ -2325,7 +2449,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     glUseProgram(state->program_b.program);
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_projection);
-    glUniform4fv(state->program_b.u_w_lightPosition_id, 1, (float *)&light_position);
     glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
     glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
 
@@ -2403,7 +2526,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
         ui2d_push_context pushctx = {};
-        ui2d_vertex_format vertices[2000];
+        ui2d_vertex_format vertices[4000];
         uint32_t elements[harray_count(vertices) / 4 * 6];
         uint32_t textures[10];
         pushctx.vertices = vertices;
@@ -2440,6 +2563,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         draw_shader_config(ctx, memory, input, &pushctx);
         draw_shader_mode(ctx, memory, input, &pushctx);
+        draw_diffuse_mode(ctx, memory, input, &pushctx);
+        draw_specular_mode(ctx, memory, input, &pushctx);
 
         push_window(state, &pushctx, 34, 140, 4, 3);
         {

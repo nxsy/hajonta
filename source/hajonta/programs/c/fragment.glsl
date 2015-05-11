@@ -20,7 +20,8 @@ uniform float u_specular_exponent = 32;
 
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
-uniform vec4 u_w_lightPosition;
+uniform int u_diffuse_mode;
+uniform int u_specular_mode;
 uniform mat4 u_model;
 uniform mat4 u_view;
 
@@ -58,6 +59,8 @@ struct ShaderConfig
 {
     int mode;
     int config;
+    int diffuse_mode;
+    int specular_mode;
 };
 
 bool ignore_normal_texture(ShaderConfig config)
@@ -110,26 +113,59 @@ float blinn_phong_specular_component(vec3 light_direction, vec3 eye_direction, v
   return pow(max(0.0, dot(normal, half_dir)), shininess);
 }
 
+float lambert_diffuse_component(vec3 light_direction, vec3 normal)
+{
+    return max(0.0, dot(light_direction, normal));
+}
+
 vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
 {
-    float cosTheta = clamp(dot(n, l.direction), 0, 1);
-
     vec4 ambient_color = vec4(l.color, 1) * l.ambient_intensity;
     vec4 diffuse_color = vec4(0);
     vec4 specular_color = vec4(0);
 
-    if (cosTheta > 0)
+    float diffuse_component;
+    switch (u_diffuse_mode)
     {
-        diffuse_color = vec4(l.color, 1) * l.diffuse_intensity * cosTheta;
+        case 0:
+        {
+            diffuse_component = lambert_diffuse_component(l.direction, n);
+        } break;
+        default:
+        {
+            diffuse_component = lambert_diffuse_component(l.direction, n);
+        } break;
+    }
+
+    if (diffuse_component > 0)
+    {
+        diffuse_color = vec4(l.color, 1) * l.diffuse_intensity * diffuse_component;
 
         float shininess = u_specular_exponent;
         if (!ignore_specular_exponent_texture(config) && enabled(specular_exponent_texture))
         {
             shininess = texture(specular_exponent_texture, v_tex_coord).r * 255.0;
         }
-
-        float specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
-        specular_color = vec4(vec3(1) * specular_component, 1);
+        if (shininess >= 1.0f)
+        {
+            float specular_component;
+            switch (u_specular_mode)
+            {
+                case 0:
+                {
+                    specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                } break;
+                case 1:
+                {
+                    specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                } break;
+                default:
+                {
+                    specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                } break;
+            }
+            specular_color = vec4(vec3(1) * specular_component, 1);
+        }
     }
 
     if (!ignore_ao_texture(config) && enabled(ao_texture))
@@ -149,9 +185,11 @@ vec4 apply_attenuation(vec4 light, Attenuation a, float distance)
         );
 }
 
-vec4 point_light_contribution(ShaderConfig config, PointLight p, vec3 n, float distance)
+vec4 point_light_contribution(ShaderConfig config, PointLight p, vec3 n)
 {
     vec3 lightDirection = p.position + v_c_eyeDirection.xyz;
+
+    float distance = length(p.position - v_w_vertexPosition.xyz);
 
     DirectionalLight dl;
     dl.direction = (u_view * vec4(lightDirection, 1.0)).xyz;
@@ -169,14 +207,12 @@ vec4 blinn_phong_shading(ShaderConfig config)
 
     vec3 normal = get_normal(config);
 
-    float distance = length(u_w_lightPosition - v_w_vertexPosition);
-
     vec4 light = vec4(0);
     light += light_contribution(config, u_directional_light, normal);
 
     for (int i = 0; i < u_num_point_lights; ++i)
     {
-        light += point_light_contribution(config, u_point_lights[i], normal, distance);
+        light += point_light_contribution(config, u_point_lights[i], normal);
     }
 
     light.w = 1.0;

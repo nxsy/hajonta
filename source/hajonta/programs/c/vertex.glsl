@@ -13,9 +13,10 @@
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
-uniform vec4 u_w_lightPosition;
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
+uniform int u_diffuse_mode;
+uniform int u_specular_mode;
 
 in vec4 a_pos;
 in vec4 a_normal;
