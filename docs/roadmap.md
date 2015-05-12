@@ -24,6 +24,8 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Ambient Occlusion maps (pre-computed, texture)
 * ui2d shader for text, windows, &c.
 * Basic skybox
+* Specular material
+* Directional light
 
 ## To do (short-term)
 
@@ -36,13 +38,13 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * “Resize” to common (1 = 1m) format
 * Export to asset structure
 * Multiple lights
-* Directional light
 * Spotlight
 * Camera control
 * Ambient light factor control
-* Specular material
 * Non-texture materials (plain old color)
 * Better skybox
+* FXAA
+* HDR
 
 ## Ideas for later
 
