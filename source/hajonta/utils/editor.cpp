@@ -1613,6 +1613,118 @@ draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_data *s
     glErrorAssert();
 }
 
+void
+draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    game_state *state = (game_state *)memory->memory;
+    glDisable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glUseProgram(state->program_ui2d.program);
+
+    v2 mouse_loc = {
+        (float)input->mouse.x,
+        (float)input->window.height - (float)input->mouse.y,
+    };
+
+    float screen_pixel_size[] =
+    {
+        (float)input->window.width,
+        (float)input->window.height,
+    };
+    glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
+
+    ui2d_push_context pushctx = {};
+    ui2d_vertex_format vertices[4000];
+    uint32_t elements[harray_count(vertices) / 4 * 6];
+    uint32_t textures[10];
+    pushctx.vertices = vertices;
+    pushctx.max_vertices = harray_count(vertices);
+    pushctx.elements = elements;
+    pushctx.max_elements = harray_count(elements);
+    pushctx.textures = textures;
+    pushctx.max_textures = harray_count(textures);
+
+    push_window(state, &pushctx, 34, 92, 6, 2);
+
+    if (state->hide_lines)
+    {
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
+    }
+    else
+    {
+        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
+    }
+
+    {
+        char full_text[] = "hide lines";
+        char *text = (char *)full_text;
+        float x = 58;
+        float y = input->window.height - 103.0f;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+        }
+    }
+
+    draw_shader_config(ctx, memory, input, &pushctx);
+    draw_shader_mode(ctx, memory, input, &pushctx);
+    draw_ambient_mode(ctx, memory, input, &pushctx);
+    draw_diffuse_mode(ctx, memory, input, &pushctx);
+    draw_specular_mode(ctx, memory, input, &pushctx);
+
+    push_window(state, &pushctx, 34, 140, 4, 3);
+    {
+        uint32_t xbase = 34 + 8;
+        uint32_t ybase = 140 + 8;
+
+        struct {
+            uint32_t sprite;
+            uint32_t x;
+            uint32_t y;
+            float *axis;
+            float iter;
+        } sprites[] =
+        {
+            { 13, 1, 1, &state->x_rotation, 0.005f },
+            { 14, 1, 0, &state->x_rotation,-0.005f },
+            { 15, 0, 0, &state->y_rotation, 0.005f },
+            { 16, 2, 0, &state->y_rotation,-0.005f },
+        };
+        for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
+        {
+            auto sprite = sprites + idx;
+            float x = (float)(xbase + (sprite->x * 16));
+            float y = (float)(ybase + (sprite->y * 16));
+            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
+
+            rectangle2 r = {{x,y},{16,16}};
+            if (point_in_rectangle(mouse_loc, r))
+            {
+                *(sprite->axis) += sprite->iter;
+            }
+        }
+    }
+
+    // Mouse should be last
+    {
+        stbtt_aligned_quad q = {};
+        q.x0 = (float)input->mouse.x;
+        q.x1 = (float)input->mouse.x + 16;
+
+        q.y0 = (float)(input->window.height - input->mouse.y);
+        q.y1 = (float)(input->window.height - input->mouse.y) - 16;
+        q.s0 = 0;
+        q.s1 = 1;
+        q.t0 = 0;
+        q.t1 = 1;
+        push_quad(&pushctx, q, state->mouse_texture, 0);
+    }
+    ui2d_render_elements(state, &pushctx);
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -2570,109 +2682,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glErrorAssert();
     }
 
-    {
-        glDisable(GL_DEPTH_TEST);
-        glDepthFunc(GL_ALWAYS);
-        glUseProgram(state->program_ui2d.program);
-
-        float screen_pixel_size[] =
-        {
-            (float)input->window.width,
-            (float)input->window.height,
-        };
-        glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
-
-        ui2d_push_context pushctx = {};
-        ui2d_vertex_format vertices[4000];
-        uint32_t elements[harray_count(vertices) / 4 * 6];
-        uint32_t textures[10];
-        pushctx.vertices = vertices;
-        pushctx.max_vertices = harray_count(vertices);
-        pushctx.elements = elements;
-        pushctx.max_elements = harray_count(elements);
-        pushctx.textures = textures;
-        pushctx.max_textures = harray_count(textures);
-
-        push_window(state, &pushctx, 34, 92, 6, 2);
-
-        if (state->hide_lines)
-        {
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
-        }
-        else
-        {
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
-        }
-
-        {
-            char full_text[] = "hide lines";
-            char *text = (char *)full_text;
-            float x = 58;
-            float y = input->window.height - 103.0f;
-            while (*text) {
-                stbtt_aligned_quad q;
-                stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
-                q.y0 = input->window.height - q.y0;
-                q.y1 = input->window.height - q.y1;
-                push_quad(&pushctx, q, state->stb_font.font_tex, 1);
-            }
-        }
-
-        draw_shader_config(ctx, memory, input, &pushctx);
-        draw_shader_mode(ctx, memory, input, &pushctx);
-        draw_ambient_mode(ctx, memory, input, &pushctx);
-        draw_diffuse_mode(ctx, memory, input, &pushctx);
-        draw_specular_mode(ctx, memory, input, &pushctx);
-
-        push_window(state, &pushctx, 34, 140, 4, 3);
-        {
-            uint32_t xbase = 34 + 8;
-            uint32_t ybase = 140 + 8;
-
-            struct {
-                uint32_t sprite;
-                uint32_t x;
-                uint32_t y;
-                float *axis;
-                float iter;
-            } sprites[] =
-            {
-                { 13, 1, 1, &state->x_rotation, 0.005f },
-                { 14, 1, 0, &state->x_rotation,-0.005f },
-                { 15, 0, 0, &state->y_rotation, 0.005f },
-                { 16, 2, 0, &state->y_rotation,-0.005f },
-            };
-            for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
-            {
-                auto sprite = sprites + idx;
-                float x = (float)(xbase + (sprite->x * 16));
-                float y = (float)(ybase + (sprite->y * 16));
-                push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
-
-                rectangle2 r = {{x,y},{16,16}};
-                if (point_in_rectangle(mouse_loc, r))
-                {
-                    *(sprite->axis) += sprite->iter;
-                }
-            }
-        }
-
-        // Mouse should be last
-        {
-            stbtt_aligned_quad q = {};
-            q.x0 = (float)input->mouse.x;
-            q.x1 = (float)input->mouse.x + 16;
-
-            q.y0 = (float)(input->window.height - input->mouse.y);
-            q.y1 = (float)(input->window.height - input->mouse.y) - 16;
-            q.s0 = 0;
-            q.s1 = 1;
-            q.t0 = 0;
-            q.t1 = 1;
-            push_quad(&pushctx, q, state->mouse_texture, 0);
-        }
-        ui2d_render_elements(state, &pushctx);
-    }
+    draw_ui(ctx, memory, input);
 
     glErrorAssert();
 }
