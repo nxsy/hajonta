@@ -1580,16 +1580,34 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
 }
 
 void
-draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_data *skybox, m4 u_model, m4 u_view, m4 u_projection)
+draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 {
-    glErrorAssert();
-
     game_state *state = (game_state *)memory->memory;
+
+    m4 u_view = m4identity();
+    m4 u_model = m4identity();
+    float scale = 100.0f;
+    u_model.cols[0].E[0] *= scale;
+    u_model.cols[1].E[1] *= scale;
+    u_model.cols[2].E[2] *= scale;
+
+    v3 y_axis = {0.0f, 1.0f, 0.0f};
+    m4 y_rotate = m4rotation(y_axis, state->y_rotation);
+    v3 x_axis = {1.0f, 0.0f, 0.0f};
+    m4 x_rotate = m4rotation(x_axis, state->x_rotation);
+
+    u_model = m4mul(x_rotate, u_model);
+    u_model = m4mul(y_rotate, u_model);
+
+    float ratio = (float)input->window.width / (float)input->window.height;
+    m4 u_projection = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+
+    glErrorAssert();
 
     glUseProgram(state->program_skybox.program);
     glActiveTexture(GL_TEXTURE0);
-    glBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
+    glBindBuffer(GL_ARRAY_BUFFER, state->skybox.vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->skybox.ibo);
 
     glUniformMatrix4fv(state->program_skybox.u_model_id, 1, false, (float *)&u_model);
     glUniformMatrix4fv(state->program_skybox.u_view_id, 1, false, (float *)&u_view);
@@ -1602,13 +1620,40 @@ draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_data *s
     int32_t tex = glGetUniformLocation(state->program_skybox.program, "u_cube_tex");
     glUniform1i(tex, 0);
     glErrorAssert();
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox->tex);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, state->skybox.tex);
 
     glErrorAssert();
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
-    glDrawElements(GL_TRIANGLES, harray_count(skybox->faces) * 3, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, harray_count(state->skybox.faces) * 3, GL_UNSIGNED_INT, 0);
+
+    glErrorAssert();
+}
+
+void
+draw_bounds(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    game_state *state = (game_state *)memory->memory;
+    glErrorAssert();
+
+    glDepthFunc(GL_LEQUAL);
+
+    glUniform1i(state->program_b.u_model_mode_id, 0);
+    glUniform1i(state->program_b.u_shading_mode_id, 0);
+    v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
+    glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
+    setup_vertex_attrib_array_b(state);
+    glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
+    setup_vertex_attrib_array_b(state);
+    glPrimitiveRestartIndex(65535);
+    glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
 
     glErrorAssert();
 }
@@ -2621,9 +2666,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
     glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
 
-    m4 u_mvp_enabled;
     if (!state->hide_lines)
     {
+        v4 u_mvp_enabled;
         setup_vertex_attrib_array_b(state);
         glUniform1i(state->program_b.u_model_mode_id, 0);
         glUniform1i(state->program_b.u_shading_mode_id, 0);
@@ -2634,53 +2679,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_INT, 0);
     }
 
-    {
-        glUniform1i(state->program_b.u_model_mode_id, 0);
-        glUniform1i(state->program_b.u_shading_mode_id, 0);
-        glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
-        setup_vertex_attrib_array_b(state);
-        glDepthFunc(GL_LEQUAL);
-        u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
-        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-        glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
-        glErrorAssert();
-    }
+    draw_bounds(ctx, memory, input);
 
-    {
-        glUniform1i(state->program_b.u_model_mode_id, 0);
-        glUniform1i(state->program_b.u_shading_mode_id, 0);
-        glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
-        setup_vertex_attrib_array_b(state);
-        u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
-        glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
-        glPrimitiveRestartIndex(65535);
-        glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
-        glErrorAssert();
-    }
-
-    {
-        m4 u_view = m4identity();
-        m4 u_model = m4identity();
-        float scale = 100.0f;
-        u_model.cols[0].E[0] *= scale;
-        u_model.cols[1].E[1] *= scale;
-        u_model.cols[2].E[2] *= scale;
-
-        v3 y_axis = {0.0f, 1.0f, 0.0f};
-        m4 y_rotate = m4rotation(y_axis, state->y_rotation);
-        v3 x_axis = {1.0f, 0.0f, 0.0f};
-        m4 x_rotate = m4rotation(x_axis, state->x_rotation);
-
-        u_model = m4mul(x_rotate, u_model);
-        u_model = m4mul(y_rotate, u_model);
-
-        m4 u_projection = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
-        glErrorAssert();
-        draw_skybox(ctx, memory, &state->skybox, u_model, u_view, u_projection);
-        glErrorAssert();
-    }
+    draw_skybox(ctx, memory, input);
 
     draw_ui(ctx, memory, input);
 
