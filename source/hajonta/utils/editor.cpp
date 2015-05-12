@@ -2509,22 +2509,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
     glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&u_projection);
 
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "tex"),
-        0);
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "normal_texture"),
-        1);
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "ao_texture"),
-        2);
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "emit_texture"),
-        3);
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "specular_exponent_texture"),
-        4);
-
     directional_light sun = {
         {0.0f, 1.0f, 0.0f},
         {1.0f, 1.0f, 1.0f},
@@ -2600,59 +2584,52 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glGetUniformLocation(state->program_c.program, "u_num_point_lights"),
         (GLint)num_point_lights);
 
+    struct {
+        char *uniform_name;
+    } texture_bindings[] =
+    {
+        {"tex"},
+        {"normal_texture"},
+        {"ao_texture"},
+        {"emit_texture"},
+        {"specular_exponent_texture"},
+    };
+
+    for (uint32_t idx = 0; idx < harray_count(texture_bindings); ++idx)
+    {
+        auto binding = texture_bindings + idx;
+        glUniform1i(
+            glGetUniformLocation(state->program_c.program, binding->uniform_name),
+            idx);
+    }
+
     uint32_t last_vertex = 0;
     for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)
     {
         editor_vertex_indices *i = state->material_indices + idx;
+        struct {
+            int32_t offset;
+        } texture_offsets[] =
+        {
+            i->current_material->texture_offset,
+            i->current_material->bump_texture_offset,
+            i->current_material->ao_texture_offset,
+            i->current_material->emit_texture_offset,
+            i->current_material->specular_exponent_texture_offset,
+        };
 
-        glActiveTexture(GL_TEXTURE0);
-        if (i->current_material->texture_offset >= 0)
+        for (uint32_t offset_idx = 0; offset_idx < harray_count(texture_offsets); ++offset_idx)
         {
-            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->texture_offset]);
-        }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-
-        glActiveTexture(GL_TEXTURE0 + 1);
-        if (i->current_material->bump_texture_offset >= 0)
-        {
-            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->bump_texture_offset]);
-        }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-
-        glActiveTexture(GL_TEXTURE0 + 2);
-        if (i->current_material->ao_texture_offset >= 0)
-        {
-            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->ao_texture_offset]);
-        }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-
-        glActiveTexture(GL_TEXTURE0 + 3);
-        if (i->current_material->emit_texture_offset >= 0)
-        {
-            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->emit_texture_offset]);
-        }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-
-        glActiveTexture(GL_TEXTURE0 + 4);
-        if (i->current_material->specular_exponent_texture_offset >= 0)
-        {
-            glBindTexture(GL_TEXTURE_2D, state->texture_ids[i->current_material->specular_exponent_texture_offset]);
-        }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, 0);
+            auto offset = texture_offsets + offset_idx;
+            glActiveTexture(GL_TEXTURE0 + offset_idx);
+            if (offset->offset >= 0)
+            {
+                glBindTexture(GL_TEXTURE_2D, state->texture_ids[offset->offset]);
+            }
+            else
+            {
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
         }
 
         glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
