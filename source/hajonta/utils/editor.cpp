@@ -1170,25 +1170,44 @@ load_texture_asset_failed(
     memory->quit = true;
 }
 
-struct sprite_config
-{
-    // top left = 0,0
-    uint32_t x;
-    uint32_t y;
-
-    uint32_t width;
-    uint32_t height;
-};
-
 void
-populate_spritesheet(spritesheet *sp, sprite *s0, uint32_t num_sprites, sprite_config *sc0, uint32_t num_sprite_configs)
+populate_spritesheet(spritesheet *sp, sprite *s0, uint32_t num_sprites)
 {
+
+    struct sprite_config
+    {
+        // top left = 0,0
+        uint32_t x;
+        uint32_t y;
+
+        uint32_t width;
+        uint32_t height;
+    } configs[] =
+    {
+        {486, 90, 16, 16}, // checkbox empty
+        {486, 90 + 18, 16, 16}, // checkbox checked
+        {234, 360, 16, 16}, // top left blue dungeon tile
+        {234 + 18, 360, 16, 16},
+        {234 + 36, 360, 16, 16},
+        {234, 360 + 18, 16, 16},
+        {234 + 18, 360 + 18, 16, 16},
+        {234 + 36, 360 + 18, 16, 16},
+        {234, 360 + 36, 16, 16},
+        {234 + 18, 360 + 36, 16, 16},
+        {234 + 36, 360 + 36, 16, 16},
+        {486 + 18, 90, 16, 16}, // radio empty
+        {486 + 36, 90, 16, 16}, // radio selected
+        {396, 414, 16, 16}, // top left green long arrow ("up")
+        {396 + 18, 414, 16, 16}, // top right green long arrow ("down")
+        {396, 414 + 18, 16, 16}, // bottom left green long arrow ("left")
+        {396 + 18, 414 + 18, 16, 16}, // bottom right green long arrow ("right")
+    };
     sp->sprites = s0;
-    hassert(num_sprites >= num_sprite_configs);
-    for (uint32_t idx = 0; idx < num_sprite_configs; ++idx)
+    hassert(num_sprites >= harray_count(configs));
+    for (uint32_t idx = 0; idx < harray_count(configs); ++idx)
     {
         sprite *s = s0 + idx;
-        sprite_config *sc = sc0 + idx;
+        sprite_config *sc = configs + idx;
 
         *s = {
             sc->width,
@@ -1842,31 +1861,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->kenney_ui.ui_pack_sheet.width = (uint32_t)x;
             state->kenney_ui.ui_pack_sheet.height = (uint32_t)abs(y);
 
-            sprite_config configs[] =
-            {
-                {486, 90, 16, 16}, // checkbox empty
-                {486, 90 + 18, 16, 16}, // checkbox checked
-                {234, 360, 16, 16}, // top left blue dungeon tile
-                {234 + 18, 360, 16, 16},
-                {234 + 36, 360, 16, 16},
-                {234, 360 + 18, 16, 16},
-                {234 + 18, 360 + 18, 16, 16},
-                {234 + 36, 360 + 18, 16, 16},
-                {234, 360 + 36, 16, 16},
-                {234 + 18, 360 + 36, 16, 16},
-                {234 + 36, 360 + 36, 16, 16},
-                {486 + 18, 90, 16, 16}, // radio empty
-                {486 + 36, 90, 16, 16}, // radio selected
-                {396, 414, 16, 16}, // top left green long arrow ("up")
-                {396 + 18, 414, 16, 16}, // top right green long arrow ("down")
-                {396, 414 + 18, 16, 16}, // bottom left green long arrow ("left")
-                {396 + 18, 414 + 18, 16, 16}, // bottom right green long arrow ("right")
-            };
             populate_spritesheet(&state->kenney_ui.ui_pack_sheet,
                 state->kenney_ui.ui_pack_sprites,
-                harray_count(state->kenney_ui.ui_pack_sprites),
-                configs,
-                harray_count(configs));
+                harray_count(state->kenney_ui.ui_pack_sprites));
         }
 
         bool loaded = populate_skybox(ctx, memory, &state->skybox);
