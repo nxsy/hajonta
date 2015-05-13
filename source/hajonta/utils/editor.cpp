@@ -1603,7 +1603,6 @@ draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, game_input *in
 {
     game_state *state = (game_state *)memory->memory;
 
-    m4 u_view = m4identity();
     m4 u_model = m4identity();
     float scale = 100.0f;
     u_model.cols[0].E[0] *= scale;
@@ -1629,6 +1628,7 @@ draw_skybox(hajonta_thread_context *ctx, platform_memory *memory, game_input *in
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->skybox.ibo);
 
     glUniformMatrix4fv(state->program_skybox.u_model_id, 1, false, (float *)&u_model);
+    m4 u_view = m4identity();
     glUniformMatrix4fv(state->program_skybox.u_view_id, 1, false, (float *)&u_view);
     glUniformMatrix4fv(state->program_skybox.u_projection_id, 1, false, (float *)&u_projection);
 
@@ -1787,6 +1787,219 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
         push_quad(&pushctx, q, state->mouse_texture, 0);
     }
     ui2d_render_elements(state, &pushctx);
+}
+
+struct Matrices
+{
+    m4 model;
+    m4 view;
+    m4 projection;
+};
+
+void
+draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, Matrices *matrices)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+
+    glUseProgram(state->program_c.program);
+    glUniform1i(state->program_c.u_shader_mode_id, state->shader_config.shader_mode);
+    glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config.shader_config_flags);
+    glUniform1i(state->program_c.u_ambient_mode_id, state->shader_config.ambient_mode);
+    glUniform1i(state->program_c.u_diffuse_mode_id, state->shader_config.diffuse_mode);
+    glUniform1i(state->program_c.u_specular_mode_id, state->shader_config.specular_mode);
+    setup_vertex_attrib_array_c(state);
+    glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&matrices->model);
+    glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&matrices->view);
+    glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&matrices->projection);
+
+    directional_light sun = {
+        {0.0f, 1.0f, 0.0f},
+        {1.0f, 1.0f, 1.0f},
+        0.3f,
+        1.0f,
+    };
+
+    glUniform3fv(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.direction"), 1,
+        (float *)&sun.direction);
+    glUniform3fv(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.color"), 1,
+        (float *)&sun.color);
+    glUniform1f(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.ambient_intensity"),
+        sun.ambient_intensity);
+    glUniform1f(
+        glGetUniformLocation(state->program_c.program, "u_directional_light.diffuse_intensity"),
+        sun.diffuse_intensity);
+
+    point_light lights[] = {
+        {
+            {-5.0f, -3.0f, -12.0f},
+            {1.0f, 1.0f, 0.8f},
+            0.0f,
+            1.0f,
+            { 0.0f, 0.0f, 0.07f },
+        },
+        {
+            {8.0f, -3.0f, -8.0f},
+            {0.8f, 1.0f, 1.0f},
+            0.0f,
+            1.0f,
+            { 0.0f, 0.0f, 0.2f },
+        },
+    };
+    uint32_t num_point_lights = harray_count(lights);
+    for (uint32_t idx = 0; idx < num_point_lights; ++idx)
+    {
+        point_light *l = lights + idx;
+        uint32_t program = state->program_c.program;
+        char un[100];
+        sprintf(un, "u_point_lights[%d].position", idx);
+        glUniform3fv(
+            glGetUniformLocation(program, un), 1,
+            (float *)&l->position);
+        sprintf(un, "u_point_lights[%d].color", idx);
+        glUniform3fv(
+            glGetUniformLocation(program, un), 1,
+            (float *)&l->color);
+        sprintf(un, "u_point_lights[%d].ambient_intensity", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->ambient_intensity);
+        sprintf(un, "u_point_lights[%d].diffuse_intensity", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->diffuse_intensity);
+        sprintf(un, "u_point_lights[%d].attenuation.constant", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->attenuation.constant);
+        sprintf(un, "u_point_lights[%d].attenuation.linear", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->attenuation.linear);
+        sprintf(un, "u_point_lights[%d].attenuation.exponential", idx);
+        glUniform1f(
+            glGetUniformLocation(program, un),
+            l->attenuation.exponential);
+    }
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "u_num_point_lights"),
+        (GLint)num_point_lights);
+
+    struct {
+        char *uniform_name;
+    } texture_bindings[] =
+    {
+        {"tex"},
+        {"normal_texture"},
+        {"ao_texture"},
+        {"emit_texture"},
+        {"specular_exponent_texture"},
+    };
+
+    for (uint32_t idx = 0; idx < harray_count(texture_bindings); ++idx)
+    {
+        auto binding = texture_bindings + idx;
+        glUniform1i(
+            glGetUniformLocation(state->program_c.program, binding->uniform_name),
+            idx);
+    }
+
+    uint32_t last_vertex = 0;
+    for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)
+    {
+        editor_vertex_indices *i = state->material_indices + idx;
+        struct {
+            int32_t offset;
+        } texture_offsets[] =
+        {
+            i->current_material->texture_offset,
+            i->current_material->bump_texture_offset,
+            i->current_material->ao_texture_offset,
+            i->current_material->emit_texture_offset,
+            i->current_material->specular_exponent_texture_offset,
+        };
+
+        for (uint32_t offset_idx = 0; offset_idx < harray_count(texture_offsets); ++offset_idx)
+        {
+            auto offset = texture_offsets + offset_idx;
+            glActiveTexture(GL_TEXTURE0 + offset_idx);
+            if (offset->offset >= 0)
+            {
+                glBindTexture(GL_TEXTURE_2D, state->texture_ids[offset->offset]);
+            }
+            else
+            {
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+        }
+
+        glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
+        last_vertex = i->final_vertex_id;
+    }
+
+    glErrorAssert();
+}
+
+Matrices
+build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    game_state *state = (game_state *)memory->memory;
+    v3 center = v3div(v3add(state->model_max, state->model_min), 2.0f);
+    m4 center_translate = m4identity();
+    center_translate.cols[3] = {-center.x, -center.y, -center.z, 1.0f};
+
+    v3 dimension = v3sub(state->model_max, state->model_min);
+    float max_dimension = dimension.x;
+    if (dimension.y > max_dimension)
+    {
+        max_dimension = dimension.y;
+    }
+    if (dimension.z > max_dimension)
+    {
+        max_dimension = dimension.z;
+    }
+
+    v3 axis = {0.0f, 1.0f, 0.0f};
+    m4 rotate = m4rotation(axis, state->y_rotation);
+    v3 x_axis = {1.0f, 0.0f, 0.0f};
+    v3 z_axis = {0.0f, 0.0f, 1.0f};
+    m4 x_rotate = m4rotation(x_axis, state->x_rotation);
+    m4 x_correction_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation_correction);
+    m4 z_correction_rotate = m4rotation(z_axis, (pi / 2) * state->z_rotation_correction);
+    rotate = m4mul(rotate, x_rotate);
+    rotate = m4mul(rotate, x_correction_rotate);
+    rotate = m4mul(rotate, z_correction_rotate);
+
+    m4 scale = m4identity();
+    scale.cols[0].E[0] = 2.0f / max_dimension;
+    scale.cols[1].E[1] = 2.0f / max_dimension;
+    scale.cols[2].E[2] = 2.0f / max_dimension;
+    m4 translate = m4identity();
+    translate.cols[3] = v4{0.0f, 0.0f, -10.0f, 1.0f};
+
+    m4 a = center_translate;
+    m4 b = scale;
+    m4 c = rotate;
+    m4 d = translate;
+
+    m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
+    m4 u_view = m4identity();
+
+    float ratio = (float)input->window.width / (float)input->window.height;
+    m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
+
+    return Matrices{
+        u_model,
+        u_view,
+        u_projection,
+    };
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -2438,207 +2651,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glErrorAssert();
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glErrorAssert();
 
     state->delta_t += input->delta_t;
 
-    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-
-    glErrorAssert();
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
-    glErrorAssert();
-
-    v3 center = v3div(v3add(state->model_max, state->model_min), 2.0f);
-    m4 center_translate = m4identity();
-    center_translate.cols[3] = {-center.x, -center.y, -center.z, 1.0f};
-
-    v3 dimension = v3sub(state->model_max, state->model_min);
-    float max_dimension = dimension.x;
-    if (dimension.y > max_dimension)
-    {
-        max_dimension = dimension.y;
-    }
-    if (dimension.z > max_dimension)
-    {
-        max_dimension = dimension.z;
-    }
-
-    v3 axis = {0.0f, 1.0f, 0.0f};
-    m4 rotate = m4rotation(axis, state->y_rotation);
-    v3 x_axis = {1.0f, 0.0f, 0.0f};
-    v3 z_axis = {0.0f, 0.0f, 1.0f};
-    m4 x_rotate = m4rotation(x_axis, state->x_rotation);
-    m4 x_correction_rotate = m4rotation(x_axis, (pi / 2) * state->x_rotation_correction);
-    m4 z_correction_rotate = m4rotation(z_axis, (pi / 2) * state->z_rotation_correction);
-    rotate = m4mul(rotate, x_rotate);
-    rotate = m4mul(rotate, x_correction_rotate);
-    rotate = m4mul(rotate, z_correction_rotate);
-
-    m4 scale = m4identity();
-    scale.cols[0].E[0] = 2.0f / max_dimension;
-    scale.cols[1].E[1] = 2.0f / max_dimension;
-    scale.cols[2].E[2] = 2.0f / max_dimension;
-    m4 translate = m4identity();
-    translate.cols[3] = v4{0.0f, 0.0f, -10.0f, 1.0f};
-
-    m4 a = center_translate;
-    m4 b = scale;
-    m4 c = rotate;
-    m4 d = translate;
-
-    m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
-
-    glUseProgram(state->program_c.program);
-    glUniform1i(state->program_c.u_shader_mode_id, state->shader_config.shader_mode);
-    glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config.shader_config_flags);
-    glUniform1i(state->program_c.u_ambient_mode_id, state->shader_config.ambient_mode);
-    glUniform1i(state->program_c.u_diffuse_mode_id, state->shader_config.diffuse_mode);
-    glUniform1i(state->program_c.u_specular_mode_id, state->shader_config.specular_mode);
-    setup_vertex_attrib_array_c(state);
-    glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&u_model);
-    m4 u_view = m4identity();
-    glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&u_view);
-    float ratio = (float)input->window.width / (float)input->window.height;
-    m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
-    glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&u_projection);
-
-    directional_light sun = {
-        {0.0f, 1.0f, 0.0f},
-        {1.0f, 1.0f, 1.0f},
-        0.3f,
-        1.0f,
-    };
-
-    glUniform3fv(
-        glGetUniformLocation(state->program_c.program, "u_directional_light.direction"), 1,
-        (float *)&sun.direction);
-    glUniform3fv(
-        glGetUniformLocation(state->program_c.program, "u_directional_light.color"), 1,
-        (float *)&sun.color);
-    glUniform1f(
-        glGetUniformLocation(state->program_c.program, "u_directional_light.ambient_intensity"),
-        sun.ambient_intensity);
-    glUniform1f(
-        glGetUniformLocation(state->program_c.program, "u_directional_light.diffuse_intensity"),
-        sun.diffuse_intensity);
-
-    point_light lights[] = {
-        {
-            {-5.0f, -3.0f, -12.0f},
-            {1.0f, 1.0f, 0.8f},
-            0.0f,
-            1.0f,
-            { 0.0f, 0.0f, 0.07f },
-        },
-        {
-            {8.0f, -3.0f, -8.0f},
-            {0.8f, 1.0f, 1.0f},
-            0.0f,
-            1.0f,
-            { 0.0f, 0.0f, 0.2f },
-        },
-    };
-    uint32_t num_point_lights = harray_count(lights);
-    for (uint32_t idx = 0; idx < num_point_lights; ++idx)
-    {
-        point_light *l = lights + idx;
-        uint32_t program = state->program_c.program;
-        char un[100];
-        sprintf(un, "u_point_lights[%d].position", idx);
-        glUniform3fv(
-            glGetUniformLocation(program, un), 1,
-            (float *)&l->position);
-        sprintf(un, "u_point_lights[%d].color", idx);
-        glUniform3fv(
-            glGetUniformLocation(program, un), 1,
-            (float *)&l->color);
-        sprintf(un, "u_point_lights[%d].ambient_intensity", idx);
-        glUniform1f(
-            glGetUniformLocation(program, un),
-            l->ambient_intensity);
-        sprintf(un, "u_point_lights[%d].diffuse_intensity", idx);
-        glUniform1f(
-            glGetUniformLocation(program, un),
-            l->diffuse_intensity);
-        sprintf(un, "u_point_lights[%d].attenuation.constant", idx);
-        glUniform1f(
-            glGetUniformLocation(program, un),
-            l->attenuation.constant);
-        sprintf(un, "u_point_lights[%d].attenuation.linear", idx);
-        glUniform1f(
-            glGetUniformLocation(program, un),
-            l->attenuation.linear);
-        sprintf(un, "u_point_lights[%d].attenuation.exponential", idx);
-        glUniform1f(
-            glGetUniformLocation(program, un),
-            l->attenuation.exponential);
-    }
-    glUniform1i(
-        glGetUniformLocation(state->program_c.program, "u_num_point_lights"),
-        (GLint)num_point_lights);
-
-    struct {
-        char *uniform_name;
-    } texture_bindings[] =
-    {
-        {"tex"},
-        {"normal_texture"},
-        {"ao_texture"},
-        {"emit_texture"},
-        {"specular_exponent_texture"},
-    };
-
-    for (uint32_t idx = 0; idx < harray_count(texture_bindings); ++idx)
-    {
-        auto binding = texture_bindings + idx;
-        glUniform1i(
-            glGetUniformLocation(state->program_c.program, binding->uniform_name),
-            idx);
-    }
-
-    uint32_t last_vertex = 0;
-    for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)
-    {
-        editor_vertex_indices *i = state->material_indices + idx;
-        struct {
-            int32_t offset;
-        } texture_offsets[] =
-        {
-            i->current_material->texture_offset,
-            i->current_material->bump_texture_offset,
-            i->current_material->ao_texture_offset,
-            i->current_material->emit_texture_offset,
-            i->current_material->specular_exponent_texture_offset,
-        };
-
-        for (uint32_t offset_idx = 0; offset_idx < harray_count(texture_offsets); ++offset_idx)
-        {
-            auto offset = texture_offsets + offset_idx;
-            glActiveTexture(GL_TEXTURE0 + offset_idx);
-            if (offset->offset >= 0)
-            {
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[offset->offset]);
-            }
-            else
-            {
-                glBindTexture(GL_TEXTURE_2D, 0);
-            }
-        }
-
-        glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
-        last_vertex = i->final_vertex_id;
-    }
-
-    glErrorAssert();
+    Matrices matrices = build_matrices(ctx, memory, input);
+    draw_model(ctx, memory, input, &matrices);
 
     glUseProgram(state->program_b.program);
-    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&u_projection);
-    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&u_model);
-    glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&u_view);
+    glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&matrices.projection);
+    glUniformMatrix4fv(state->program_b.u_model_id, 1, false, (float *)&matrices.model);
+    glUniformMatrix4fv(state->program_b.u_view_id, 1, false, (float *)&matrices.view);
 
     if (!state->hide_lines)
     {
