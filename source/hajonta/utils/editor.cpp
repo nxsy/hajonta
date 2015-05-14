@@ -249,6 +249,11 @@ struct game_state
     uint32_t bounding_sphere_vbo;
     uint32_t bounding_sphere_ibo;
     uint32_t mouse_texture;
+    uint32_t fbo;
+    uint32_t fbo_texture;
+    uint32_t fbo_draw_vbo;
+    uint32_t fbo_draw_ibo;
+    uint32_t fbo_depth_render_buffer;
 
     uint32_t num_bounding_sphere_elements;
 
@@ -1797,8 +1802,83 @@ struct Matrices
 };
 
 void
+load_fbo_objects(game_state *state)
+{
+    glErrorAssert();
+
+    glUseProgram(state->program_c.program);
+    editor_vertex_format_c vertices[] =
+    {
+        {
+            {-1, -1, 0, 1},
+            {}, {}, {0,0},
+        },
+        {
+            {1, -1, 0, 1},
+            {}, {}, {1,0},
+        },
+        {
+            {1, 1, 0, 1},
+            {}, {}, {1,1},
+        },
+        {
+            {-1, 1, 0, 1},
+            {}, {}, {0,1},
+        },
+    };
+    glBindBuffer(GL_ARRAY_BUFFER, state->fbo_draw_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            sizeof(vertices),
+            vertices,
+            GL_STATIC_DRAW);
+
+    glErrorAssert();
+
+    int32_t elements[] = {
+        0, 1, 2,
+        2, 3, 0,
+    };
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->fbo_draw_ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            sizeof(elements),
+            elements,
+            GL_STATIC_DRAW);
+
+    glErrorAssert();
+}
+
+void
+draw_fbo_texture(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    glErrorAssert();
+
+    game_state *state = (game_state *)memory->memory;
+    glUseProgram(state->program_c.program);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->fbo_draw_vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->fbo_draw_ibo);
+    setup_vertex_attrib_array_c(state);
+    glUniform1i(state->program_c.u_pass_id, 1);
+
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(
+        glGetUniformLocation(state->program_c.program, "tex"),
+        0);
+    glBindTexture(GL_TEXTURE_2D, state->fbo_texture);
+    m4 identity = m4identity();
+    glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&identity);
+    glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&identity);
+    glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&identity);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glErrorAssert();
+}
+
+void
 draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, Matrices *matrices)
 {
+    glErrorAssert();
+
     game_state *state = (game_state *)memory->memory;
 
     glEnable(GL_DEPTH_TEST);
@@ -1807,6 +1887,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
 
     glUseProgram(state->program_c.program);
+    glUniform1i(state->program_c.u_pass_id, 0);
     glUniform1i(state->program_c.u_shader_mode_id, state->shader_config.shader_mode);
     glUniform1i(state->program_c.u_shader_config_flags_id, state->shader_config.shader_config_flags);
     glUniform1i(state->program_c.u_ambient_mode_id, state->shader_config.ambient_mode);
@@ -2086,6 +2167,26 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             memory->quit = true;
             return;
         }
+
+        glGenFramebuffers(1, &state->fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, state->fbo);
+
+        glGenTextures(1, &state->fbo_texture);
+        glBindTexture(GL_TEXTURE_2D, state->fbo_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, input->window.width, input->window.height, 0, GL_RGBA, GL_BYTE, NULL);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenBuffers(1, &state->fbo_draw_vbo);
+        glGenBuffers(1, &state->fbo_draw_ibo);
+
+        glGenRenderbuffers(1, &state->fbo_depth_render_buffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, state->fbo_depth_render_buffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, input->window.width, input->window.height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, state->fbo_depth_render_buffer);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         glErrorAssert();
 
@@ -2589,6 +2690,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         load_aabb_buffer_objects(state, state->model_min, state->model_max);
         load_bounding_sphere(state, state->model_min, state->model_max);
         state->hide_lines = true;
+
+        load_fbo_objects(state);
     }
 
     for (uint32_t i = 0;
@@ -2657,7 +2760,25 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->delta_t += input->delta_t;
 
     Matrices matrices = build_matrices(ctx, memory, input);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, state->fbo);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state->fbo_texture, 0);
+
+    GLenum draw_buffers[] =
+    {
+        GL_COLOR_ATTACHMENT0,
+    };
+    glDrawBuffers(harray_count(draw_buffers), draw_buffers);
+    glViewport(0, 0, input->window.width, input->window.height);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     draw_model(ctx, memory, input, &matrices);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDrawBuffer(GL_BACK);
+
+    draw_fbo_texture(ctx, memory, input);
 
     glUseProgram(state->program_b.program);
     glUniformMatrix4fv(state->program_b.u_perspective_id, 1, false, (float *)&matrices.projection);

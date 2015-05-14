@@ -18,6 +18,7 @@ uniform sampler2D emit_texture;
 uniform sampler2D specular_exponent_texture;
 uniform float u_specular_exponent = 32;
 
+uniform int u_pass = 0;
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
 uniform int u_ambient_mode;
@@ -271,6 +272,16 @@ vec4 standard_shading(ShaderConfig config)
 
 void main(void)
 {
+    if (u_pass > 0)
+    {
+        o_color = texture(tex, v_tex_coord);
+        if (o_color.a == 0)
+        {
+            discard;
+        }
+        return;
+    }
+
     ShaderConfig config;
     config.mode = u_shader_mode;
     config.config = u_shader_config_flags;

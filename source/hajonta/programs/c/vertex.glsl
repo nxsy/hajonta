@@ -13,6 +13,7 @@
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform int u_pass;
 uniform int u_shader_mode;
 uniform int u_shader_config_flags;
 uniform int u_ambient_mode;
@@ -35,6 +36,12 @@ out vec4 v_c_eyeDirection;
 
 void main (void)
 {
+    if (u_pass > 0)
+    {
+        gl_Position = a_pos;
+        v_tex_coord = a_tex_coord;
+        return;
+    }
     v_normal = a_normal;
     v_tex_coord = a_tex_coord;
 
