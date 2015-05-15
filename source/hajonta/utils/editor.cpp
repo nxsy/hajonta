@@ -203,6 +203,7 @@ enum struct shader_config_flags
     ignore_ao_texture = (1<<1),
     ignore_emit_texture = (1<<2),
     ignore_specular_exponent_texture = (1<<3),
+    ignore_gamma_correct = (1<<4),
 };
 
 enum struct diffuse_mode {
@@ -1559,6 +1560,7 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
         "ao tex",
         "emit tex",
         "spec. exp.",
+        "gamma",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
 

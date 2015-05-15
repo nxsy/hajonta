@@ -85,6 +85,11 @@ bool ignore_specular_exponent_texture(ShaderConfig config)
     return (config.config & 8) == 8;
 }
 
+bool ignore_gamma_correct(ShaderConfig config)
+{
+    return (config.config & 16) == 16;
+}
+
 bool enabled(in sampler2D texture)
 {
     ivec2 size = textureSize(texture, 0);
@@ -238,9 +243,37 @@ vec4 point_light_contribution(ShaderConfig config, PointLight p, vec3 n)
     return apply_attenuation(light, p.attenuation, distance);
 }
 
+vec4 linearize_gamma(vec4 color)
+{
+    vec4 ret = vec4(
+        pow(color.x, 2.2),
+        pow(color.y, 2.2),
+        pow(color.z, 2.2),
+        color.w
+    );
+
+    return ret;
+}
+
+vec4 delinearize_gamma(vec4 color)
+{
+    vec4 ret = vec4(
+        pow(color.x, 1/2.2),
+        pow(color.y, 1/2.2),
+        pow(color.z, 1/2.2),
+        color.w
+    );
+
+    return ret;
+}
+
 vec4 blinn_phong_shading(ShaderConfig config)
 {
     vec4 o_color = texture(tex, v_tex_coord);
+    if (!ignore_gamma_correct(config))
+    {
+        o_color = linearize_gamma(o_color);
+    }
 
     vec3 normal = get_normal(config);
 
@@ -261,6 +294,11 @@ vec4 blinn_phong_shading(ShaderConfig config)
         o_color.r = max(o_color.r, emit_color.r);
         o_color.g = max(o_color.g, emit_color.g);
         o_color.b = max(o_color.b, emit_color.b);
+    }
+
+    if (!ignore_gamma_correct(config))
+    {
+        o_color = delinearize_gamma(o_color);
     }
     return o_color;
 }
