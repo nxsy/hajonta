@@ -228,6 +228,15 @@ enum struct shader_mode
     specular_exponent_texture,
 };
 
+enum struct tonemap_mode
+{
+    none,
+    reinhard,
+    reinhard_luma,
+    hejl,
+    filmic,
+};
+
 struct shader_configuration
 {
     int shader_mode;
@@ -235,6 +244,7 @@ struct shader_configuration
     int ambient_mode;
     int diffuse_mode;
     int specular_mode;
+    int tonemap_mode;
 };
 
 struct game_state
@@ -1546,6 +1556,61 @@ draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_in
 }
 
 void
+draw_tonemap_mode(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    float x = 38;
+    float y_base = (float)input->window.height - 200.0f;
+    push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
+    char *shader_mode_names[] =
+    {
+        "none",
+        "Reinhard",
+        "Reinhard luma",
+        "Hejl",
+        "Filmic",
+    };
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
+    {
+        char *text = shader_mode_names[idx];
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (state->shader_config.tonemap_mode == idx)
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 12, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+        else
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                state->shader_config.tonemap_mode = idx;
+            }
+        }
+
+        x += 22;
+
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+
+        x += 10;
+    }
+}
+
+void
 draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
 {
     game_state *state = (game_state *)memory->memory;
@@ -1745,6 +1810,7 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     draw_ambient_mode(ctx, memory, input, &pushctx);
     draw_diffuse_mode(ctx, memory, input, &pushctx);
     draw_specular_mode(ctx, memory, input, &pushctx);
+    draw_tonemap_mode(ctx, memory, input, &pushctx);
 
     push_window(state, &pushctx, 34, 140, 4, 3);
     {
@@ -1895,6 +1961,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     glUniform1i(state->program_c.u_ambient_mode_id, state->shader_config.ambient_mode);
     glUniform1i(state->program_c.u_diffuse_mode_id, state->shader_config.diffuse_mode);
     glUniform1i(state->program_c.u_specular_mode_id, state->shader_config.specular_mode);
+    glUniform1i(state->program_c.u_tonemap_mode_id, state->shader_config.tonemap_mode);
     setup_vertex_attrib_array_c(state);
     glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&matrices->model);
     glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&matrices->view);

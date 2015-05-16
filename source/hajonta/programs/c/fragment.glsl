@@ -19,11 +19,12 @@ uniform sampler2D specular_exponent_texture;
 uniform float u_specular_exponent = 32;
 
 uniform int u_pass = 0;
-uniform int u_shader_mode;
-uniform int u_shader_config_flags;
-uniform int u_ambient_mode;
-uniform int u_diffuse_mode;
-uniform int u_specular_mode;
+uniform int u_shader_mode = 0;
+uniform int u_shader_config_flags = 0;
+uniform int u_ambient_mode = 0;
+uniform int u_diffuse_mode = 0;
+uniform int u_specular_mode = 0;
+uniform int u_tonemap_mode = 0;
 uniform mat4 u_model;
 uniform mat4 u_view;
 
@@ -199,7 +200,7 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
                 } break;
                 case 3:
                 {
-                    specular_component = gaussian_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess / 512.0);
+                    specular_component = gaussian_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess / 255.0);
                 } break;
                 default:
                 {
@@ -267,6 +268,61 @@ vec4 delinearize_gamma(vec4 color)
     return ret;
 }
 
+vec4 reinhard(vec4 o_color)
+{
+    vec4 ret = o_color;
+    ret = ret/(1+ret);
+    ret.w = o_color.w;
+    return ret;
+}
+
+vec4 reinhard_l(vec4 o_color)
+{
+    float luminance = 0.2126 * o_color.r + 0.7152 * o_color.g + 0.0722 * o_color.b;
+    float nL = luminance / (1 + luminance);
+    float scale = nL / luminance;
+    o_color.r *= scale;
+    o_color.g *= scale;
+    o_color.b *= scale;
+    return o_color;
+}
+
+vec4 hejl(vec4 o_color)
+{
+    vec3 x = o_color.rgb - 0.004;
+    x.r = max(0, x.r);
+    x.g = max(0, x.g);
+    x.b = max(0, x.b);
+    vec3 ret = (x*(6.2*x+.5))/(x*(6.2*x+1.7)+0.06);
+    return vec4(ret,1);
+}
+
+float A = 0.15;
+float B = 0.50;
+float C = 0.10;
+float D = 0.20;
+float E = 0.02;
+float F = 0.30;
+float W = 11.2;
+
+vec3 filmic_tonemap(vec3 color)
+{
+    vec3 x = color.rgb;
+    color.rgb = ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
+    return color;
+}
+
+vec4 filmic(vec4 o_color)
+{
+   float exposure_bias = 2.0f;
+   vec3 curr = filmic_tonemap(exposure_bias * o_color.rgb);
+
+   vec3 white_scale = 1.0f / filmic_tonemap(vec3(W));
+   vec3 color = curr * white_scale;
+
+   return vec4(color, o_color.w);
+}
+
 vec4 blinn_phong_shading(ShaderConfig config)
 {
     vec4 o_color = texture(tex, v_tex_coord);
@@ -296,7 +352,31 @@ vec4 blinn_phong_shading(ShaderConfig config)
         o_color.b = max(o_color.b, emit_color.b);
     }
 
-    if (!ignore_gamma_correct(config))
+    bool no_delinearize = false;
+    switch (u_tonemap_mode)
+    {
+        case 0:
+        {
+        } break;
+        case 1:
+        {
+            o_color = reinhard(o_color);
+        } break;
+        case 2:
+        {
+            o_color = reinhard_l(o_color);
+        } break;
+        case 3:
+        {
+            no_delinearize = true;
+            o_color = hejl(o_color);
+        } break;
+        case 4:
+        {
+            o_color = filmic(o_color);
+        } break;
+    }
+    if (!ignore_gamma_correct(config) && !no_delinearize)
     {
         o_color = delinearize_gamma(o_color);
     }

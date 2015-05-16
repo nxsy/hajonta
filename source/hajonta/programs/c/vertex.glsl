@@ -19,6 +19,7 @@ uniform int u_shader_config_flags;
 uniform int u_ambient_mode;
 uniform int u_diffuse_mode;
 uniform int u_specular_mode;
+uniform int u_tonemap_mode;
 
 in vec4 a_pos;
 in vec4 a_normal;
