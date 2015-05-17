@@ -160,7 +160,7 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
         } break;
         case 1:
         {
-            diffuse_component = 0.0001f;
+            diffuse_component = 0.000001f;
         } break;
         case 2:
         {
