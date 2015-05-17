@@ -2070,7 +2070,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
         auto binding = texture_bindings + idx;
         glUniform1i(
             glGetUniformLocation(state->program_c.program, binding->uniform_name),
-            idx);
+            (GLint)idx);
     }
 
     uint32_t last_vertex = 0;
