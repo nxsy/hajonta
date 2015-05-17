@@ -118,7 +118,7 @@ struct ui2d_push_context
     uint32_t seen_textures[1024];
 };
 
-struct material
+struct Material
 {
     char name[100];
     int32_t texture_offset;
@@ -131,12 +131,12 @@ struct material
 struct face
 {
     face_index indices[3];
-    material *current_material;
+    Material *current_material;
 };
 
 struct editor_vertex_indices
 {
-    material *current_material;
+    Material *material;
     uint32_t final_vertex_id;
 };
 
@@ -247,26 +247,41 @@ struct shader_configuration
     int tonemap_mode;
 };
 
-struct game_state
+struct ModelObjects
 {
-    uint32_t vao;
     uint32_t vbo;
     uint32_t ibo;
-    uint32_t line_ibo;
-    uint32_t texture_ids[20];
+
+    uint32_t num_material_indices;
+    editor_vertex_indices material_indices[100];
     uint32_t num_texture_ids;
+    uint32_t texture_ids[20];
+};
+
+struct DebugModelObjects
+{
+    uint32_t line_ibo;
     uint32_t aabb_cube_vbo;
     uint32_t aabb_cube_ibo;
     uint32_t bounding_sphere_vbo;
     uint32_t bounding_sphere_ibo;
+    uint32_t num_bounding_sphere_elements;
+
+};
+
+struct game_state
+{
+    uint32_t vao;
+
+    ModelObjects model_objects;
+    DebugModelObjects debug_model_objects;
+
     uint32_t mouse_texture;
     uint32_t fbo;
     uint32_t fbo_texture;
     uint32_t fbo_draw_vbo;
     uint32_t fbo_draw_ibo;
     uint32_t fbo_depth_render_buffer;
-
-    uint32_t num_bounding_sphere_elements;
 
     float near_;
     float far_;
@@ -285,7 +300,7 @@ struct game_state
     face faces[100000];
 
     uint32_t num_materials;
-    material materials[15];
+    Material materials[15];
 
     uint32_t num_faces_array;
     uint32_t faces_array[300000];
@@ -293,9 +308,6 @@ struct game_state
     uint32_t line_elements[600000];
     uint32_t num_vbo_vertices;
     editor_vertex_format_c vbo_vertices[300000];
-
-    editor_vertex_indices material_indices[100];
-    uint32_t num_material_indices;
 
     b_program_struct program_b;
     ui2d_program_struct program_ui2d;
@@ -436,7 +448,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
     char *position = start_position;
     uint32_t max_lines = 100000;
     uint32_t counter = 0;
-    material *current_material = 0;
+    Material *current_material = 0;
     while (position < eof)
     {
         uint32_t remainder = state->mtl_file.size - (uint32_t)(position - start_position);
@@ -530,9 +542,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
                 hassert(loaded);
 
-                current_material->bump_texture_offset = (int32_t)(state->num_texture_ids++);
+                current_material->bump_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
                 glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->bump_texture_offset]);
+                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->bump_texture_offset]);
                 glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
@@ -562,9 +574,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
                 hassert(loaded);
 
-                current_material->texture_offset = (int32_t)(state->num_texture_ids++);
+                current_material->texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
                 glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->texture_offset]);
+                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->texture_offset]);
                 glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
@@ -591,9 +603,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
                 hassert(loaded);
 
-                current_material->emit_texture_offset = (int32_t)(state->num_texture_ids++);
+                current_material->emit_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
                 glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->emit_texture_offset]);
+                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->emit_texture_offset]);
                 glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
@@ -620,9 +632,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
                 hassert(loaded);
 
-                current_material->ao_texture_offset = (int32_t)(state->num_texture_ids++);
+                current_material->ao_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
                 glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->ao_texture_offset]);
+                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->ao_texture_offset]);
                 glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
@@ -661,9 +673,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
                 loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
                 hassert(loaded);
 
-                current_material->specular_exponent_texture_offset = (int32_t)(state->num_texture_ids++);
+                current_material->specular_exponent_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
                 glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[current_material->specular_exponent_texture_offset]);
+                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->specular_exponent_texture_offset]);
                 glErrorAssert();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                     x, y, 0,
@@ -728,7 +740,7 @@ load_aabb_buffer_objects(game_state *state, v3 model_min, v3 model_max)
             {model_min.x, model_max.y, model_max.z, 1.0},
         },
     };
-    glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, state->debug_model_objects.aabb_cube_vbo);
 
     glBufferData(GL_ARRAY_BUFFER,
             (GLsizeiptr)sizeof(vertices),
@@ -753,7 +765,7 @@ load_aabb_buffer_objects(game_state *state, v3 model_min, v3 model_max)
         3, 7,
     };
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.aabb_cube_ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             (GLsizeiptr)sizeof(elements),
             elements,
@@ -808,7 +820,7 @@ load_bounding_sphere(game_state *state, v3 model_min, v3 model_max)
             };
         }
     }
-    glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, state->debug_model_objects.bounding_sphere_vbo);
 
     glBufferData(GL_ARRAY_BUFFER,
             (GLsizeiptr)sizeof(vertices),
@@ -828,9 +840,9 @@ load_bounding_sphere(game_state *state, v3 model_min, v3 model_max)
         }
     }
 
-    state->num_bounding_sphere_elements = harray_count(elements);
+    state->debug_model_objects.num_bounding_sphere_elements = harray_count(elements);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.bounding_sphere_ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             (GLsizeiptr)sizeof(elements),
             elements,
@@ -1735,16 +1747,16 @@ draw_bounds(hajonta_thread_context *ctx, platform_memory *memory, game_input *in
     v4 u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
     glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
 
-    glBindBuffer(GL_ARRAY_BUFFER, state->aabb_cube_vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->aabb_cube_ibo);
+    glBindBuffer(GL_ARRAY_BUFFER, state->debug_model_objects.aabb_cube_vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.aabb_cube_ibo);
     setup_vertex_attrib_array_b(state);
     glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, state->bounding_sphere_vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->bounding_sphere_ibo);
+    glBindBuffer(GL_ARRAY_BUFFER, state->debug_model_objects.bounding_sphere_vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.bounding_sphere_ibo);
     setup_vertex_attrib_array_b(state);
     glPrimitiveRestartIndex(65535);
-    glDrawElements(GL_LINE_LOOP, (GLsizei)state->num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
+    glDrawElements(GL_LINE_LOOP, (GLsizei)state->debug_model_objects.num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
 
     glErrorAssert();
 }
@@ -1951,8 +1963,8 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
 
     glUseProgram(state->program_c.program);
     glUniform1i(state->program_c.u_pass_id, 0);
@@ -2062,18 +2074,18 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     }
 
     uint32_t last_vertex = 0;
-    for (uint32_t idx = 0; idx < state->num_material_indices; ++idx)
+    for (uint32_t idx = 0; idx < state->model_objects.num_material_indices; ++idx)
     {
-        editor_vertex_indices *i = state->material_indices + idx;
+        editor_vertex_indices *i = state->model_objects.material_indices + idx;
         struct {
             int32_t offset;
         } texture_offsets[] =
         {
-            i->current_material->texture_offset,
-            i->current_material->bump_texture_offset,
-            i->current_material->ao_texture_offset,
-            i->current_material->emit_texture_offset,
-            i->current_material->specular_exponent_texture_offset,
+            i->material->texture_offset,
+            i->material->bump_texture_offset,
+            i->material->ao_texture_offset,
+            i->material->emit_texture_offset,
+            i->material->specular_exponent_texture_offset,
         };
 
         for (uint32_t offset_idx = 0; offset_idx < harray_count(texture_offsets); ++offset_idx)
@@ -2082,7 +2094,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
             glActiveTexture(GL_TEXTURE0 + offset_idx);
             if (offset->offset >= 0)
             {
-                glBindTexture(GL_TEXTURE_2D, state->texture_ids[offset->offset]);
+                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[offset->offset]);
             }
             else
             {
@@ -2179,15 +2191,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 
         glErrorAssert();
-        glGenBuffers(1, &state->vbo);
-        glGenBuffers(1, &state->aabb_cube_vbo);
-        glGenBuffers(1, &state->bounding_sphere_vbo);
-        glGenBuffers(1, &state->ibo);
-        glGenBuffers(1, &state->line_ibo);
-        glGenBuffers(1, &state->aabb_cube_ibo);
-        glGenBuffers(1, &state->bounding_sphere_ibo);
+        glGenBuffers(1, &state->model_objects.vbo);
+        glGenBuffers(1, &state->debug_model_objects.aabb_cube_vbo);
+        glGenBuffers(1, &state->debug_model_objects.bounding_sphere_vbo);
+        glGenBuffers(1, &state->model_objects.ibo);
+        glGenBuffers(1, &state->debug_model_objects.line_ibo);
+        glGenBuffers(1, &state->debug_model_objects.aabb_cube_ibo);
+        glGenBuffers(1, &state->debug_model_objects.bounding_sphere_ibo);
         glErrorAssert();
-        glGenTextures(harray_count(state->texture_ids), state->texture_ids);
+        glGenTextures(harray_count(state->model_objects.texture_ids), state->model_objects.texture_ids);
         glGenTextures(1, &state->mouse_texture);
 
         {
@@ -2269,13 +2281,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         char *position = start_position;
         uint32_t max_lines = 200000;
         uint32_t counter = 0;
-        material null_material = {};
+        Material null_material = {};
         null_material.texture_offset = -1;
         null_material.bump_texture_offset = -1;
         null_material.emit_texture_offset = -1;
         null_material.ao_texture_offset = -1;
         null_material.specular_exponent_texture_offset = -1;
-        material *current_material = &null_material;
+        Material *current_material = &null_material;
         while (position < eof)
         {
             uint32_t remainder = state->model_file.size - (uint32_t)(position - start_position);
@@ -2499,7 +2511,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
             else if (starts_with(line, "usemtl"))
             {
-                material *tm;
+                Material *tm;
                 char material_name[100];
                 auto material_name_length = eol - position - 7;
                 strncpy(material_name, line + 7, (size_t)material_name_length + 1);
@@ -2562,7 +2574,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         glErrorAssert();
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
         glErrorAssert();
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                 (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0])),
@@ -2570,7 +2582,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 GL_STATIC_DRAW);
         glErrorAssert();
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.line_ibo);
         glErrorAssert();
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                 (GLsizeiptr)(state->num_line_elements * sizeof(state->line_elements[0])),
@@ -2578,7 +2590,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 GL_STATIC_DRAW);
         glErrorAssert();
 
-        material *last_material = 0;
+        Material *last_material = 0;
         for (uint32_t face_idx = 0;
                 face_idx < state->num_faces;
                 ++face_idx)
@@ -2587,7 +2599,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             if (f->current_material != last_material) {
                 if (last_material)
                 {
-                    state->material_indices[state->num_material_indices++] =
+                    state->model_objects.material_indices[state->model_objects.num_material_indices++] =
                     {
                         last_material,
                         3 * face_idx,
@@ -2741,13 +2753,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             vbo_v3->tex_coord.y = 1 - face_vt3->y;
         }
 
-        state->material_indices[state->num_material_indices++] =
+        state->model_objects.material_indices[state->model_objects.num_material_indices++] =
         {
             last_material,
             state->num_vbo_vertices,
         };
 
-        glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
         glErrorAssert();
 
         glBufferData(GL_ARRAY_BUFFER,
@@ -2860,7 +2872,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         setup_vertex_attrib_array_b(state);
         glUniform1i(state->program_b.u_model_mode_id, 0);
         glUniform1i(state->program_b.u_shading_mode_id, 0);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->line_ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.line_ibo);
         glDepthFunc(GL_LEQUAL);
         u_mvp_enabled = {1.0f, 0.0f, 0.0f, 1.0f};
         glUniform4fv(state->program_b.u_mvp_enabled_id, 1, (float *)&u_mvp_enabled);
