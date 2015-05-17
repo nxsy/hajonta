@@ -341,16 +341,14 @@ vec4 blinn_phong_shading(ShaderConfig config)
         light += point_light_contribution(config, u_point_lights[i], normal);
     }
 
-    light.w = 1.0;
     o_color *= light;
 
     if (!ignore_emit_texture(config) && enabled(emit_texture))
     {
         vec4 emit_color = texture(emit_texture, v_tex_coord);
-        o_color.r = max(o_color.r, emit_color.r);
-        o_color.g = max(o_color.g, emit_color.g);
-        o_color.b = max(o_color.b, emit_color.b);
+        o_color += emit_color;
     }
+    o_color.w = 1;
 
     bool no_delinearize = false;
     switch (u_tonemap_mode)
