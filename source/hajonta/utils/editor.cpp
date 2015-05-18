@@ -39,7 +39,9 @@
 #include "hajonta/programs/skybox.h"
 #include "hajonta/programs/c.h"
 
-struct directional_light
+#include "hajonta/ui/ui2d.cpp"
+
+struct DirectionalLight
 {
     v3 direction;
     v3 color;
@@ -54,7 +56,7 @@ struct attenuation_config
     float exponential;
 };
 
-struct point_light
+struct PointLight
 {
     v3 position;
     v3 color;
@@ -92,30 +94,6 @@ struct face_index
     uint32_t vertex;
     uint32_t texture_coord;
     uint32_t normal;
-};
-
-struct ui2d_vertex_format
-{
-    float position[2];
-    float tex_coord[2];
-    uint32_t texid;
-    uint32_t options;
-    v3 channel_color;
-};
-
-struct ui2d_push_context
-{
-    ui2d_vertex_format *vertices;
-    uint32_t num_vertices;
-    uint32_t max_vertices;
-    GLuint *elements;
-    uint32_t num_elements;
-    uint32_t max_elements;
-    uint32_t *textures;
-    uint32_t num_textures;
-    uint32_t max_textures;
-
-    uint32_t seen_textures[1024];
 };
 
 struct Material
@@ -269,6 +247,13 @@ struct DebugModelObjects
 
 };
 
+struct Lighting
+{
+    DirectionalLight directional_light;
+    uint32_t num_point_lights;
+    PointLight point_lights[8];
+};
+
 struct game_state
 {
     uint32_t vao;
@@ -334,6 +319,8 @@ struct game_state
     stb_font_data stb_font;
     kenney_ui_data kenney_ui;
     skybox_data skybox;
+
+    Lighting lighting;
 };
 
 
@@ -884,82 +871,6 @@ setup_vertex_attrib_array_c(game_state *state)
     glErrorAssert();
 }
 
-uint32_t
-push_texture(ui2d_push_context *pushctx, uint32_t tex)
-{
-    hassert(tex < sizeof(pushctx->seen_textures));
-
-    if (pushctx->seen_textures[tex] != 0)
-    {
-        return pushctx->seen_textures[tex];
-    }
-
-    hassert(pushctx->num_textures + 4 <= pushctx->max_textures);
-    pushctx->textures[pushctx->num_textures++] = tex;
-
-    // Yes, this is post-increment.  It is decremented in the shader.
-    pushctx->seen_textures[tex] = pushctx->num_textures;
-    return pushctx->num_textures;
-}
-
-void
-push_quad(ui2d_push_context *pushctx, stbtt_aligned_quad q, uint32_t tex, uint32_t options)
-{
-        ui2d_vertex_format *vertices = pushctx->vertices;
-        uint32_t *num_vertices = &pushctx->num_vertices;
-        uint32_t *elements = pushctx->elements;
-        uint32_t *num_elements = &pushctx->num_elements;
-
-        uint32_t tex_handle = push_texture(pushctx, tex);
-
-        hassert(pushctx->num_vertices + 4 <= pushctx->max_vertices);
-
-        uint32_t bl_vertex = (*num_vertices)++;
-        vertices[bl_vertex] =
-        {
-            { q.x0, q.y0 },
-            { q.s0, q.t0 },
-            tex_handle,
-            options,
-            { 1, 1, 1 },
-        };
-        uint32_t br_vertex = (*num_vertices)++;
-        vertices[br_vertex] =
-        {
-            { q.x1, q.y0 },
-            { q.s1, q.t0 },
-            tex_handle,
-            options,
-            { 1, 1, 0 },
-        };
-        uint32_t tr_vertex = (*num_vertices)++;
-        vertices[tr_vertex] =
-        {
-            { q.x1, q.y1 },
-            { q.s1, q.t1 },
-            tex_handle,
-            options,
-            { 1, 1, 0 },
-        };
-        uint32_t tl_vertex = (*num_vertices)++;
-        vertices[tl_vertex] =
-        {
-            { q.x0, q.y1 },
-            { q.s0, q.t1 },
-            tex_handle,
-            options,
-            { 1, 1, 0 },
-        };
-        hassert(pushctx->num_elements + 6 <= pushctx->max_elements);
-        elements[(*num_elements)++] = bl_vertex;
-        elements[(*num_elements)++] = br_vertex;
-        elements[(*num_elements)++] = tr_vertex;
-
-        elements[(*num_elements)++] = tr_vertex;
-        elements[(*num_elements)++] = tl_vertex;
-        elements[(*num_elements)++] = bl_vertex;
-}
-
 void
 push_sprite(ui2d_push_context *pushctx, sprite *s, uint32_t tex, v2 pos_bl)
 {
@@ -1088,52 +999,6 @@ push_window(game_state *state, ui2d_push_context *pushctx, uint32_t x, uint32_t 
     }
 }
 
-void
-ui2d_render_elements(game_state *state, ui2d_push_context *pushctx)
-{
-    glBindBuffer(GL_ARRAY_BUFFER, state->stb_font.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-            (GLsizei)(pushctx->num_vertices * sizeof(pushctx->vertices[0])),
-            pushctx->vertices,
-            GL_DYNAMIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->stb_font.ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-            (GLsizei)(pushctx->num_elements * sizeof(pushctx->elements[0])),
-            pushctx->elements,
-            GL_DYNAMIC_DRAW);
-
-    glEnableVertexAttribArray((GLuint)state->program_ui2d.a_pos_id);
-    glEnableVertexAttribArray((GLuint)state->program_ui2d.a_tex_coord_id);
-    glEnableVertexAttribArray((GLuint)state->program_ui2d.a_texid_id);
-    glEnableVertexAttribArray((GLuint)state->program_ui2d.a_options_id);
-    glEnableVertexAttribArray((GLuint)state->program_ui2d.a_channel_color_id);
-    glVertexAttribPointer((GLuint)state->program_ui2d.a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), 0);
-    glVertexAttribPointer((GLuint)state->program_ui2d.a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
-    glVertexAttribPointer((GLuint)state->program_ui2d.a_texid_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
-    glVertexAttribPointer((GLuint)state->program_ui2d.a_options_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
-    glVertexAttribPointer((GLuint)state->program_ui2d.a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
-
-    GLint uniform_locations[10] = {};
-    char msg[] = "tex[xx]";
-    for (int idx = 0; idx < harray_count(uniform_locations); ++idx)
-    {
-        sprintf(msg, "tex[%d]", idx);
-        uniform_locations[idx] = glGetUniformLocation(state->program_ui2d.program, msg);
-
-    }
-    for (uint32_t i = 0; i < pushctx->num_textures; ++i)
-    {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, pushctx->textures[i]);
-        glUniform1i(
-            uniform_locations[i],
-            (GLint)i);
-    }
-
-    glDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, 0);
-    glErrorAssert();
-}
 bool
 load_texture_asset(
     hajonta_thread_context *ctx,
@@ -1873,7 +1738,7 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
         q.t1 = 1;
         push_quad(&pushctx, q, state->mouse_texture, 0);
     }
-    ui2d_render_elements(state, &pushctx);
+    ui2d_render_elements(&pushctx, &state->program_ui2d, state->stb_font.vbo, state->stb_font.ibo);
 }
 
 struct Matrices
@@ -1981,46 +1846,24 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&matrices->view);
     glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&matrices->projection);
 
-    directional_light sun = {
-        {0.0f, 1.0f, 0.0f},
-        {1.0f, 1.0f, 1.0f},
-        0.01f,
-        20.0f,
-    };
+    DirectionalLight *sun = &state->lighting.directional_light;
 
     glUniform3fv(
         glGetUniformLocation(state->program_c.program, "u_directional_light.direction"), 1,
-        (float *)&sun.direction);
+        (float *)&sun->direction);
     glUniform3fv(
         glGetUniformLocation(state->program_c.program, "u_directional_light.color"), 1,
-        (float *)&sun.color);
+        (float *)&sun->color);
     glUniform1f(
         glGetUniformLocation(state->program_c.program, "u_directional_light.ambient_intensity"),
-        sun.ambient_intensity);
+        sun->ambient_intensity);
     glUniform1f(
         glGetUniformLocation(state->program_c.program, "u_directional_light.diffuse_intensity"),
-        sun.diffuse_intensity);
+        sun->diffuse_intensity);
 
-    point_light lights[] = {
-        {
-            {-5.0f, -3.0f, -12.0f},
-            {1.0f, 0.6f, 0.5f},
-            0.0f,
-            50.0f,
-            { 1.0f, 0.25f, 0.4f },
-        },
-        {
-            {8.0f, -3.0f, -8.0f},
-            {0.3f, 0.6f, 1.0f},
-            0.0f,
-            10.0f,
-            { 1.0f, 0.25f, 0.4f },
-        },
-    };
-    uint32_t num_point_lights = harray_count(lights);
-    for (uint32_t idx = 0; idx < num_point_lights; ++idx)
+    for (uint32_t idx = 0; idx < state->lighting.num_point_lights; ++idx)
     {
-        point_light *l = lights + idx;
+        PointLight *l = state->lighting.point_lights + idx;
         uint32_t program = state->program_c.program;
         char un[100];
         sprintf(un, "u_point_lights[%d].position", idx);
@@ -2054,7 +1897,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     }
     glUniform1i(
         glGetUniformLocation(state->program_c.program, "u_num_point_lights"),
-        (GLint)num_point_lights);
+        (GLint)state->lighting.num_point_lights);
 
     struct {
         char *uniform_name;
@@ -2190,6 +2033,29 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         state->near_ = {5.0f};
         state->far_ = {50.0f};
+
+        state->lighting.directional_light = {
+            {0.0f, 1.0f, 0.0f},
+            {1.0f, 1.0f, 1.0f},
+            0.01f,
+            20.0f,
+        };
+
+        state->lighting.point_lights[0] = {
+            {-5.0f, -3.0f, -12.0f},
+            {1.0f, 0.6f, 0.5f},
+            0.0f,
+            50.0f,
+            { 1.0f, 0.25f, 0.4f },
+        };
+        state->lighting.point_lights[1] = {
+            {8.0f, -3.0f, -8.0f},
+            {0.3f, 0.6f, 1.0f},
+            0.0f,
+            10.0f,
+            { 1.0f, 0.25f, 0.4f },
+        };
+        state->lighting.num_point_lights = 2;
 
         glErrorAssert();
         glGenBuffers(1, &state->model_objects.vbo);
