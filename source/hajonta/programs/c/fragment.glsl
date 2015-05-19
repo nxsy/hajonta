@@ -133,6 +133,23 @@ float lambert_diffuse_component(vec3 light_direction, vec3 normal)
 {
     return max(0.0, dot(light_direction, normal));
 }
+#define PI 3.14159265
+
+float oren_nayer_diffuse_component(vec3 light_direction, vec3 eye_direction, vec3 n, float roughness, float albedo)
+{
+    float l_dot_v = dot(light_direction, eye_direction);
+    float n_dot_l = dot(light_direction, n);
+    float n_dot_v = dot(n, eye_direction);
+
+    float s = l_dot_v - n_dot_l * n_dot_v;
+    float t = mix(1.0, max(n_dot_l, n_dot_v), step(0.0, s));
+
+    float sigma2 = roughness * roughness;
+    float A = 1.0 + sigma2 * (albedo / (sigma2 + 0.13) + 0.5 / (sigma2 + 0.33));
+    float B = 0.45 * sigma2 / (sigma2 + 0.09);
+
+    return albedo * max(0.0, n_dot_l) * (A + B * s / t) / PI;
+}
 
 vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
 {
@@ -165,6 +182,12 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
         case 2:
         {
             diffuse_component = lambert_diffuse_component(l.direction, n);
+        } break;
+        case 3:
+        {
+            float roughness = 0.05;
+            float albedo = 2;
+            diffuse_component = oren_nayer_diffuse_component(l.direction, v_c_eyeDirection.xyz, n, roughness, albedo);
         } break;
         default:
         {

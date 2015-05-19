@@ -187,6 +187,7 @@ enum struct shader_config_flags
 enum struct diffuse_mode {
     standard,
     lambert,
+    oren_nayer,
 };
 
 enum struct specular_mode
@@ -1340,6 +1341,7 @@ draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
         "standard",
         "none",
         "lambert",
+        "oren-nayer",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
