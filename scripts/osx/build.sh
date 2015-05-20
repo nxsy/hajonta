@@ -27,6 +27,9 @@ clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/p
 clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/unit source/hajonta/bootstrap/unit.cpp ${DEBUG_FLAGS} ${INCLUDES}
 ( cd build/debug && ./unit )
 
+# util 
+clang ${CPPFLAGS} ${WARNFLAGS} -o build/debug/bump_to_normal source/hajonta/utils/bump_to_normal.cpp ${DEBUG_FLAGS} ${INCLUDES} -Isource/hajonta/thirdparty
+
 # game
 clang ${CPPFLAGS} ${WARNFLAGS} -c source/hajonta/game.cpp ${DEBUG_FLAGS} ${INCLUDES} -o build/debug/game.o
 clang ${WARNFLAGS} -dynamiclib -o build/debug/libgame.dylib build/debug/game.o -framework OpenGL ${DEBUG_FLAGS}
