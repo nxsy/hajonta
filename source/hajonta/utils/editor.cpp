@@ -255,9 +255,29 @@ struct Lighting
     PointLight point_lights[8];
 };
 
+struct Camera
+{
+    // What we're pointed at
+    v3 target;
+    // Which direction we're viewing from
+    v2 rotation;
+    // How far away we're viewing from
+    float distance;
+
+    m4 view;
+    m4 projection;
+
+    // How fast we're still moving
+    v3 target_velocity;
+    // How fast we're still rotating
+    v2 rotation_velocity;
+};
+
 struct game_state
 {
     uint32_t vao;
+
+    Camera camera;
 
     ModelObjects model_objects;
     DebugModelObjects debug_model_objects;
@@ -1631,6 +1651,88 @@ draw_bounds(hajonta_thread_context *ctx, platform_memory *memory, game_input *in
 }
 
 void
+draw_model_rotation(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+    push_window(state, pushctx, 34, 140, 4, 3);
+    v2 mouse_loc = {
+        (float)input->mouse.x,
+        (float)input->window.height - (float)input->mouse.y,
+    };
+
+    uint32_t xbase = 34 + 8;
+    uint32_t ybase = 140 + 8;
+
+    struct {
+        uint32_t sprite;
+        uint32_t x;
+        uint32_t y;
+        float *axis;
+        float iter;
+    } sprites[] =
+    {
+        { 13, 1, 1, &state->x_rotation, 0.005f },
+        { 14, 1, 0, &state->x_rotation,-0.005f },
+        { 15, 0, 0, &state->y_rotation, 0.005f },
+        { 16, 2, 0, &state->y_rotation,-0.005f },
+    };
+    for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
+    {
+        auto sprite = sprites + idx;
+        float x = (float)(xbase + (sprite->x * 16));
+        float y = (float)(ybase + (sprite->y * 16));
+        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
+
+        rectangle2 r = {{x,y},{16,16}};
+        if (point_in_rectangle(mouse_loc, r))
+        {
+            *(sprite->axis) += sprite->iter;
+        }
+    }
+}
+
+void
+draw_camera_movement(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+    push_window(state, pushctx, 104, 140, 4, 3);
+    v2 mouse_loc = {
+        (float)input->mouse.x,
+        (float)input->window.height - (float)input->mouse.y,
+    };
+
+    uint32_t xbase = 104 + 8;
+    uint32_t ybase = 140 + 8;
+
+    struct {
+        uint32_t sprite;
+        uint32_t x;
+        uint32_t y;
+        float *axis;
+        float iter;
+    } sprites[] =
+    {
+        { 13, 1, 1, &state->camera.target.y, 0.005f },
+        { 14, 1, 0, &state->camera.target.y,-0.005f },
+        { 15, 0, 0, &state->camera.target.x,-0.005f },
+        { 16, 2, 0, &state->camera.target.x, 0.005f },
+    };
+    for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
+    {
+        auto sprite = sprites + idx;
+        float x = (float)(xbase + (sprite->x * 16));
+        float y = (float)(ybase + (sprite->y * 16));
+        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
+
+        rectangle2 r = {{x,y},{16,16}};
+        if (point_in_rectangle(mouse_loc, r))
+        {
+            *(sprite->axis) += sprite->iter;
+        }
+    }
+}
+
+void
 draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 {
     game_state *state = (game_state *)memory->memory;
@@ -1693,38 +1795,8 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     draw_specular_mode(ctx, memory, input, &pushctx);
     draw_tonemap_mode(ctx, memory, input, &pushctx);
 
-    push_window(state, &pushctx, 34, 140, 4, 3);
-    {
-        uint32_t xbase = 34 + 8;
-        uint32_t ybase = 140 + 8;
-
-        struct {
-            uint32_t sprite;
-            uint32_t x;
-            uint32_t y;
-            float *axis;
-            float iter;
-        } sprites[] =
-        {
-            { 13, 1, 1, &state->x_rotation, 0.005f },
-            { 14, 1, 0, &state->x_rotation,-0.005f },
-            { 15, 0, 0, &state->y_rotation, 0.005f },
-            { 16, 2, 0, &state->y_rotation,-0.005f },
-        };
-        for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
-        {
-            auto sprite = sprites + idx;
-            float x = (float)(xbase + (sprite->x * 16));
-            float y = (float)(ybase + (sprite->y * 16));
-            push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
-
-            rectangle2 r = {{x,y},{16,16}};
-            if (point_in_rectangle(mouse_loc, r))
-            {
-                *(sprite->axis) += sprite->iter;
-            }
-        }
-    }
+    draw_model_rotation(ctx, memory, input, &pushctx);
+    draw_camera_movement(ctx, memory, input, &pushctx);
 
     // Mouse should be last
     {
@@ -1956,6 +2028,24 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     glErrorAssert();
 }
 
+void
+update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    m4 view = m4identity();
+    view.cols[3] = {
+        -state->camera.target.x,
+        -state->camera.target.y,
+        -(state->camera.target.z +state->camera.distance),
+        1.0f,
+    };
+    state->camera.view = view;
+
+    float ratio = (float)input->window.width / (float)input->window.height;
+    state->camera.projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
+}
+
 Matrices
 build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 {
@@ -1991,7 +2081,6 @@ build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input 
     scale.cols[1].E[1] = 2.0f / max_dimension;
     scale.cols[2].E[2] = 2.0f / max_dimension;
     m4 translate = m4identity();
-    translate.cols[3] = v4{0.0f, 0.0f, -10.0f, 1.0f};
 
     m4 a = center_translate;
     m4 b = scale;
@@ -1999,15 +2088,13 @@ build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input 
     m4 d = translate;
 
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
-    m4 u_view = m4identity();
 
-    float ratio = (float)input->window.width / (float)input->window.height;
-    m4 u_projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
+    update_camera(ctx, memory, input);
 
     return Matrices{
         u_model,
-        u_view,
-        u_projection,
+        state->camera.view,
+        state->camera.projection,
     };
 }
 
@@ -2033,6 +2120,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         load_fonts(ctx, memory);
         memory->initialized = 1;
 
+        state->camera.distance = 10.0f;
         state->near_ = {5.0f};
         state->far_ = {50.0f};
 
