@@ -227,27 +227,32 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 
 - (void) keyDown: (NSEvent*) event {
     [appLock lock];
-    if ([event isARepeat] == NO) {
-        //NSLog(@"Key down: %d", [event keyCode]);
-        if (!state.keyboard_mode) {
-            osx_process_key_event(&state, [event keyCode], true);
-        }
+    if ([event isARepeat] != NO) {
+        return;
     }
+    if (state.pending_keys.num_messages == harray_count(state.pending_keys.messages))
+    {
+        return;
+    }
+    keyboard_message *message = state.pending_keys.messages + state.pending_keys.num_messages++;
+    message->key_code = [event keyCode];
+    NSString *characters = [event characters];
+    message->character = [characters characterAtIndex:0];
+    message->is_down = true;
     [appLock unlock];
 }
 
 - (void) keyUp: (NSEvent*) event {
     [appLock lock];
-    //NSLog(@"Key up: %d", [event keyCode]);
-    if (!state.keyboard_mode) {
-        osx_process_key_event(&state, [event keyCode], false);
-    }
-    else
+    if (state.pending_keys.num_messages == harray_count(state.pending_keys.messages))
     {
-        NSString *characters = [event characters];
-        unichar c = [characters characterAtIndex:0];
-        osx_process_character(&state, c);
+        return;
     }
+    keyboard_message *message = state.pending_keys.messages + state.pending_keys.num_messages++;
+    message->key_code = [event keyCode];
+    NSString *characters = [event characters];
+    message->character = [characters characterAtIndex:0];
+    message->is_down = false;
     [appLock unlock];
 }
 
@@ -266,6 +271,20 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     //NSLog(@"Update");
     // Temp
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    for (uint32_t i = 0; i < state.pending_keys.num_messages; ++i)
+    {
+        keyboard_message *message = state.pending_keys.messages + i;
+        if (!state.keyboard_mode) {
+            osx_process_key_event(&state, message->key_code, message->is_down);
+        }
+        else
+        {
+            osx_process_character(&state, message->character);
+        }
+    }
+    state.pending_keys.num_messages = 0;
+
     [appLock unlock];
     loop_cycle(&state);
     [appLock lock];

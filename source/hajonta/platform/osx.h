@@ -12,6 +12,19 @@ struct osx_game_code
     time_t last_updated;
 };
 
+struct keyboard_message
+{
+    int key_code;
+    char character;
+    bool is_down;
+};
+
+struct keyboard_message_array
+{
+    uint32_t num_messages;
+    keyboard_message messages[10];
+};
+
 struct osx_state
 {
     bool stopping;
@@ -34,6 +47,8 @@ struct osx_state
     int window_height;
 
     void *view;
+
+    keyboard_message_array pending_keys;
 };
 
 
