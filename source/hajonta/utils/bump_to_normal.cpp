@@ -98,22 +98,22 @@ main(int argc, char **argv)
         {
 #define X(xoff) ((x + xoff) % width)
 #define Y(yoff) ((y + yoff) % height)
-#define HEIGHT(xoff,yoff) (data + Y(yoff) * width + X(xoff))
+#define HEIGHT(xoff,yoff) ((data + Y(yoff) * width + X(xoff))->x / 255.0f)
             float dY = 0.0f;
-            dY += HEIGHT(-1,-1)->x / 255.0f * -1.0f;
-            dY += HEIGHT( 0,-1)->x / 255.0f * -2.0f;
-            dY += HEIGHT( 1,-1)->x / 255.0f * -1.0f;
-            dY += HEIGHT(-1, 1)->x / 255.0f *  1.0f;
-            dY += HEIGHT( 0, 1)->x / 255.0f *  2.0f;
-            dY += HEIGHT( 1, 1)->x / 255.0f *  1.0f;
+            dY += HEIGHT(-1,-1) * -1.0f;
+            dY += HEIGHT( 0,-1) * -2.0f;
+            dY += HEIGHT( 1,-1) * -1.0f;
+            dY += HEIGHT(-1, 1) *  1.0f;
+            dY += HEIGHT( 0, 1) *  2.0f;
+            dY += HEIGHT( 1, 1) *  1.0f;
 
             float dX = 0.0f;
-            dX += HEIGHT(-1, 1)->x / 255.0f * -1.0f;
-            dX += HEIGHT(-1, 0)->x / 255.0f * -2.0f;
-            dX += HEIGHT(-1,-1)->x / 255.0f * -1.0f;
-            dX += HEIGHT( 1, 1)->x / 255.0f *  1.0f;
-            dX += HEIGHT( 1, 0)->x / 255.0f *  2.0f;
-            dX += HEIGHT( 1,-1)->x / 255.0f *  1.0f;
+            dX += HEIGHT(-1, 1) * -1.0f;
+            dX += HEIGHT(-1, 0) * -2.0f;
+            dX += HEIGHT(-1,-1) * -1.0f;
+            dX += HEIGHT( 1, 1) *  1.0f;
+            dX += HEIGHT( 1, 0) *  2.0f;
+            dX += HEIGHT( 1,-1) *  1.0f;
 
             float length = sqrtf(dX*dX + dY*dY + 1);
             dX /= -length;
