@@ -10,6 +10,7 @@
 #pragma warning (disable: 4278)
 #pragma warning (disable: 4917)
 #include <Shobjidl.h>
+#include <Shlwapi.h>
 #pragma warning (pop)
 
 #include "hajonta/platform/common.h"
@@ -552,15 +553,21 @@ PLATFORM_EDITOR_LOAD_NEARBY_FILE(win32_editor_load_nearby_file)
 {
     bool result = false;
     char new_path[MAX_PATH];
-    strcpy(new_path, existing_file.file_path);
-    char *location_of_last_slash = strrchr(new_path, '\\');
-    if (!location_of_last_slash)
+    if (PathIsRelative(name))
     {
-        return false;
+        char existing_path[MAX_PATH];
+        strcpy(existing_path, existing_file.file_path);
+        PathRemoveFileSpec(existing_path);
+        auto combine_result = PathCombine(new_path, existing_path, name);
+        if (!combine_result)
+        {
+            return false;
+        }
     }
-    *location_of_last_slash = '\0';
-    strcat(new_path, "\\");
-    strcat(new_path, name);
+    else
+    {
+        strcpy(new_path, name);
+    }
 
     HANDLE handle = CreateFile(new_path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     if (handle != INVALID_HANDLE_VALUE)
