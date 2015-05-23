@@ -1740,11 +1740,6 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     glDepthFunc(GL_ALWAYS);
     glUseProgram(state->program_ui2d.program);
 
-    v2 mouse_loc = {
-        (float)input->mouse.x,
-        (float)input->window.height - (float)input->mouse.y,
-    };
-
     float screen_pixel_size[] =
     {
         (float)input->window.width,
@@ -2127,23 +2122,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->lighting.directional_light = {
             {0.0f, 1.0f, 0.0f},
             {1.0f, 1.0f, 1.0f},
-            0.01f,
-            20.0f,
+            0.05f,
+            5.0f,
         };
 
         state->lighting.point_lights[0] = {
-            {-5.0f, -3.0f, -12.0f},
-            {1.0f, 0.6f, 0.5f},
+            {-10.0f, -0.0f, -0.0f},
+            {1.0f, 0.3f, 0.3f},
             0.0f,
-            50.0f,
-            { 1.0f, 0.25f, 0.4f },
+            3.0f,
+            { 1.0f, 0.0f, 0.0f },
         };
         state->lighting.point_lights[1] = {
-            {8.0f, -3.0f, -8.0f},
-            {0.3f, 0.6f, 1.0f},
+            {10.0f, -0.0f, 3.0f},
+            {0.3f, 0.3f, 1.0f},
             0.0f,
-            10.0f,
-            { 1.0f, 0.25f, 0.4f },
+            3.0f,
+            { 1.0f, 0.0f, 0.0f },
         };
         state->lighting.num_point_lights = 2;
 

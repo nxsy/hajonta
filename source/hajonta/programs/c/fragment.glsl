@@ -5,8 +5,8 @@ in vec4 v_tangent;
 in vec2 v_tex_coord;
 
 in vec4 v_w_vertexPosition;
-in vec4 v_c_vertexNormal;
-in vec4 v_c_vertexTangent;
+in vec3 v_c_vertexNormal;
+in vec3 v_c_vertexTangent;
 in vec4 v_c_eyeDirection;
 
 out vec4 o_color;
@@ -99,13 +99,13 @@ bool enabled(in sampler2D texture)
 
 vec3 get_normal(ShaderConfig config)
 {
-    vec3 normal = normalize(v_c_vertexNormal.xyz);
+    vec3 normal = normalize(v_c_vertexNormal);
     if (!ignore_normal_texture(config) && enabled(normal_texture))
     {
         vec4 bump_normal_raw = texture(normal_texture, v_tex_coord);
         vec3 bump_normal = bump_normal_raw.xyz * 2.0 - 1.0;
         vec3 n = normal;
-        vec3 t = normalize(v_c_vertexTangent.xyz);
+        vec3 t = normalize(v_c_vertexTangent);
         t = normalize(t - dot(t, n) * n);
         vec3 b = cross(t, n);
         mat3 tbn_m = mat3(t, b, n);
@@ -157,6 +157,8 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
     vec4 diffuse_color = vec4(0);
     vec4 specular_color = vec4(0);
 
+    vec3 eye_direction = normalize(v_c_eyeDirection.xyz);
+
     switch (u_ambient_mode)
     {
         case 0:
@@ -187,18 +189,17 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
         {
             float roughness = 0.05;
             float albedo = 2;
-            diffuse_component = oren_nayer_diffuse_component(l.direction, v_c_eyeDirection.xyz, n, roughness, albedo);
+            diffuse_component = oren_nayer_diffuse_component(l.direction, eye_direction, n, roughness, albedo);
         } break;
         default:
         {
             diffuse_component = lambert_diffuse_component(l.direction, n);
         } break;
     }
+    diffuse_color = vec4(l.color, 1) * l.diffuse_intensity * diffuse_component;
 
-    if (diffuse_component > 0)
+    if (dot(l.direction, n) > 0)
     {
-        diffuse_color = vec4(l.color, 1) * l.diffuse_intensity * diffuse_component;
-
         float shininess = u_specular_exponent;
         if (!ignore_specular_exponent_texture(config) && enabled(specular_exponent_texture))
         {
@@ -211,7 +212,7 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
             {
                 case 0:
                 {
-                    specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                    specular_component = blinn_phong_specular_component(l.direction.xyz, eye_direction, n, shininess / 2) * 10;
                 } break;
                 case 1:
                 {
@@ -219,18 +220,18 @@ vec4 light_contribution(ShaderConfig config, DirectionalLight l, vec3 n)
                 } break;
                 case 2:
                 {
-                    specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                    specular_component = blinn_phong_specular_component(l.direction.xyz, eye_direction, n, shininess / 2) * 10;
                 } break;
                 case 3:
                 {
-                    specular_component = gaussian_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess / 255.0);
+                    specular_component = gaussian_specular_component(l.direction.xyz, eye_direction, n, shininess / 512);
                 } break;
                 default:
                 {
-                    specular_component = blinn_phong_specular_component(l.direction.xyz, v_c_eyeDirection.xyz, n, shininess);
+                    specular_component = blinn_phong_specular_component(l.direction.xyz, eye_direction, n, shininess / 2) * 10;
                 } break;
             }
-            specular_color = vec4(vec3(1) * specular_component, 1);
+            specular_color = vec4(l.color * specular_component, 1);
         }
     }
 
@@ -253,12 +254,13 @@ vec4 apply_attenuation(vec4 light, Attenuation a, float distance)
 
 vec4 point_light_contribution(ShaderConfig config, PointLight p, vec3 n)
 {
-    vec3 lightDirection = p.position + v_c_eyeDirection.xyz;
+    vec3 eye_direction = normalize(v_c_eyeDirection.xyz);
+    vec3 light_direction = mat3(u_view) * normalize(p.position - v_w_vertexPosition.xyz);
 
     float distance = length(p.position - v_w_vertexPosition.xyz);
 
     DirectionalLight dl;
-    dl.direction = (u_view * vec4(lightDirection, 1.0)).xyz;
+    dl.direction = light_direction;
     dl.color = p.color;
     dl.ambient_intensity = p.ambient_intensity;
     dl.diffuse_intensity = p.diffuse_intensity;
@@ -362,6 +364,11 @@ vec4 blinn_phong_shading(ShaderConfig config)
     for (int i = 0; i < u_num_point_lights; ++i)
     {
         light += point_light_contribution(config, u_point_lights[i], normal);
+    }
+
+    if (DONOTRUN)
+    {
+        o_color = vec4(1);
     }
 
     o_color *= light;

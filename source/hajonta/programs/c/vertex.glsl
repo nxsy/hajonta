@@ -31,8 +31,8 @@ out vec4 v_tangent;
 out vec2 v_tex_coord;
 
 out vec4 v_w_vertexPosition;
-out vec4 v_c_vertexNormal;
-out vec4 v_c_vertexTangent;
+out vec3 v_c_vertexNormal;
+out vec3 v_c_vertexTangent;
 out vec4 v_c_eyeDirection;
 
 void main (void)
@@ -53,6 +53,6 @@ void main (void)
     vec4 c_vertexPosition = u_view * u_model * a_pos;
 
     v_c_eyeDirection = vec4(vec3(0,0,0) - c_vertexPosition.xyz, 1);
-    v_c_vertexNormal = u_view * inverse(transpose(u_model)) * a_normal;
-    v_c_vertexTangent = u_view * inverse(transpose(u_model)) * a_tangent;
+    v_c_vertexNormal = mat3(u_view) * (inverse(transpose(u_model)) * a_normal).xyz;
+    v_c_vertexTangent = mat3(u_view) * (inverse(transpose(u_model)) * a_tangent).xyz;
 }
