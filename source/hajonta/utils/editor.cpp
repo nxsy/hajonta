@@ -226,15 +226,28 @@ struct shader_configuration
     int tonemap_mode;
 };
 
+struct TextureListItem
+{
+    char path[100];
+    uint32_t texture_offset;
+};
+
+struct TextureHash
+{
+    TextureListItem items[64];
+};
+
 struct ModelObjects
 {
     uint32_t vbo;
     uint32_t ibo;
 
     uint32_t num_material_indices;
-    editor_vertex_indices material_indices[100];
+    editor_vertex_indices material_indices[200];
     uint32_t num_texture_ids;
-    uint32_t texture_ids[20];
+    uint32_t texture_ids[64];
+
+    TextureHash texture_offset_hash;
 };
 
 struct DebugModelObjects
@@ -301,21 +314,21 @@ struct game_state
     uint32_t num_vertices;
     v3 vertices[100000];
     uint32_t num_texture_coords;
-    v3 texture_coords[100000];
+    v3 texture_coords[300000];
     uint32_t num_normals;
     v3 normals[100000];
     uint32_t num_faces;
-    face faces[100000];
+    face faces[500000];
 
     uint32_t num_materials;
-    Material materials[15];
+    Material materials[256];
 
     uint32_t num_faces_array;
-    uint32_t faces_array[300000];
+    uint32_t faces_array[1500000];
     uint32_t num_line_elements;
-    uint32_t line_elements[600000];
+    uint32_t line_elements[3000000];
     uint32_t num_vbo_vertices;
-    editor_vertex_format_c vbo_vertices[300000];
+    editor_vertex_format_c vbo_vertices[1500000];
 
     b_program_struct program_b;
     ui2d_program_struct program_ui2d;
@@ -445,6 +458,110 @@ next_newline(char *str, uint32_t str_length)
     return str + str_length;
 }
 
+uint32_t
+fnv1a_32(uint8_t *buf, uint32_t buf_size)
+{
+    uint8_t *pos = buf;
+    uint8_t *end = buf + buf_size;
+    uint32_t hval = 0x811c9dc5;
+    for (uint8_t databyte = *pos; pos < end; ++pos)
+    {
+        hval ^= databyte;
+        hval *= 0x01000193;
+    }
+    return hval;
+}
+
+#define TINYFNV1A(bits) uint32_t fnv1a_##bits(uint8_t *buf, uint32_t buf_size) { uint32_t hash; hash = fnv1a_32(buf, buf_size); hash = ((hash >> bits) ^ hash) & ((1<<bits) - 1); return hash; }
+TINYFNV1A(6)
+
+void
+register_texture(TextureHash *hash, char *filename, int32_t offset)
+{
+#pragma warning(push)
+#pragma warning(disable: 4127) // "conditional expression is constant"
+    hassert(harray_count(hash->items) == (1<<6));
+#pragma warning(pop)
+    uint32_t hash_loc = fnv1a_6((uint8_t *)filename, (uint32_t)strlen(filename));
+
+    TextureListItem *first_item = hash->items + (hash_loc % harray_count(hash->items));
+    TextureListItem *item = first_item;
+    if (first_item->texture_offset)
+    {
+        while ((item = hash->items + (++hash_loc % harray_count(hash->items))) && item->texture_offset)
+        {
+            hassert(item != first_item); // hash full
+        }
+    }
+    strcpy(item->path, filename);
+    item->texture_offset = (uint32_t)(offset + 1);
+}
+
+bool
+find_texture_offset(TextureHash *hash, char *filename, int32_t *offset)
+{
+#pragma warning(push)
+#pragma warning(disable: 4127) // "conditional expression is constant"
+    hassert(harray_count(hash->items) == (1<<6));
+#pragma warning(pop)
+    uint32_t hash_loc = fnv1a_6((uint8_t *)filename, (uint32_t)strlen(filename));
+
+    TextureListItem *first_item = hash->items + (hash_loc % harray_count(hash->items));
+    uint32_t not_first = 0;
+    for (
+        TextureListItem *item = first_item;
+        (!not_first++ || item != first_item) && item->texture_offset;
+        item = hash->items + (++hash_loc % harray_count(hash->items))
+    )
+    {
+        if (strcmp(filename, item->path) == 0)
+        {
+            *offset = (int32_t)item->texture_offset - 1;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+int32_t
+load_texture_get_offset(hajonta_thread_context *ctx, platform_memory *memory, char *filename)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    int32_t texture_offset;
+
+    TextureHash *hash = &state->model_objects.texture_offset_hash;
+
+    if (find_texture_offset(hash, filename, &texture_offset))
+    {
+        return texture_offset;
+    }
+
+    loaded_file texture;
+    bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+    hassert(loaded);
+    int32_t x, y, size;
+    loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
+    hassert(loaded);
+
+    texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
+    glErrorAssert();
+    glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[texture_offset]);
+    glErrorAssert();
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+        x, y, 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+    glErrorAssert();
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glErrorAssert();
+
+    register_texture(&state->model_objects.texture_offset_hash, filename, texture_offset);
+
+    return texture_offset;
+}
+
 #define starts_with(line, s) (strncmp(line, s, sizeof(s) - 1) == 0)
 
 bool
@@ -539,120 +656,34 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         {
             char *filename = line + sizeof("map_Bump ") - 1;
             hassert(strlen(filename) > 0);
-            if (filename[0] == '.')
-            {
-
-            }
-            else
-            {
-                loaded_file texture;
-                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
-                hassert(loaded);
-                int32_t x, y, size;
-                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-                hassert(loaded);
-
-                current_material->bump_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
-                glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->bump_texture_offset]);
-                glErrorAssert();
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                    x, y, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-                glErrorAssert();
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glErrorAssert();
-            }
+            current_material->bump_texture_offset = load_texture_get_offset(ctx, memory, filename);
         }
         else if (starts_with(line, "map_d "))
+        {
+        }
+        else if (starts_with(line, "map_D "))
+        {
+        }
+        else if (starts_with(line, "map_refl "))
         {
         }
         else if (starts_with(line, "map_Kd "))
         {
             char *filename = line + sizeof("map_Kd ") - 1;
             hassert(strlen(filename) > 0);
-            if (filename[0] == '.')
-            {
-
-            }
-            else
-            {
-                loaded_file texture;
-                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
-                hassert(loaded);
-                int32_t x, y, size;
-                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-                hassert(loaded);
-
-                current_material->texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
-                glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->texture_offset]);
-                glErrorAssert();
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                    x, y, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-                glErrorAssert();
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glErrorAssert();
-            }
+            current_material->texture_offset = load_texture_get_offset(ctx, memory, filename);
         }
         else if (starts_with(line, "map_Ke "))
         {
             char *filename = line + sizeof("map_Ke ") - 1;
             hassert(strlen(filename) > 0);
-            if (filename[0] == '.')
-            {
-
-            }
-            else
-            {
-                loaded_file texture;
-                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
-                hassert(loaded);
-                int32_t x, y, size;
-                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-                hassert(loaded);
-
-                current_material->emit_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
-                glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->emit_texture_offset]);
-                glErrorAssert();
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                    x, y, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-                glErrorAssert();
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glErrorAssert();
-            }
+            current_material->emit_texture_offset = load_texture_get_offset(ctx, memory, filename);
         }
         else if (starts_with(line, "map_ao "))
         {
             char *filename = line + sizeof("map_ao ") - 1;
             hassert(strlen(filename) > 0);
-            if (filename[0] == '.')
-            {
-
-            }
-            else
-            {
-                loaded_file texture;
-                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
-                hassert(loaded);
-                int32_t x, y, size;
-                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-                hassert(loaded);
-
-                current_material->ao_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
-                glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->ao_texture_offset]);
-                glErrorAssert();
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                    x, y, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-                glErrorAssert();
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glErrorAssert();
-            }
+            current_material->ao_texture_offset = load_texture_get_offset(ctx, memory, filename);
         }
         else if (starts_with(line, "map_Ks "))
         {
@@ -670,30 +701,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         {
             char *filename = line + sizeof("map_Ns ") - 1;
             hassert(strlen(filename) > 0);
-            if (filename[0] == '.')
-            {
-
-            }
-            else
-            {
-                loaded_file texture;
-                bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
-                hassert(loaded);
-                int32_t x, y, size;
-                loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-                hassert(loaded);
-
-                current_material->specular_exponent_texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
-                glErrorAssert();
-                glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[current_material->specular_exponent_texture_offset]);
-                glErrorAssert();
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                    x, y, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-                glErrorAssert();
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glErrorAssert();
-            }
+            current_material->specular_exponent_texture_offset = load_texture_get_offset(ctx, memory, filename);
         }
         else if (starts_with(line, "Km "))
         {
@@ -2232,7 +2240,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         char *start_position = (char *)state->model_file.contents;
         char *eof = start_position + state->model_file.size;
         char *position = start_position;
-        uint32_t max_lines = 200000;
+        uint32_t max_lines = 500000;
         uint32_t counter = 0;
         Material null_material = {};
         null_material.texture_offset = -1;
@@ -2261,11 +2269,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     if (num_found == 3)
                     {
                         v3 texture_coord = {a,b,c};
+                        hassert(state->num_texture_coords <= harray_count(state->texture_coords));
                         state->texture_coords[state->num_texture_coords++] = texture_coord;
                     }
                     else if (num_found == 2)
                     {
                         v3 texture_coord = {a, b, 0.0f};
+                        hassert(state->num_texture_coords <= harray_count(state->texture_coords));
                         state->texture_coords[state->num_texture_coords++] = texture_coord;
                     }
                     else
@@ -2280,6 +2290,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     if (num_found == 3)
                     {
                         v3 normal = {a,b,c};
+                        hassert(state->num_normals <= harray_count(state->normals));
                         state->normals[state->num_normals++] = normal;
                     }
                     else
@@ -2325,6 +2336,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             }
                         }
                         v3 vertex = {a,b,c};
+                        hassert(state->num_vertices <= harray_count(state->vertices));
                         state->vertices[state->num_vertices++] = vertex;
                     }
                 }
@@ -2377,6 +2389,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material,
                         };
+                        hassert(state->num_faces + 1 <= harray_count(state->faces));
                         state->faces[state->num_faces++] = face1;
                         state->faces[state->num_faces++] = face2;
                     }
@@ -2413,6 +2426,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material,
                         };
+                        hassert(state->num_faces <= harray_count(state->faces));
                         state->faces[state->num_faces++] = face1;
                     }
                     else if (num_found2 == 3)
@@ -2435,6 +2449,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                             },
                             current_material,
                         };
+                        hassert(state->num_faces <= harray_count(state->faces));
                         state->faces[state->num_faces++] = face1;
                     }
                     else
@@ -2505,6 +2520,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         glErrorAssert();
 
+        hassert((state->num_faces * 3) < harray_count(state->faces_array));
+
         for (uint32_t face_idx = 0;
                 face_idx < state->num_faces * 3;
                 ++face_idx)
@@ -2518,6 +2535,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 face_array_idx < state->num_faces_array;
                 face_array_idx += 3)
         {
+            hassert(state->num_line_elements + 5 < harray_count(state->line_elements));
             state->line_elements[state->num_line_elements++] = face_array_idx;
             state->line_elements[state->num_line_elements++] = face_array_idx + 1;
             state->line_elements[state->num_line_elements++] = face_array_idx + 1;
@@ -2544,6 +2562,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glErrorAssert();
 
         Material *last_material = 0;
+        hassert(state->num_faces * 3 < harray_count(state->vbo_vertices));
         for (uint32_t face_idx = 0;
                 face_idx < state->num_faces;
                 ++face_idx)
@@ -2552,6 +2571,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             if (f->current_material != last_material) {
                 if (last_material)
                 {
+                    hassert(state->model_objects.num_material_indices <= harray_count(state->model_objects.material_indices));
                     state->model_objects.material_indices[state->model_objects.num_material_indices++] =
                     {
                         last_material,
