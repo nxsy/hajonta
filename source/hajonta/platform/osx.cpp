@@ -185,7 +185,7 @@ osx_init(osx_state *state, int window_width, int window_height, void *view)
 
     load_game(&state->game_code, state->library_path);
 
-    state->memory.size = 128 * 1024 * 1024;
+    state->memory.size = 256 * 1024 * 1024;
     state->memory.memory = calloc(state->memory.size, sizeof(uint8_t));
     state->memory.platform_fail = osx_fail;
     state->memory.platform_load_asset = osx_load_asset;

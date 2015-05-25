@@ -478,10 +478,14 @@ TINYFNV1A(6)
 void
 register_texture(TextureHash *hash, char *filename, int32_t offset)
 {
+#if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable: 4127) // "conditional expression is constant"
+#endif
     hassert(harray_count(hash->items) == (1<<6));
+#if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
     uint32_t hash_loc = fnv1a_6((uint8_t *)filename, (uint32_t)strlen(filename));
 
     TextureListItem *first_item = hash->items + (hash_loc % harray_count(hash->items));
@@ -500,10 +504,14 @@ register_texture(TextureHash *hash, char *filename, int32_t offset)
 bool
 find_texture_offset(TextureHash *hash, char *filename, int32_t *offset)
 {
+#if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable: 4127) // "conditional expression is constant"
+#endif
     hassert(harray_count(hash->items) == (1<<6));
+#if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
     uint32_t hash_loc = fnv1a_6((uint8_t *)filename, (uint32_t)strlen(filename));
 
     TextureListItem *first_item = hash->items + (hash_loc % harray_count(hash->items));
