@@ -32,4 +32,10 @@ del editor.dll.lock
 copy ..\source\hajonta\platform\win32.cpp generated\win32_editor.cpp
 cl %CPPFLAGS% -DHAJONTA_LIBRARY_NAME=editor.dll -DHAJONTA_DEBUG=1 generated\win32_editor.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
 
+echo > ddsviewer.dll.lock
+cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\ddsviewer.cpp -LD /link /incremental:no -PDB:ddsviewer-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib
+del ddsviewer.dll.lock
+copy ..\source\hajonta\platform\win32.cpp generated\win32_ddsviewer.cpp
+cl %CPPFLAGS% -DHAJONTA_LIBRARY_NAME=ddsviewer.dll -DHAJONTA_DEBUG=1 generated\win32_ddsviewer.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
+
 popd

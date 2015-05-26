@@ -38,6 +38,11 @@ clang ${WARNFLAGS} -dynamiclib -o build/debug/libgame.dylib build/debug/game.o -
 clang ${CPPFLAGS} ${WARNFLAGS} -c source/hajonta/utils/editor.cpp ${DEBUG_FLAGS} ${INCLUDES} -o build/debug/editor.o
 clang ${WARNFLAGS} -dynamiclib -o build/debug/libeditor.dylib build/debug/editor.o -framework OpenGL ${DEBUG_FLAGS}
 
+# ddsviewer
+clang ${CPPFLAGS} ${WARNFLAGS} -c source/hajonta/utils/ddsviewer.cpp ${DEBUG_FLAGS} ${INCLUDES} -o build/debug/ddsviewer.o
+clang ${WARNFLAGS} -dynamiclib -o build/debug/libddsviewer.dylib build/debug/ddsviewer.o -framework OpenGL ${DEBUG_FLAGS}
+
 # binary
 clang ${CPPFLAGS} ${WARNFLAGS} -framework Cocoa -framework QuartzCore -framework OpenGL -o build/debug/hajonta source/hajonta/platform/osx.mm ${DEBUG_FLAGS} ${INCLUDES}
 clang ${CPPFLAGS} ${WARNFLAGS} -framework Cocoa -framework QuartzCore -framework OpenGL -o build/debug/editor source/hajonta/platform/osx.mm ${DEBUG_FLAGS} ${INCLUDES} -DHAJONTA_LIBRARY_NAME=libeditor.dylib
+clang ${CPPFLAGS} ${WARNFLAGS} -framework Cocoa -framework QuartzCore -framework OpenGL -o build/debug/ddsviewer source/hajonta/platform/osx.mm ${DEBUG_FLAGS} ${INCLUDES} -DHAJONTA_LIBRARY_NAME=libddsviewer.dylib
