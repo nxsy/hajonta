@@ -238,27 +238,48 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             printf("surface->format.flags & DDS_FOURCC (0x4) = %d\n", surface->format.flags & DDS_FOURCC);
             printf("surface->format.four_cc = %d\n", surface->format.four_cc);
             printf("DXT1 == %d\n", DXT1);
+            printf("DXT3 == %d\n", DXT3);
+            printf("DXT5 == %d\n", DXT5);
+
+            uint32_t block_size;
+            uint32_t format;
 
             switch (surface->format.four_cc)
             {
                 case DXT1:
                 {
-                    glBindTexture(GL_TEXTURE_2D, state->image_tex);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                    uint32_t block_size = 8;
-                    uint32_t size = ((surface->width + 3) / 4) * ((surface->height + 3) / 4) * block_size;
-                    printf("TexImage2D size = %d\n", size);
-                    glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,
-                        surface->width, surface->height, 0, size,
-                        (uint8_t *)(start_position + 4 + surface->size));
-                    glErrorAssert();
-                    glBindTexture (GL_TEXTURE_2D, 0);
-                    state->image_width = surface->width;
-                    state->image_height = surface->height;
-                    loaded = true;
+                    block_size = 8;
+                    format = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
                 } break;
+                case DXT3:
+                {
+                    block_size = 16;
+                    format = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+                } break;
+                case DXT5:
+                {
+                    block_size = 16;
+                    format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+                } break;
+                default:
+                {
+                    continue;
+                }
             }
+
+            glBindTexture(GL_TEXTURE_2D, state->image_tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            uint32_t size = ((surface->width + 3) / 4) * ((surface->height + 3) / 4) * block_size;
+            printf("TexImage2D size = %d\n", size);
+            glCompressedTexImage2D(GL_TEXTURE_2D, 0, format,
+                surface->width, surface->height, 0, size,
+                (uint8_t *)(start_position + 4 + surface->size));
+            glErrorAssert();
+            glBindTexture (GL_TEXTURE_2D, 0);
+            state->image_width = surface->width;
+            state->image_height = surface->height;
+            loaded = true;
         }
 
         {
