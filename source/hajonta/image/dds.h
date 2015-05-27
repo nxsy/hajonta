@@ -1,3 +1,5 @@
+#pragma once
+
 #define DDS_FOURCC      0x00000004
 #define MAKE_FOURCC(ch0, ch1, ch2, ch3) \
     (uint32_t)( \

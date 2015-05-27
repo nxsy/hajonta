@@ -532,6 +532,73 @@ find_texture_offset(TextureHash *hash, char *filename, int32_t *offset)
     return false;
 }
 
+struct texture_load_parameters
+{
+    uint32_t target;
+
+    uint32_t format;
+    uint32_t internal_format;
+    uint32_t type;
+
+    int32_t width;
+    int32_t height;
+
+    uint32_t min_filter;
+    uint32_t mag_filter;
+
+    uint32_t wrap_s;
+    uint32_t wrap_t;
+};
+
+
+void
+hgl_tex_load(texture_load_parameters *params, uint8_t *contents, uint32_t size)
+{
+    bool compressed = false;
+    switch (params->internal_format)
+    {
+        case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
+        {
+            compressed = true;
+        } break;
+        case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
+        {
+            compressed = true;
+        } break;
+        case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
+        {
+            compressed = true;
+        } break;
+    }
+
+    hassert(params->target == GL_TEXTURE_2D);
+
+    if (params->min_filter)
+    {
+        glTexParameteri(params->target, GL_TEXTURE_MIN_FILTER, params->min_filter);
+        glErrorAssert();
+    }
+    if (params->mag_filter)
+    {
+        glTexParameteri(params->target, GL_TEXTURE_MAG_FILTER, params->mag_filter);
+        glErrorAssert();
+    }
+
+    if (compressed)
+    {
+        glCompressedTexImage2D(params->target, 0, params->internal_format,
+            params->width, params->height, 0, size, contents);
+        glErrorAssert();
+    }
+    else
+    {
+        glTexImage2D(params->target, 0, params->internal_format,
+            params->width, params->height, 0,
+            params->format, params->type, contents);
+        glErrorAssert();
+    }
+}
+
 
 int32_t
 load_texture_get_offset(hajonta_thread_context *ctx, platform_memory *memory, char *filename)
@@ -550,20 +617,30 @@ load_texture_get_offset(hajonta_thread_context *ctx, platform_memory *memory, ch
     loaded_file texture;
     bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
     hassert(loaded);
-    int32_t x, y, size;
-    loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &x, &y, &size, false);
-    hassert(loaded);
+
+    texture_load_parameters params = {
+        .target = GL_TEXTURE_2D,
+    };
+
+    uint32_t size;
+
+    uint8_t *contents;
+    if (!dds_check((uint8_t *)texture.contents, texture.size, &params.width,
+                &params.height, &params.internal_format, &contents, &size))
+    {
+        loaded = load_image((uint8_t *)texture.contents, texture.size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch), &params.width, &params.height, &size, false);
+        hassert(loaded);
+        contents = (uint8_t *)state->bitmap_scratch;
+        params.internal_format = GL_RGBA;
+        params.format = GL_RGBA;
+        params.type = GL_UNSIGNED_BYTE;
+    }
+    params.min_filter = GL_LINEAR;
 
     texture_offset = (int32_t)(state->model_objects.num_texture_ids++);
-    glErrorAssert();
     glBindTexture(GL_TEXTURE_2D, state->model_objects.texture_ids[texture_offset]);
-    glErrorAssert();
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-        x, y, 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-    glErrorAssert();
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glErrorAssert();
+
+    hgl_tex_load(&params, contents, size);
 
     register_texture(&state->model_objects.texture_offset_hash, filename, texture_offset);
 
@@ -1054,7 +1131,7 @@ load_texture_asset(
         return false;
     }
 
-    int32_t actual_size;
+    uint32_t actual_size;
     load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
             x, y, &actual_size);
 

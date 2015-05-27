@@ -103,7 +103,7 @@ load_texture_asset(
         return false;
     }
 
-    int32_t actual_size;
+    uint32_t actual_size;
     load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
             x, y, &actual_size);
 
@@ -226,20 +226,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 continue;
             }
-            printf("Woo, a DDS file!\n");
             DDSURFACEDESC *surface = (DDSURFACEDESC *)(start_position + 4);
-            printf("sizeof(DDSURFACEDESC) = %ld\n", sizeof(DDSURFACEDESC));
-            printf("surface->size = %d\n", surface->size);
             hassert(surface->size == sizeof(DDSURFACEDESC));
-            printf("surface->width = %d\n", surface->width);
-            printf("surface->height = %d\n", surface->height);
-            printf("surface->mip_map_count = %d\n", surface->mip_map_count);
-            printf("surface->format.flags = %d\n", surface->format.flags);
-            printf("surface->format.flags & DDS_FOURCC (0x4) = %d\n", surface->format.flags & DDS_FOURCC);
-            printf("surface->format.four_cc = %d\n", surface->format.four_cc);
-            printf("DXT1 == %d\n", DXT1);
-            printf("DXT3 == %d\n", DXT3);
-            printf("DXT5 == %d\n", DXT5);
 
             uint32_t block_size;
             uint32_t format;
@@ -271,7 +259,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             uint32_t size = ((surface->width + 3) / 4) * ((surface->height + 3) / 4) * block_size;
-            printf("TexImage2D size = %d\n", size);
             glCompressedTexImage2D(GL_TEXTURE_2D, 0, format,
                 surface->width, surface->height, 0, size,
                 (uint8_t *)(start_position + 4 + surface->size));
