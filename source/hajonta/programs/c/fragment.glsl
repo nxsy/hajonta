@@ -351,6 +351,7 @@ vec4 filmic(vec4 o_color)
 vec4 blinn_phong_shading(ShaderConfig config)
 {
     vec4 o_color = texture(tex, v_tex_coord);
+    float alpha = o_color.a;
     if (!ignore_gamma_correct(config))
     {
         o_color = linearize_gamma(o_color);
@@ -378,7 +379,7 @@ vec4 blinn_phong_shading(ShaderConfig config)
         vec4 emit_color = texture(emit_texture, v_tex_coord);
         o_color += emit_color;
     }
-    o_color.w = 1;
+    o_color.a = alpha;
 
     bool no_delinearize = false;
     switch (u_tonemap_mode)
