@@ -286,6 +286,43 @@ struct Camera
     v2 rotation_velocity;
 };
 
+struct BinaryFormatVersion
+{
+    uint32_t version;
+};
+
+struct v1_material_index
+{
+    uint32_t material_id;
+    uint32_t final_vertex_id;
+};
+
+struct v1_material_definition
+{
+    char name[256];
+    char diffuse_texture[256];
+    char normal_texture[256];
+    char emit_texture[256];
+    char ao_texture[256];
+    char specular_exponent_texture[256];
+};
+
+struct binary_format_v1
+{
+    BinaryFormatVersion version;
+
+    uint32_t materials_offset;
+    uint32_t num_materials;
+
+    uint32_t indices_offset;
+    uint32_t num_indices;
+
+    uint32_t vertices_offset;
+    uint32_t num_vertices;
+
+    uint8_t *content;
+};
+
 struct game_state
 {
     uint32_t vao;
@@ -1995,6 +2032,8 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
 
+    glErrorAssert();
+
     glUseProgram(state->program_c.program);
     glUniform1i(state->program_c.u_pass_id, 0);
     glUniform1i(state->program_c.u_shader_mode_id, state->shader_config.shader_mode);
@@ -2007,6 +2046,8 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
     glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&matrices->model);
     glUniformMatrix4fv(state->program_c.u_view_id, 1, false, (float *)&matrices->view);
     glUniformMatrix4fv(state->program_c.u_projection_id, 1, false, (float *)&matrices->projection);
+
+    glErrorAssert();
 
     DirectionalLight *sun = &state->lighting.directional_light;
 
@@ -2111,6 +2152,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
 
         glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
         last_vertex = i->final_vertex_id;
+        glErrorAssert();
     }
 
     glErrorAssert();
@@ -2132,6 +2174,516 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
 
     float ratio = (float)input->window.width / (float)input->window.height;
     state->camera.projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
+}
+
+void
+load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    char *start_position = (char *)state->model_file.contents;
+    char *eof = start_position + state->model_file.size;
+    char *position = start_position;
+    uint32_t max_lines = 500000;
+    uint32_t counter = 0;
+    Material *null_material = state->materials + state->num_materials++;
+    null_material->texture_offset = -1;
+    null_material->bump_texture_offset = -1;
+    null_material->emit_texture_offset = -1;
+    null_material->ao_texture_offset = -1;
+    null_material->specular_exponent_texture_offset = -1;
+    Material *current_material = null_material;
+    while (position < eof)
+    {
+        uint32_t remainder = state->model_file.size - (uint32_t)(position - start_position);
+        char *eol = next_newline(position, remainder);
+        char line[1024];
+        strncpy(line, position, (size_t)(eol - position));
+        line[eol - position] = '\0';
+
+        if (line[0] == '\0')
+        {
+        }
+        else if (line[0] == 'v')
+        {
+            if (line[1] == 't')
+            {
+                float a, b, c;
+                int num_found = sscanf(position + 2, "%f %f %f", &a, &b, &c);
+                if (num_found == 3)
+                {
+                    v3 texture_coord = {a,b,c};
+                    hassert(state->num_texture_coords <= harray_count(state->texture_coords));
+                    state->texture_coords[state->num_texture_coords++] = texture_coord;
+                }
+                else if (num_found == 2)
+                {
+                    v3 texture_coord = {a, b, 0.0f};
+                    hassert(state->num_texture_coords <= harray_count(state->texture_coords));
+                    state->texture_coords[state->num_texture_coords++] = texture_coord;
+                }
+                else
+                {
+                    hassert(!"Invalid code path");
+                }
+            }
+            else if (line[1] == 'n')
+            {
+                float a, b, c;
+                int num_found = sscanf(position + 2, "%f %f %f", &a, &b, &c);
+                if (num_found == 3)
+                {
+                    v3 normal = {a,b,c};
+                    hassert(state->num_normals <= harray_count(state->normals));
+                    state->normals[state->num_normals++] = normal;
+                }
+                else
+                {
+                    hassert(!"Invalid code path");
+                }
+            }
+            else if (line[1] == ' ')
+            {
+                float a, b, c;
+                if (sscanf(line + 2, "%f %f %f", &a, &b, &c) == 3)
+                {
+                    if (state->num_vertices == 0)
+                    {
+                        state->model_max = {a, b, c};
+                        state->model_min = {a, b, c};
+                    }
+                    else
+                    {
+                        if (a > state->model_max.x)
+                        {
+                            state->model_max.x = a;
+                        }
+                        if (b > state->model_max.y)
+                        {
+                            state->model_max.y = b;
+                        }
+                        if (c > state->model_max.z)
+                        {
+                            state->model_max.z = c;
+                        }
+                        if (a < state->model_min.x)
+                        {
+                            state->model_min.x = a;
+                        }
+                        if (b < state->model_min.y)
+                        {
+                            state->model_min.y = b;
+                        }
+                        if (c < state->model_min.z)
+                        {
+                            state->model_min.z = c;
+                        }
+                    }
+                    v3 vertex = {a,b,c};
+                    hassert(state->num_vertices <= harray_count(state->vertices));
+                    state->vertices[state->num_vertices++] = vertex;
+                }
+            }
+            else
+            {
+                hassert(!"Invalid code path");
+            }
+        }
+        else if (line[0] == 'f')
+        {
+            char a[100], b[100], c[100], d[100];
+            int num_found = sscanf(line + 2, "%s %s %s %s", (char *)&a, (char *)&b, (char *)&c, (char *)&d);
+            hassert((num_found == 4) || (num_found == 3));
+            if (num_found == 4)
+            {
+                uint32_t t1, t2;
+                int num_found2 = sscanf(a, "%d/%d", &t1, &t2);
+                if (num_found2 == 1)
+                {
+
+                }
+                else if (num_found2 == 2)
+                {
+                    uint32_t a_vertex_id, a_texture_coord_id;
+                    uint32_t b_vertex_id, b_texture_coord_id;
+                    uint32_t c_vertex_id, c_texture_coord_id;
+                    uint32_t d_vertex_id, d_texture_coord_id;
+                    int num_found2;
+                    num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    num_found2 = sscanf(d, "%d/%d", &d_vertex_id, &d_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    face face1 = {
+                        {
+                            {a_vertex_id, a_texture_coord_id},
+                            {b_vertex_id, b_texture_coord_id},
+                            {c_vertex_id, c_texture_coord_id},
+                        },
+                        current_material,
+                    };
+                    face face2 = {
+                        {
+                            {c_vertex_id, c_texture_coord_id},
+                            {d_vertex_id, d_texture_coord_id},
+                            {a_vertex_id, a_texture_coord_id},
+                        },
+                        current_material,
+                    };
+                    hassert(state->num_faces + 1 <= harray_count(state->faces));
+                    state->faces[state->num_faces++] = face1;
+                    state->faces[state->num_faces++] = face2;
+                }
+                else
+                {
+                    hassert(!"Invalid number of face attributes");
+                }
+            }
+            else if (num_found == 3)
+            {
+                uint32_t t1, t2, t3;
+                int num_found2 = sscanf(a, "%d/%d/%d", &t1, &t2, &t3);
+                if (num_found2 == 1)
+                {
+
+                }
+                else if (num_found2 == 2)
+                {
+                    uint32_t a_vertex_id, a_texture_coord_id;
+                    uint32_t b_vertex_id, b_texture_coord_id;
+                    uint32_t c_vertex_id, c_texture_coord_id;
+                    int num_found2;
+                    num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
+                    hassert(num_found2 == 2);
+                    face face1 = {
+                        {
+                            {a_vertex_id, a_texture_coord_id},
+                            {b_vertex_id, b_texture_coord_id},
+                            {c_vertex_id, c_texture_coord_id},
+                        },
+                        current_material,
+                    };
+                    hassert(state->num_faces <= harray_count(state->faces));
+                    state->faces[state->num_faces++] = face1;
+                }
+                else if (num_found2 == 3)
+                {
+                    uint32_t a_vertex_id, a_texture_coord_id, a_normal_id;
+                    uint32_t b_vertex_id, b_texture_coord_id, b_normal_id;
+                    uint32_t c_vertex_id, c_texture_coord_id, c_normal_id;
+                    int num_found2;
+                    num_found2 = sscanf(a, "%d/%d/%d", &a_vertex_id, &a_texture_coord_id, &a_normal_id);
+                    hassert(num_found2 == 3);
+                    num_found2 = sscanf(b, "%d/%d/%d", &b_vertex_id, &b_texture_coord_id, &b_normal_id);
+                    hassert(num_found2 == 3);
+                    num_found2 = sscanf(c, "%d/%d/%d", &c_vertex_id, &c_texture_coord_id, &c_normal_id);
+                    hassert(num_found2 == 3);
+                    face face1 = {
+                        {
+                            {a_vertex_id, a_texture_coord_id, a_normal_id},
+                            {b_vertex_id, b_texture_coord_id, b_normal_id},
+                            {c_vertex_id, c_texture_coord_id, c_normal_id},
+                        },
+                        current_material,
+                    };
+                    hassert(state->num_faces <= harray_count(state->faces));
+                    state->faces[state->num_faces++] = face1;
+                }
+                else
+                {
+                    hassert(!"Invalid number of face attributes");
+                }
+            }
+        }
+        else if (line[0] == '#')
+        {
+        }
+        else if (line[0] == 'g')
+        {
+        }
+        else if (line[0] == 'o')
+        {
+        }
+        else if (line[0] == 's')
+        {
+        }
+        else if (starts_with(line, "mtllib"))
+        {
+            char *filename = line + 7;
+            bool loaded = memory->platform_editor_load_nearby_file(ctx, &state->mtl_file, state->model_file, filename);
+            hassert(loaded);
+            load_mtl(ctx, memory);
+        }
+        else if (starts_with(line, "usemtl"))
+        {
+            Material *tm;
+            char material_name[100];
+            auto material_name_length = eol - position - 7;
+            strncpy(material_name, line + 7, (size_t)material_name_length + 1);
+
+            current_material = 0;
+            for (tm = state->materials;
+                    tm < state->materials + state->num_materials;
+                    tm++)
+            {
+                if (strcmp(tm->name, material_name) == 0)
+                {
+                    current_material = tm;
+                    break;
+                }
+            }
+            hassert(current_material);
+        }
+        else
+        {
+            hassert(!"Invalid code path");
+        }
+
+        if (*eol == '\0')
+        {
+            break;
+        }
+        position = eol + 1;
+        while((*position == '\r') && (*position == '\n'))
+        {
+            position++;
+        }
+        if (counter++ >= max_lines)
+        {
+            hassert(!"Counter too high!");
+            break;
+        }
+    }
+
+    glErrorAssert();
+
+    hassert((state->num_faces * 3) < harray_count(state->faces_array));
+
+    for (uint32_t face_idx = 0;
+            face_idx < state->num_faces * 3;
+            ++face_idx)
+    {
+        state->num_faces_array++;
+        state->faces_array[face_idx] = face_idx;
+    }
+
+
+    for (uint32_t face_array_idx = 0;
+            face_array_idx < state->num_faces_array;
+            face_array_idx += 3)
+    {
+        hassert(state->num_line_elements + 5 < harray_count(state->line_elements));
+        state->line_elements[state->num_line_elements++] = face_array_idx;
+        state->line_elements[state->num_line_elements++] = face_array_idx + 1;
+        state->line_elements[state->num_line_elements++] = face_array_idx + 1;
+        state->line_elements[state->num_line_elements++] = face_array_idx + 2;
+        state->line_elements[state->num_line_elements++] = face_array_idx + 2;
+        state->line_elements[state->num_line_elements++] = face_array_idx;
+    }
+
+    glErrorAssert();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
+    glErrorAssert();
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0])),
+            state->faces_array,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.line_ibo);
+    glErrorAssert();
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            (GLsizeiptr)(state->num_line_elements * sizeof(state->line_elements[0])),
+            state->line_elements,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+
+    Material *last_material = 0;
+    hassert(state->num_faces * 3 < harray_count(state->vbo_vertices));
+    for (uint32_t face_idx = 0;
+            face_idx < state->num_faces;
+            ++face_idx)
+    {
+        face *f = state->faces + face_idx;
+        if (f->current_material != last_material) {
+            if (last_material)
+            {
+                hassert(state->model_objects.num_material_indices <= harray_count(state->model_objects.material_indices));
+                state->model_objects.material_indices[state->model_objects.num_material_indices++] =
+                {
+                    last_material,
+                    3 * face_idx,
+                };
+            }
+            last_material = f->current_material;
+        }
+        v3 *face_v1 = state->vertices + (f->indices[0].vertex - 1);
+        v3 *face_v2 = state->vertices + (f->indices[1].vertex - 1);
+        v3 *face_v3 = state->vertices + (f->indices[2].vertex - 1);
+
+        state->num_vbo_vertices += 3;
+        editor_vertex_format_c *vbo_v1 = state->vbo_vertices + (3 * face_idx);
+        editor_vertex_format_c *vbo_v2 = vbo_v1 + 1;
+        editor_vertex_format_c *vbo_v3 = vbo_v2 + 1;
+
+        triangle3 t = {
+            {face_v1->x, face_v1->y, face_v1->z},
+            {face_v2->x, face_v2->y, face_v2->z},
+            {face_v3->x, face_v3->y, face_v3->z},
+        };
+
+        v3 face_n1_v3;
+        v4 face_n1_v4;
+        v3 face_n2_v3;
+        v4 face_n2_v4;
+        v3 face_n3_v3;
+        v4 face_n3_v4;
+
+        if (f->indices[0].normal == 0)
+        {
+            v3 normal3 = winded_triangle_normal(t);
+            v4 normal = {normal3.x, normal3.y, normal3.z, 1.0f};
+            face_n1_v3 = normal3;
+            face_n2_v3 = normal3;
+            face_n3_v3 = normal3;
+            face_n1_v4 = normal;
+            face_n2_v4 = normal;
+            face_n3_v4 = normal;
+        }
+        else
+        {
+            face_n1_v3 = state->normals[f->indices[0].normal - 1];
+            face_n2_v3 = state->normals[f->indices[1].normal - 1];
+            face_n3_v3 = state->normals[f->indices[2].normal - 1];
+            face_n1_v4 = { face_n1_v3.x, face_n1_v3.y, face_n1_v3.z, 1.0f };
+            face_n2_v4 = { face_n2_v3.x, face_n2_v3.y, face_n2_v3.z, 1.0f };
+            face_n3_v4 = { face_n3_v3.x, face_n3_v3.y, face_n3_v3.z, 1.0f };
+        }
+
+
+        v3 *face_vt1 = state->texture_coords + (f->indices[0].texture_coord - 1);
+        v3 *face_vt2 = state->texture_coords + (f->indices[1].texture_coord - 1);
+        v3 *face_vt3 = state->texture_coords + (f->indices[2].texture_coord - 1);
+
+        v4 face_t1;
+        v4 face_t2;
+        v4 face_t3;
+
+        {
+            v3 q1 = v3sub(t.p1, t.p0);
+            v3 q2 = v3sub(t.p2, t.p0);
+            float x1 = q1.x;
+            float x2 = q2.x;
+            float y1 = q1.y;
+            float y2 = q2.y;
+            float z1 = q1.z;
+            float z2 = q2.z;
+
+            float s1 = face_vt2->x - face_vt1->x;
+            float t1 = face_vt2->y - face_vt1->y;
+            float s2 = face_vt3->x - face_vt1->x;
+            float t2 = face_vt3->y - face_vt1->y;
+
+            float r = 1 / (s1 * t2 - s2 * t1);
+
+            v3 sdir = {
+                r * (t2 * x1 - t1 * x2),
+                r * (t2 * y1 - t1 * y2),
+                r * (t2 * z1 - t1 * z2),
+            };
+            v3 tdir = {
+                r * (s1 * x2 - s1 * x1),
+                r * (s1 * y2 - s1 * y1),
+                r * (s1 * z2 - s1 * z1),
+            };
+
+            {
+                v3 normal3 = face_n1_v3;
+                v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
+                float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
+                face_t1 = {
+                    tangent3.x,
+                    tangent3.y,
+                    tangent3.z,
+                    w,
+                };
+            }
+            {
+                v3 normal3 = face_n2_v3;
+                v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
+                float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
+                face_t2 = {
+                    tangent3.x,
+                    tangent3.y,
+                    tangent3.z,
+                    w,
+                };
+            }
+            {
+                v3 normal3 = face_n3_v3;
+                v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
+                float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
+                face_t3 = {
+                    tangent3.x,
+                    tangent3.y,
+                    tangent3.z,
+                    w,
+                };
+            }
+        }
+
+        vbo_v1->position.x = face_v1->x;
+        vbo_v1->position.y = face_v1->y;
+        vbo_v1->position.z = face_v1->z;
+        vbo_v1->position.w = 1.0f;
+        vbo_v1->normal = face_n1_v4;
+        vbo_v1->tangent = face_t1;
+
+        vbo_v2->position.x = face_v2->x;
+        vbo_v2->position.y = face_v2->y;
+        vbo_v2->position.z = face_v2->z;
+        vbo_v2->position.w = 1.0f;
+        vbo_v2->normal = face_n2_v4;
+        vbo_v2->tangent = face_t2;
+
+        vbo_v3->position.x = face_v3->x;
+        vbo_v3->position.y = face_v3->y;
+        vbo_v3->position.z = face_v3->z;
+        vbo_v3->position.w = 1.0f;
+        vbo_v3->normal = face_n3_v4;
+        vbo_v3->tangent = face_t3;
+
+        vbo_v1->tex_coord.x = face_vt1->x;
+        vbo_v1->tex_coord.y = 1 - face_vt1->y;
+
+        vbo_v2->tex_coord.x = face_vt2->x;
+        vbo_v2->tex_coord.y = 1 - face_vt2->y;
+
+        vbo_v3->tex_coord.x = face_vt3->x;
+        vbo_v3->tex_coord.y = 1 - face_vt3->y;
+    }
+
+    state->model_objects.material_indices[state->model_objects.num_material_indices++] =
+    {
+        last_material,
+        state->num_vbo_vertices,
+    };
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
+    glErrorAssert();
+
+    glBufferData(GL_ARRAY_BUFFER,
+            (GLsizeiptr)(sizeof(state->vbo_vertices[0]) * state->num_faces * 3),
+            state->vbo_vertices,
+            GL_STATIC_DRAW);
+    glErrorAssert();
 }
 
 Matrices
@@ -2320,511 +2872,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
         {
         }
-        glErrorAssert();
-
-        char *start_position = (char *)state->model_file.contents;
-        char *eof = start_position + state->model_file.size;
-        char *position = start_position;
-        uint32_t max_lines = 500000;
-        uint32_t counter = 0;
-        Material null_material = {};
-        null_material.texture_offset = -1;
-        null_material.bump_texture_offset = -1;
-        null_material.emit_texture_offset = -1;
-        null_material.ao_texture_offset = -1;
-        null_material.specular_exponent_texture_offset = -1;
-        Material *current_material = &null_material;
-        while (position < eof)
-        {
-            uint32_t remainder = state->model_file.size - (uint32_t)(position - start_position);
-            char *eol = next_newline(position, remainder);
-            char line[1024];
-            strncpy(line, position, (size_t)(eol - position));
-            line[eol - position] = '\0';
-
-            if (line[0] == '\0')
-            {
-            }
-            else if (line[0] == 'v')
-            {
-                if (line[1] == 't')
-                {
-                    float a, b, c;
-                    int num_found = sscanf(position + 2, "%f %f %f", &a, &b, &c);
-                    if (num_found == 3)
-                    {
-                        v3 texture_coord = {a,b,c};
-                        hassert(state->num_texture_coords <= harray_count(state->texture_coords));
-                        state->texture_coords[state->num_texture_coords++] = texture_coord;
-                    }
-                    else if (num_found == 2)
-                    {
-                        v3 texture_coord = {a, b, 0.0f};
-                        hassert(state->num_texture_coords <= harray_count(state->texture_coords));
-                        state->texture_coords[state->num_texture_coords++] = texture_coord;
-                    }
-                    else
-                    {
-                        hassert(!"Invalid code path");
-                    }
-                }
-                else if (line[1] == 'n')
-                {
-                    float a, b, c;
-                    int num_found = sscanf(position + 2, "%f %f %f", &a, &b, &c);
-                    if (num_found == 3)
-                    {
-                        v3 normal = {a,b,c};
-                        hassert(state->num_normals <= harray_count(state->normals));
-                        state->normals[state->num_normals++] = normal;
-                    }
-                    else
-                    {
-                        hassert(!"Invalid code path");
-                    }
-                }
-                else if (line[1] == ' ')
-                {
-                    float a, b, c;
-                    if (sscanf(line + 2, "%f %f %f", &a, &b, &c) == 3)
-                    {
-                        if (state->num_vertices == 0)
-                        {
-                            state->model_max = {a, b, c};
-                            state->model_min = {a, b, c};
-                        }
-                        else
-                        {
-                            if (a > state->model_max.x)
-                            {
-                                state->model_max.x = a;
-                            }
-                            if (b > state->model_max.y)
-                            {
-                                state->model_max.y = b;
-                            }
-                            if (c > state->model_max.z)
-                            {
-                                state->model_max.z = c;
-                            }
-                            if (a < state->model_min.x)
-                            {
-                                state->model_min.x = a;
-                            }
-                            if (b < state->model_min.y)
-                            {
-                                state->model_min.y = b;
-                            }
-                            if (c < state->model_min.z)
-                            {
-                                state->model_min.z = c;
-                            }
-                        }
-                        v3 vertex = {a,b,c};
-                        hassert(state->num_vertices <= harray_count(state->vertices));
-                        state->vertices[state->num_vertices++] = vertex;
-                    }
-                }
-                else
-                {
-                    hassert(!"Invalid code path");
-                }
-            }
-            else if (line[0] == 'f')
-            {
-                char a[100], b[100], c[100], d[100];
-                int num_found = sscanf(line + 2, "%s %s %s %s", (char *)&a, (char *)&b, (char *)&c, (char *)&d);
-                hassert((num_found == 4) || (num_found == 3));
-                if (num_found == 4)
-                {
-                    uint32_t t1, t2;
-                    int num_found2 = sscanf(a, "%d/%d", &t1, &t2);
-                    if (num_found2 == 1)
-                    {
-
-                    }
-                    else if (num_found2 == 2)
-                    {
-                        uint32_t a_vertex_id, a_texture_coord_id;
-                        uint32_t b_vertex_id, b_texture_coord_id;
-                        uint32_t c_vertex_id, c_texture_coord_id;
-                        uint32_t d_vertex_id, d_texture_coord_id;
-                        int num_found2;
-                        num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        num_found2 = sscanf(d, "%d/%d", &d_vertex_id, &d_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        face face1 = {
-                            {
-                                {a_vertex_id, a_texture_coord_id},
-                                {b_vertex_id, b_texture_coord_id},
-                                {c_vertex_id, c_texture_coord_id},
-                            },
-                            current_material,
-                        };
-                        face face2 = {
-                            {
-                                {c_vertex_id, c_texture_coord_id},
-                                {d_vertex_id, d_texture_coord_id},
-                                {a_vertex_id, a_texture_coord_id},
-                            },
-                            current_material,
-                        };
-                        hassert(state->num_faces + 1 <= harray_count(state->faces));
-                        state->faces[state->num_faces++] = face1;
-                        state->faces[state->num_faces++] = face2;
-                    }
-                    else
-                    {
-                        hassert(!"Invalid number of face attributes");
-                    }
-                }
-                else if (num_found == 3)
-                {
-                    uint32_t t1, t2, t3;
-                    int num_found2 = sscanf(a, "%d/%d/%d", &t1, &t2, &t3);
-                    if (num_found2 == 1)
-                    {
-
-                    }
-                    else if (num_found2 == 2)
-                    {
-                        uint32_t a_vertex_id, a_texture_coord_id;
-                        uint32_t b_vertex_id, b_texture_coord_id;
-                        uint32_t c_vertex_id, c_texture_coord_id;
-                        int num_found2;
-                        num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
-                        hassert(num_found2 == 2);
-                        face face1 = {
-                            {
-                                {a_vertex_id, a_texture_coord_id},
-                                {b_vertex_id, b_texture_coord_id},
-                                {c_vertex_id, c_texture_coord_id},
-                            },
-                            current_material,
-                        };
-                        hassert(state->num_faces <= harray_count(state->faces));
-                        state->faces[state->num_faces++] = face1;
-                    }
-                    else if (num_found2 == 3)
-                    {
-                        uint32_t a_vertex_id, a_texture_coord_id, a_normal_id;
-                        uint32_t b_vertex_id, b_texture_coord_id, b_normal_id;
-                        uint32_t c_vertex_id, c_texture_coord_id, c_normal_id;
-                        int num_found2;
-                        num_found2 = sscanf(a, "%d/%d/%d", &a_vertex_id, &a_texture_coord_id, &a_normal_id);
-                        hassert(num_found2 == 3);
-                        num_found2 = sscanf(b, "%d/%d/%d", &b_vertex_id, &b_texture_coord_id, &b_normal_id);
-                        hassert(num_found2 == 3);
-                        num_found2 = sscanf(c, "%d/%d/%d", &c_vertex_id, &c_texture_coord_id, &c_normal_id);
-                        hassert(num_found2 == 3);
-                        face face1 = {
-                            {
-                                {a_vertex_id, a_texture_coord_id, a_normal_id},
-                                {b_vertex_id, b_texture_coord_id, b_normal_id},
-                                {c_vertex_id, c_texture_coord_id, c_normal_id},
-                            },
-                            current_material,
-                        };
-                        hassert(state->num_faces <= harray_count(state->faces));
-                        state->faces[state->num_faces++] = face1;
-                    }
-                    else
-                    {
-                        hassert(!"Invalid number of face attributes");
-                    }
-                }
-            }
-            else if (line[0] == '#')
-            {
-            }
-            else if (line[0] == 'g')
-            {
-            }
-            else if (line[0] == 'o')
-            {
-            }
-            else if (line[0] == 's')
-            {
-            }
-            else if (starts_with(line, "mtllib"))
-            {
-                char *filename = line + 7;
-                bool loaded = memory->platform_editor_load_nearby_file(ctx, &state->mtl_file, state->model_file, filename);
-                hassert(loaded);
-                load_mtl(ctx, memory);
-            }
-            else if (starts_with(line, "usemtl"))
-            {
-                Material *tm;
-                char material_name[100];
-                auto material_name_length = eol - position - 7;
-                strncpy(material_name, line + 7, (size_t)material_name_length + 1);
-
-                current_material = 0;
-                for (tm = state->materials;
-                        tm < state->materials + state->num_materials;
-                        tm++)
-                {
-                    if (strcmp(tm->name, material_name) == 0)
-                    {
-                        current_material = tm;
-                        break;
-                    }
-                }
-                hassert(current_material);
-            }
-            else
-            {
-                hassert(!"Invalid code path");
-            }
-
-            if (*eol == '\0')
-            {
-                break;
-            }
-            position = eol + 1;
-            while((*position == '\r') && (*position == '\n'))
-            {
-                position++;
-            }
-            if (counter++ >= max_lines)
-            {
-                hassert(!"Counter too high!");
-                break;
-            }
-        }
-
-        glErrorAssert();
-
-        hassert((state->num_faces * 3) < harray_count(state->faces_array));
-
-        for (uint32_t face_idx = 0;
-                face_idx < state->num_faces * 3;
-                ++face_idx)
-        {
-            state->num_faces_array++;
-            state->faces_array[face_idx] = face_idx;
-        }
-
-
-        for (uint32_t face_array_idx = 0;
-                face_array_idx < state->num_faces_array;
-                face_array_idx += 3)
-        {
-            hassert(state->num_line_elements + 5 < harray_count(state->line_elements));
-            state->line_elements[state->num_line_elements++] = face_array_idx;
-            state->line_elements[state->num_line_elements++] = face_array_idx + 1;
-            state->line_elements[state->num_line_elements++] = face_array_idx + 1;
-            state->line_elements[state->num_line_elements++] = face_array_idx + 2;
-            state->line_elements[state->num_line_elements++] = face_array_idx + 2;
-            state->line_elements[state->num_line_elements++] = face_array_idx;
-        }
-
-        glErrorAssert();
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
-        glErrorAssert();
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0])),
-                state->faces_array,
-                GL_STATIC_DRAW);
-        glErrorAssert();
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.line_ibo);
-        glErrorAssert();
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                (GLsizeiptr)(state->num_line_elements * sizeof(state->line_elements[0])),
-                state->line_elements,
-                GL_STATIC_DRAW);
-        glErrorAssert();
-
-        Material *last_material = 0;
-        hassert(state->num_faces * 3 < harray_count(state->vbo_vertices));
-        for (uint32_t face_idx = 0;
-                face_idx < state->num_faces;
-                ++face_idx)
-        {
-            face *f = state->faces + face_idx;
-            if (f->current_material != last_material) {
-                if (last_material)
-                {
-                    hassert(state->model_objects.num_material_indices <= harray_count(state->model_objects.material_indices));
-                    state->model_objects.material_indices[state->model_objects.num_material_indices++] =
-                    {
-                        last_material,
-                        3 * face_idx,
-                    };
-                }
-                last_material = f->current_material;
-            }
-            v3 *face_v1 = state->vertices + (f->indices[0].vertex - 1);
-            v3 *face_v2 = state->vertices + (f->indices[1].vertex - 1);
-            v3 *face_v3 = state->vertices + (f->indices[2].vertex - 1);
-
-            state->num_vbo_vertices += 3;
-            editor_vertex_format_c *vbo_v1 = state->vbo_vertices + (3 * face_idx);
-            editor_vertex_format_c *vbo_v2 = vbo_v1 + 1;
-            editor_vertex_format_c *vbo_v3 = vbo_v2 + 1;
-
-            triangle3 t = {
-                {face_v1->x, face_v1->y, face_v1->z},
-                {face_v2->x, face_v2->y, face_v2->z},
-                {face_v3->x, face_v3->y, face_v3->z},
-            };
-
-            v3 face_n1_v3;
-            v4 face_n1_v4;
-            v3 face_n2_v3;
-            v4 face_n2_v4;
-            v3 face_n3_v3;
-            v4 face_n3_v4;
-
-            if (f->indices[0].normal == 0)
-            {
-                v3 normal3 = winded_triangle_normal(t);
-                v4 normal = {normal3.x, normal3.y, normal3.z, 1.0f};
-                face_n1_v3 = normal3;
-                face_n2_v3 = normal3;
-                face_n3_v3 = normal3;
-                face_n1_v4 = normal;
-                face_n2_v4 = normal;
-                face_n3_v4 = normal;
-            }
-            else
-            {
-                face_n1_v3 = state->normals[f->indices[0].normal - 1];
-                face_n2_v3 = state->normals[f->indices[1].normal - 1];
-                face_n3_v3 = state->normals[f->indices[2].normal - 1];
-                face_n1_v4 = { face_n1_v3.x, face_n1_v3.y, face_n1_v3.z, 1.0f };
-                face_n2_v4 = { face_n2_v3.x, face_n2_v3.y, face_n2_v3.z, 1.0f };
-                face_n3_v4 = { face_n3_v3.x, face_n3_v3.y, face_n3_v3.z, 1.0f };
-            }
-
-
-            v3 *face_vt1 = state->texture_coords + (f->indices[0].texture_coord - 1);
-            v3 *face_vt2 = state->texture_coords + (f->indices[1].texture_coord - 1);
-            v3 *face_vt3 = state->texture_coords + (f->indices[2].texture_coord - 1);
-
-            v4 face_t1;
-            v4 face_t2;
-            v4 face_t3;
-
-            {
-                v3 q1 = v3sub(t.p1, t.p0);
-                v3 q2 = v3sub(t.p2, t.p0);
-                float x1 = q1.x;
-                float x2 = q2.x;
-                float y1 = q1.y;
-                float y2 = q2.y;
-                float z1 = q1.z;
-                float z2 = q2.z;
-
-                float s1 = face_vt2->x - face_vt1->x;
-                float t1 = face_vt2->y - face_vt1->y;
-                float s2 = face_vt3->x - face_vt1->x;
-                float t2 = face_vt3->y - face_vt1->y;
-
-                float r = 1 / (s1 * t2 - s2 * t1);
-
-                v3 sdir = {
-                    r * (t2 * x1 - t1 * x2),
-                    r * (t2 * y1 - t1 * y2),
-                    r * (t2 * z1 - t1 * z2),
-                };
-                v3 tdir = {
-                    r * (s1 * x2 - s1 * x1),
-                    r * (s1 * y2 - s1 * y1),
-                    r * (s1 * z2 - s1 * z1),
-                };
-
-                {
-                    v3 normal3 = face_n1_v3;
-                    v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
-                    float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
-                    face_t1 = {
-                        tangent3.x,
-                        tangent3.y,
-                        tangent3.z,
-                        w,
-                    };
-                }
-                {
-                    v3 normal3 = face_n2_v3;
-                    v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
-                    float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
-                    face_t2 = {
-                        tangent3.x,
-                        tangent3.y,
-                        tangent3.z,
-                        w,
-                    };
-                }
-                {
-                    v3 normal3 = face_n3_v3;
-                    v3 tangent3 = v3normalize(v3sub(sdir, v3mul(normal3, (v3dot(normal3, sdir)))));
-                    float w = v3dot(v3cross(normal3, sdir), tdir) < 0.0f ? -1.0f : 1.0f;
-                    face_t3 = {
-                        tangent3.x,
-                        tangent3.y,
-                        tangent3.z,
-                        w,
-                    };
-                }
-            }
-
-            vbo_v1->position.x = face_v1->x;
-            vbo_v1->position.y = face_v1->y;
-            vbo_v1->position.z = face_v1->z;
-            vbo_v1->position.w = 1.0f;
-            vbo_v1->normal = face_n1_v4;
-            vbo_v1->tangent = face_t1;
-
-            vbo_v2->position.x = face_v2->x;
-            vbo_v2->position.y = face_v2->y;
-            vbo_v2->position.z = face_v2->z;
-            vbo_v2->position.w = 1.0f;
-            vbo_v2->normal = face_n2_v4;
-            vbo_v2->tangent = face_t2;
-
-            vbo_v3->position.x = face_v3->x;
-            vbo_v3->position.y = face_v3->y;
-            vbo_v3->position.z = face_v3->z;
-            vbo_v3->position.w = 1.0f;
-            vbo_v3->normal = face_n3_v4;
-            vbo_v3->tangent = face_t3;
-
-            vbo_v1->tex_coord.x = face_vt1->x;
-            vbo_v1->tex_coord.y = 1 - face_vt1->y;
-
-            vbo_v2->tex_coord.x = face_vt2->x;
-            vbo_v2->tex_coord.y = 1 - face_vt2->y;
-
-            vbo_v3->tex_coord.x = face_vt3->x;
-            vbo_v3->tex_coord.y = 1 - face_vt3->y;
-        }
-
-        state->model_objects.material_indices[state->model_objects.num_material_indices++] =
-        {
-            last_material,
-            state->num_vbo_vertices,
-        };
-
-        glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
-        glErrorAssert();
-
-        glBufferData(GL_ARRAY_BUFFER,
-                (GLsizeiptr)(sizeof(state->vbo_vertices[0]) * state->num_faces * 3),
-                state->vbo_vertices,
-                GL_STATIC_DRAW);
-        glErrorAssert();
+        load_model_from_obj(ctx, memory, input);
 
         load_aabb_buffer_objects(state, state->model_min, state->model_max);
         load_bounding_sphere(state, state->model_min, state->model_max);
