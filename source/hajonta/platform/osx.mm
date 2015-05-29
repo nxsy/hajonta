@@ -427,6 +427,10 @@ openFileNearby(char *base, char *path, char **contents, uint32_t *size, char *fi
     NSData *data = [[NSData alloc] initWithContentsOfURL:url];
 
     *size = [data length];
+    if (!*size)
+    {
+        return false;
+    }
     char *file_contents = (char *)malloc(*size);
     [data getBytes:file_contents length:*size];
 
