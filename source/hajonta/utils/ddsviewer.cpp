@@ -260,7 +260,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             uint32_t size = ((surface->width + 3) / 4) * ((surface->height + 3) / 4) * block_size;
             glCompressedTexImage2D(GL_TEXTURE_2D, 0, format,
-                surface->width, surface->height, 0, size,
+                (GLsizei)surface->width, (GLsizei)surface->height, 0, (GLsizei)size,
                 (uint8_t *)(start_position + 4 + surface->size));
             glErrorAssert();
             glBindTexture (GL_TEXTURE_2D, 0);
@@ -288,7 +288,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             continue;
         }
-        game_controller_state *controller = &input->controllers[i];
+        // game_controller_state *controller = &input->controllers[i];
     }
 
     glBindVertexArray(state->vao);

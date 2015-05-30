@@ -54,8 +54,8 @@ dds_check(
         }
     }
     *size = ((surface->width + 3) / 4) * ((surface->height + 3) / 4) * block_size;
-    *x = surface->width;
-    *y = surface->height;
+    *x = (int32_t)surface->width;
+    *y = (int32_t)surface->height;
     *contents = source + 4 + surface->size;
 
     return true;
@@ -72,7 +72,7 @@ load_image(uint8_t *source, uint32_t source_size, uint8_t *dest, uint32_t dest_s
         return false;
     }
 
-    *actual_size = (*x) * (*y) * (int32_t)4;
+    *actual_size = (uint32_t)((*x) * (*y) * 4);
     if (exact_size)
     {
         if (*actual_size != (int32_t)dest_size)

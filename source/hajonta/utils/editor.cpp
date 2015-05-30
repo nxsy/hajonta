@@ -320,7 +320,14 @@ struct binary_format_v1
     uint32_t vertices_offset;
     uint32_t num_vertices;
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4200) // "zero-sized array in struct/union""
+#endif
     uint8_t content[0];
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 };
 
 struct v1_vertex_format
@@ -352,13 +359,13 @@ write_binary_format_v1(
     uint32_t vertices_offset = offset;
 
     binary_format_v1 header = {
-        .version = {1},
-        .num_materials = num_materials,
-        .materials_offset = materials_offset,
-        .num_indices = num_indices,
-        .indices_offset = indices_offset,
-        .num_vertices = num_vertices,
-        .vertices_offset = vertices_offset,
+        {1},
+        materials_offset,
+        num_materials,
+        indices_offset,
+        num_indices,
+        vertices_offset,
+        num_vertices,
     };
 
     FILE *f = fopen(filename, "w");
@@ -578,10 +585,10 @@ register_texture(TextureHash *hash, char *filename, int32_t offset)
     TextureListItem *item = first_item;
     if (first_item->texture_offset)
     {
-        while ((item = hash->items + (++hash_loc % harray_count(hash->items))) && item->texture_offset)
-        {
+        do {
+            item = hash->items + (++hash_loc % harray_count(hash->items));
             hassert(item != first_item); // hash full
-        }
+        } while (item->texture_offset);
     }
     strcpy(item->path, filename);
     item->texture_offset = (uint32_t)(offset + 1);
@@ -629,8 +636,8 @@ struct texture_load_parameters
     int32_t width;
     int32_t height;
 
-    uint32_t min_filter;
-    uint32_t mag_filter;
+    int32_t min_filter;
+    int32_t mag_filter;
 
     uint32_t wrap_s;
     uint32_t wrap_t;
@@ -673,12 +680,15 @@ hgl_tex_load(texture_load_parameters *params, uint8_t *contents, uint32_t size)
     if (compressed)
     {
         glCompressedTexImage2D(params->target, 0, params->internal_format,
-            params->width, params->height, 0, size, contents);
+            params->width, params->height, 0, (GLsizei)size, contents);
         glErrorAssert();
     }
     else
     {
-        glTexImage2D(params->target, 0, params->internal_format,
+        // glTexImage2D says internal_format is a GLint
+        // glCompressedTexImage2D says internal_format is a GLenum
+        // Choose to think glTexImage2D got it wrong.
+        glTexImage2D(params->target, 0, (GLint)params->internal_format,
             params->width, params->height, 0,
             params->format, params->type, contents);
         glErrorAssert();
@@ -709,7 +719,7 @@ load_texture_get_offset(hajonta_thread_context *ctx, platform_memory *memory, ch
     hassert(loaded);
 
     texture_load_parameters params = {
-        .target = GL_TEXTURE_2D,
+        GL_TEXTURE_2D,
     };
 
     uint32_t size;
@@ -2242,7 +2252,6 @@ load_model_from_v1(hajonta_thread_context *ctx, platform_memory *memory, game_in
     game_state *state = (game_state *)memory->memory;
 
     char *start_position = (char *)state->model_file.contents;
-    char *eof = start_position + state->model_file.size;
     char *position = start_position;
 
     char magic[4] = { 'H', 'J', 'N', 'T' };
@@ -2380,7 +2389,6 @@ load_model_from_v1(hajonta_thread_context *ctx, platform_memory *memory, game_in
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
     glErrorAssert();
-    GLsizeiptr bar = (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0]));
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0])),
             state->faces_array,
@@ -2733,7 +2741,6 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
 
     v1_material_index indices[harray_count(state->model_objects.material_indices)];
     Material *last_material = 0;
-    uint32_t num_material_indices = 0;
 
     hassert(state->num_faces * 3 < harray_count(state->vbo_vertices));
     for (uint32_t face_idx = 0;
