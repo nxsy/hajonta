@@ -320,8 +320,56 @@ struct binary_format_v1
     uint32_t vertices_offset;
     uint32_t num_vertices;
 
-    uint8_t *content;
+    uint8_t content[0];
 };
+
+struct v1_vertex_format
+{
+    v4 position;
+    v4 normal;
+    v4 tangent;
+    v2 tex_coord;
+};
+
+#define base_size_of_binary_format (offsetof(binary_format_v1, content))
+
+void
+write_binary_format_v1(
+    char *filename,
+    uint32_t num_materials,
+    v1_material_definition *definitions,
+    uint32_t num_indices,
+    v1_material_index *indices,
+    uint32_t num_vertices,
+    v1_vertex_format *vertices
+)
+{
+    uint32_t offset = 0;
+    uint32_t materials_offset = offset;
+    offset += sizeof(*definitions) * num_materials;
+    uint32_t indices_offset = offset;
+    offset += sizeof(*indices) * num_indices;
+    uint32_t vertices_offset = offset;
+
+    binary_format_v1 header = {
+        .version = {1},
+        .num_materials = num_materials,
+        .materials_offset = materials_offset,
+        .num_indices = num_indices,
+        .indices_offset = indices_offset,
+        .num_vertices = num_vertices,
+        .vertices_offset = vertices_offset,
+    };
+
+    FILE *f = fopen(filename, "w");
+    char fmt[4] = { 'H', 'J', 'N', 'T' };
+    fwrite(&fmt, sizeof(fmt), 1, f);
+    fwrite(&header, sizeof(binary_format_v1), 1, f);
+    fwrite(definitions, sizeof(v1_material_definition), num_materials, f);
+    fwrite(indices, sizeof(v1_material_index), num_indices, f);
+    fwrite(vertices, sizeof(v1_vertex_format), num_vertices, f);
+    fclose(f);
+}
 
 struct game_state
 {
@@ -359,6 +407,7 @@ struct game_state
 
     uint32_t num_materials;
     Material materials[256];
+    v1_material_definition v1_material_definitions[256];
 
     uint32_t num_faces_array;
     uint32_t faces_array[1500000];
@@ -653,6 +702,10 @@ load_texture_get_offset(hajonta_thread_context *ctx, platform_memory *memory, ch
 
     loaded_file texture;
     bool loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->mtl_file, filename);
+    if (!loaded)
+    {
+        loaded = memory->platform_editor_load_nearby_file(ctx, &texture, state->model_file, filename);
+    }
     hassert(loaded);
 
     texture_load_parameters params = {
@@ -698,6 +751,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
     uint32_t max_lines = 100000;
     uint32_t counter = 0;
     Material *current_material = 0;
+    v1_material_definition *current_material_definition = 0;
     while (position < eof)
     {
         uint32_t remainder = state->mtl_file.size - (uint32_t)(position - start_position);
@@ -733,7 +787,9 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
         else if (starts_with(line, "newmtl "))
         {
             hassert(state->num_materials < harray_count(state->materials));
-            current_material = state->materials + state->num_materials++;
+            current_material = state->materials + state->num_materials;
+            current_material_definition = state->v1_material_definitions + state->num_materials++;
+
             strncpy(current_material->name, line + 7, (size_t)(eol - position - 7));
             current_material->texture_offset = -1;
             current_material->bump_texture_offset = -1;
@@ -779,6 +835,7 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             char *filename = line + sizeof("map_Bump ") - 1;
             hassert(strlen(filename) > 0);
             current_material->bump_texture_offset = load_texture_get_offset(ctx, memory, filename);
+            strncpy(current_material_definition->normal_texture, filename, sizeof(current_material_definition->normal_texture));
         }
         else if (starts_with(line, "map_d "))
         {
@@ -794,18 +851,21 @@ load_mtl(hajonta_thread_context *ctx, platform_memory *memory)
             char *filename = line + sizeof("map_Kd ") - 1;
             hassert(strlen(filename) > 0);
             current_material->texture_offset = load_texture_get_offset(ctx, memory, filename);
+            strncpy(current_material_definition->diffuse_texture, filename, sizeof(current_material_definition->diffuse_texture));
         }
         else if (starts_with(line, "map_Ke "))
         {
             char *filename = line + sizeof("map_Ke ") - 1;
             hassert(strlen(filename) > 0);
             current_material->emit_texture_offset = load_texture_get_offset(ctx, memory, filename);
+            strncpy(current_material_definition->emit_texture, filename, sizeof(current_material_definition->emit_texture));
         }
         else if (starts_with(line, "map_ao "))
         {
             char *filename = line + sizeof("map_ao ") - 1;
             hassert(strlen(filename) > 0);
             current_material->ao_texture_offset = load_texture_get_offset(ctx, memory, filename);
+            strncpy(current_material_definition->ao_texture, filename, sizeof(current_material_definition->ao_texture));
         }
         else if (starts_with(line, "map_Ks "))
         {
@@ -2176,6 +2236,172 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
     state->camera.projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
 }
 
+bool
+load_model_from_v1(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    char *start_position = (char *)state->model_file.contents;
+    char *eof = start_position + state->model_file.size;
+    char *position = start_position;
+
+    char magic[4] = { 'H', 'J', 'N', 'T' };
+    if (strncmp(position, magic, sizeof(magic)) != 0)
+    {
+        return false;
+    }
+
+    if (state->model_file.size < (sizeof(magic) + sizeof(BinaryFormatVersion)))
+    {
+        return false;
+    }
+
+    BinaryFormatVersion *foo = (BinaryFormatVersion *)(position + sizeof(magic));
+    if (foo->version != 1)
+    {
+        return false;
+    }
+
+    binary_format_v1 *format = (binary_format_v1 *)(position + sizeof(magic));
+
+    uint8_t *base = (uint8_t *)(format + 1);
+
+    for (uint32_t idx = 0; idx < format->num_materials; ++idx)
+    {
+        v1_material_definition *d = (v1_material_definition *)(base + format->materials_offset) + idx;
+
+        Material *m = state->materials + state->num_materials++;
+        if (d->diffuse_texture[0])
+        {
+            m->texture_offset = load_texture_get_offset(ctx, memory, d->diffuse_texture);
+        }
+        else
+        {
+            m->texture_offset = -1;
+        }
+
+        if (d->normal_texture[0])
+        {
+            m->bump_texture_offset = load_texture_get_offset(ctx, memory, d->normal_texture);
+        }
+        else
+        {
+            m->bump_texture_offset = -1;
+        }
+
+        if (d->emit_texture[0])
+        {
+            m->emit_texture_offset = load_texture_get_offset(ctx, memory, d->emit_texture);
+        }
+        else
+        {
+            m->emit_texture_offset = -1;
+        }
+
+        if (d->ao_texture[0])
+        {
+            m->ao_texture_offset = load_texture_get_offset(ctx, memory, d->ao_texture);
+        }
+        else
+        {
+            m->ao_texture_offset = -1;
+        }
+
+        if (d->specular_exponent_texture[0])
+        {
+            m->specular_exponent_texture_offset = load_texture_get_offset(ctx, memory, d->specular_exponent_texture);
+        }
+        else
+        {
+            m->specular_exponent_texture_offset = -1;
+        }
+    }
+
+    for (uint32_t idx = 0; idx < format->num_indices; ++idx)
+    {
+        v1_material_index *mi = (v1_material_index *)(base + format->indices_offset) + idx;
+        editor_vertex_indices *ei = state->model_objects.material_indices + state->model_objects.num_material_indices++;
+        ei->material = state->materials + mi->material_id;
+        ei->final_vertex_id = mi->final_vertex_id;
+    }
+
+    for (uint32_t idx = 0;
+            idx < format->num_vertices;
+            ++idx)
+    {
+        v1_vertex_format *v = (v1_vertex_format *)(base + format->vertices_offset) + idx;
+        editor_vertex_format_c *evfc = state->vbo_vertices + state->num_vbo_vertices++;
+        evfc->position = v->position;
+        evfc->normal = v->normal;
+        evfc->tangent = v->tangent;
+        evfc->tex_coord = v->tex_coord;
+
+        if (idx == 0)
+        {
+            state->model_max = {v->position.x, v->position.y, v->position.z};
+            state->model_min = {v->position.x, v->position.y, v->position.z};
+        }
+        else
+        {
+            if (v->position.x > state->model_max.x)
+            {
+                state->model_max.x = v->position.x;
+            }
+            if (v->position.y > state->model_max.y)
+            {
+                state->model_max.y = v->position.y;
+            }
+            if (v->position.z > state->model_max.z)
+            {
+                state->model_max.z = v->position.z;
+            }
+            if (v->position.x < state->model_min.x)
+            {
+                state->model_min.x = v->position.x;
+            }
+            if (v->position.y < state->model_min.y)
+            {
+                state->model_min.y = v->position.y;
+            }
+            if (v->position.z < state->model_min.z)
+            {
+                state->model_min.z = v->position.z;
+            }
+        }
+    }
+
+    for (uint32_t face_idx = 0;
+            face_idx < format->num_vertices;
+            ++face_idx)
+    {
+        state->num_faces_array++;
+        state->faces_array[face_idx] = face_idx;
+    }
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->model_objects.ibo);
+    glErrorAssert();
+    GLsizeiptr bar = (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0]));
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            (GLsizeiptr)(state->num_faces_array * sizeof(state->faces_array[0])),
+            state->faces_array,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glErrorAssert();
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
+    glErrorAssert();
+    glBufferData(GL_ARRAY_BUFFER,
+            (GLsizeiptr)(sizeof(state->vbo_vertices[0]) * format->num_vertices),
+            state->vbo_vertices,
+            GL_STATIC_DRAW);
+    glErrorAssert();
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glErrorAssert();
+
+    return true;
+}
+
 void
 load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 {
@@ -2505,7 +2731,10 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
             GL_STATIC_DRAW);
     glErrorAssert();
 
+    v1_material_index indices[harray_count(state->model_objects.material_indices)];
     Material *last_material = 0;
+    uint32_t num_material_indices = 0;
+
     hassert(state->num_faces * 3 < harray_count(state->vbo_vertices));
     for (uint32_t face_idx = 0;
             face_idx < state->num_faces;
@@ -2676,6 +2905,15 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
         state->num_vbo_vertices,
     };
 
+    for (uint32_t idx = 0; idx < state->model_objects.num_material_indices; ++idx)
+    {
+        auto *f = state->model_objects.material_indices + idx;
+        indices[idx] = {
+            (uint32_t)(f->material - state->materials),
+            f->final_vertex_id,
+        };
+    }
+
     glBindBuffer(GL_ARRAY_BUFFER, state->model_objects.vbo);
     glErrorAssert();
 
@@ -2684,6 +2922,12 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
             state->vbo_vertices,
             GL_STATIC_DRAW);
     glErrorAssert();
+#if 0
+    write_binary_format_v1("tmp",
+            state->num_materials, state->v1_material_definitions,
+            state->model_objects.num_material_indices, indices,
+            state->num_faces * 3, (v1_vertex_format *)state->vbo_vertices);
+#endif
 }
 
 Matrices
@@ -2872,7 +3116,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
         {
         }
-        load_model_from_obj(ctx, memory, input);
+        if (!load_model_from_v1(ctx, memory, input)) {
+            load_model_from_obj(ctx, memory, input);
+        }
 
         load_aabb_buffer_objects(state, state->model_min, state->model_max);
         load_bounding_sphere(state, state->model_min, state->model_max);
