@@ -35,6 +35,7 @@ struct osx_state
     char *last_slash;
     char library_path[PATH_MAX];
     char asset_path[PATH_MAX];
+    char arg_asset_path[PATH_MAX];
 
     game_input inputs[2];
     game_input *new_input;

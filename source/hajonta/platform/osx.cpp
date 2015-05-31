@@ -103,10 +103,18 @@ load_game(osx_game_code *game_code, char *path)
 PLATFORM_LOAD_ASSET(osx_load_asset)
 {
     osx_state *state = (osx_state *)ctx;
-    char full_pathname[PATH_MAX];
-    snprintf(full_pathname, sizeof(full_pathname), "%s/%s", state->asset_path, asset_path);
-
-    FILE *asset = fopen(full_pathname, "r");
+    char *paths[] = {
+        state->asset_path,
+        state->arg_asset_path,
+        0,
+    };
+    FILE *asset = 0;
+    for (char **path = paths; !asset && path; ++path)
+    {
+        char full_pathname[PATH_MAX];
+        snprintf(full_pathname, sizeof(full_pathname), "%s/%s", *path, asset_path);
+        asset = fopen(full_pathname, "r");
+    }
     if (!asset)
     {
         return false;

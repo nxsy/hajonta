@@ -8,6 +8,8 @@
 #import <OpenGL/OpenGL.h>
 #include <OpenGL/gl.h>
 
+#include <unistd.h>
+
 @interface OpenFileDialogReturn : NSObject {
 @public
     NSURL *filename;
@@ -443,7 +445,8 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef displayLink, const CV
     return result;
 }
 
-int main(int argc, const char * argv[])  { 
+int main(int argc, char **argv)
+{
     // Autorelease Pool: 
     // Objects declared in this scope will be automatically 
     // released at the end of it, when the pool is "drained". 
@@ -501,6 +504,25 @@ int main(int argc, const char * argv[])  {
     // Create app delegate to handle system events
     View* view = [[[View alloc] initWithFrame:windowRect] autorelease];
     view->windowRect = windowRect;
+
+    int ch;
+    while((ch = getopt(argc, argv, "d:")) != -1)
+    {
+        switch(ch)
+        {
+            case 'd':
+            {
+                strcpy(view->state.arg_asset_path, optarg);
+            } break;
+            case '?':
+            default:
+            {
+            }
+        }
+    }
+    argc -= optind;
+    argv += optind;
+
     [window setAcceptsMouseMovedEvents:YES];
     [window setContentView:view];
     [window setDelegate:view];
