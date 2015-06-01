@@ -26,6 +26,8 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Basic skybox
 * Specular material
 * Directional light
+* Compressed texture loading (DDS, DXT)
+* Multiple lights
 
 ## To do (short-term)
 
@@ -37,8 +39,8 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 
 * “Resize” to common (1 = 1m) format
 * Export to asset structure
-* Multiple lights
 * Spotlight
+* Shadows
 * Camera control
 * Ambient light factor control
 * Non-texture materials (plain old color)
