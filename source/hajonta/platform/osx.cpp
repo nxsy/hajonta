@@ -28,8 +28,8 @@ get_binary_name(osx_state *state)
 
 void
 cat_strings(
-    size_t src_a_count, char *src_a,
-    size_t src_b_count, char *src_b,
+    size_t src_a_count, const char *src_a,
+    size_t src_b_count, const char *src_b,
     size_t dest_count, char *dest
     )
 {
@@ -53,7 +53,7 @@ cat_strings(
 }
 
 void
-build_full_filename(osx_state *state, char *filename, int dest_count, char *dest)
+build_full_filename(osx_state *state, const char *filename, int dest_count, char *dest)
 {
     cat_strings(state->last_slash -
             state->binary_name, state->binary_name, strlen(filename), filename,
@@ -183,9 +183,9 @@ osx_init(osx_state *state, int window_width, int window_height, void *view)
     find_asset_path(state);
 
 #if defined(HAJONTA_LIBRARY_NAME)
-    char *game_code_filename = hquoted(HAJONTA_LIBRARY_NAME);
+    const char *game_code_filename = hquoted(HAJONTA_LIBRARY_NAME);
 #else
-    char *game_code_filename = (char *)"libgame.dylib";
+    const char *game_code_filename = "libgame.dylib";
 #endif
     build_full_filename(state, game_code_filename,
             sizeof(state->library_path),

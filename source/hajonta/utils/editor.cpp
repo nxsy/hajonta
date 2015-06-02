@@ -457,7 +457,7 @@ void load_fonts(hajonta_thread_context *ctx, platform_memory *memory)
 
     uint8_t ttf_buffer[158080];
     unsigned char temp_bitmap[512][512];
-    char *filename = "fonts/AnonymousPro-1.002.001/Anonymous Pro.ttf";
+    const char *filename = "fonts/AnonymousPro-1.002.001/Anonymous Pro.ttf";
 
     if (!memory->platform_load_asset(ctx, filename, sizeof(ttf_buffer), ttf_buffer)) {
         char msg[1024];
@@ -495,7 +495,7 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     game_state *state = (game_state *)memory->memory;
 
 #if !defined(NEEDS_EGL)
-    if (glGenVertexArrays != 0)
+    if (&glGenVertexArrays != 0)
     {
         glGenVertexArrays(1, &state->vao);
         glBindVertexArray(state->vao);
@@ -1224,7 +1224,7 @@ bool
 load_texture_asset(
     hajonta_thread_context *ctx,
     platform_memory *memory,
-    char *filename,
+    const char *filename,
     uint8_t *image_buffer,
     uint32_t image_size,
     int32_t *x,
@@ -1405,7 +1405,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, skybox_dat
 
     uint8_t image[162019]; // maximum size
     struct _assets {
-        char *filename;
+        const char *filename;
         GLenum target;
         uint32_t filesize;
     } assets[] = {
@@ -1447,7 +1447,7 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
     float x = 38;
     float y_base = 12;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 51, 2);
-    char *shader_mode_names[] =
+    const char *shader_mode_names[] =
     {
         "standard",
         "diffuse tex",
@@ -1460,7 +1460,7 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
-        char *text = shader_mode_names[idx];
+        const char *text = shader_mode_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
         if (state->shader_config.shader_mode == idx)
@@ -1504,7 +1504,7 @@ draw_ambient_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     float x = 38;
     float y_base = (float)input->window.height - 50.0f;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
-    char *shader_mode_names[] =
+    const char *shader_mode_names[] =
     {
         "standard",
         "none",
@@ -1512,7 +1512,7 @@ draw_ambient_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
-        char *text = shader_mode_names[idx];
+        const char *text = shader_mode_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
         if (state->shader_config.ambient_mode == idx)
@@ -1556,7 +1556,7 @@ draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     float x = 38;
     float y_base = (float)input->window.height - 100.0f;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
-    char *shader_mode_names[] =
+    const char *shader_mode_names[] =
     {
         "standard",
         "none",
@@ -1566,7 +1566,7 @@ draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
-        char *text = shader_mode_names[idx];
+        const char *text = shader_mode_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
         if (state->shader_config.diffuse_mode == idx)
@@ -1610,7 +1610,7 @@ draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_in
     float x = 38;
     float y_base = (float)input->window.height - 150.0f;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
-    char *shader_mode_names[] =
+    const char *shader_mode_names[] =
     {
         "standard",
         "none",
@@ -1620,7 +1620,7 @@ draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_in
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
-        char *text = shader_mode_names[idx];
+        const char *text = shader_mode_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
         if (state->shader_config.specular_mode == idx)
@@ -1664,7 +1664,7 @@ draw_tonemap_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     float x = 38;
     float y_base = (float)input->window.height - 200.0f;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 25, 2);
-    char *shader_mode_names[] =
+    const char *shader_mode_names[] =
     {
         "none",
         "Reinhard",
@@ -1675,7 +1675,7 @@ draw_tonemap_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
-        char *text = shader_mode_names[idx];
+        const char *text = shader_mode_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
         if (state->shader_config.tonemap_mode == idx)
@@ -1719,7 +1719,7 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
     float x = 38;
     float y_base = 50;
     push_window(state, pushctx, 30, (uint32_t)(y_base) - 8, 51, 2);
-    char *shader_config_names[] =
+    const char *shader_config_names[] =
     {
         "diffuse tex",
         "normal tex",
@@ -1732,7 +1732,7 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
 
     for (int32_t idx = 0; idx < harray_count(shader_config_names); ++idx)
     {
-        char *text = shader_config_names[idx];
+        const char *text = shader_config_names[idx];
         float y = input->window.height - (y_base + 3.0f);
 
         if (idx > 0)
@@ -2173,7 +2173,7 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
         (GLint)state->lighting.num_point_lights);
 
     struct {
-        char *uniform_name;
+        const char *uniform_name;
     } texture_bindings[] =
     {
         {"tex"},

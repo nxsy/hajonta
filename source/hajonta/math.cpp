@@ -157,7 +157,7 @@ v3cross(v3 p, v3 q)
 }
 
 static bool
-assertEqual(v3 left, v3 right, char *msg, char *file, int line)
+assertEqual(v3 left, v3 right, const char *msg, const char *file, int line)
 {
     if (!(
         (left.x == right.x) &&
@@ -177,7 +177,7 @@ assertEqual(v3 left, v3 right, char *msg, char *file, int line)
 }
 
 static bool
-assertEqual(v2 left, v2 right, char *msg, char *file, int line)
+assertEqual(v2 left, v2 right, const char *msg, const char *file, int line)
 {
     if (!(
         (left.x == right.x) &&
@@ -196,7 +196,7 @@ assertEqual(v2 left, v2 right, char *msg, char *file, int line)
 }
 
 static bool
-assertEqual(float left, float right, char *msg, char *file, int line)
+assertEqual(float left, float right, const char *msg, const char *file, int line)
 {
 #define _P(x, ...) printf("%s(%d) : " x "\n", file, line, __VA_ARGS__)
     if (left != right)
@@ -631,7 +631,7 @@ m4sprint(char *msg, uint32_t msg_size, const m4 left)
 }
 
 static bool
-assertEqual(m4 left, m4 right, char *msg, char *file, int line)
+assertEqual(m4 left, m4 right, const char *msg, const char *file, int line)
 {
     if (!m4identical(left, right))
     {

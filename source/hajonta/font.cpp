@@ -63,7 +63,7 @@ load_font(uint8_t *zfi, uint8_t *bmp, font_data *font, hajonta_thread_context *c
 }
 
 bool
-write_to_buffer(draw_buffer *buffer, font_data *font, char *message)
+write_to_buffer(draw_buffer *buffer, font_data *font, const char *message)
 {
     int buffer_x = 0;
     int buffer_y = 0;

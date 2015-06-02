@@ -181,7 +181,7 @@ main(int argc, char **argv)
     strcpy(buffer, "#if !defined(NEEDS_EGL)\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
-    strcpy(buffer, "    char *vertex_shader_source = R\"EOF(\n");
+    strcpy(buffer, "    const char *vertex_shader_source = R\"EOF(\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     while (feof(v) == 0)
@@ -198,7 +198,7 @@ main(int argc, char **argv)
     strcpy(buffer, "\n)EOF\";\n#else\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
-    strcpy(buffer, "    char *egl_vertex_shader_source = R\"EOF(\n");
+    strcpy(buffer, "    const char *egl_vertex_shader_source = R\"EOF(\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     while (feof(eglv) == 0)
@@ -219,7 +219,7 @@ main(int argc, char **argv)
     strcpy(buffer, "#if !defined(NEEDS_EGL)\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
-    strcpy(buffer, "    char *fragment_shader_source = R\"EOF(\n");
+    strcpy(buffer, "    const char *fragment_shader_source = R\"EOF(\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     while (feof(f) == 0)
@@ -235,7 +235,7 @@ main(int argc, char **argv)
     strcpy(buffer, "\n)EOF\";\n#else\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
-    strcpy(buffer, "    char *egl_fragment_shader_source = R\"EOF(\n");
+    strcpy(buffer, "    const char *egl_fragment_shader_source = R\"EOF(\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     while (feof(eglf) == 0)

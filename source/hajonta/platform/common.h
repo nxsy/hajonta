@@ -29,7 +29,7 @@ struct loaded_file
     char file_path[MAX_PATH]; // platform path for load_nearby
 };
 
-#define PLATFORM_FAIL(func_name) void func_name(hajonta_thread_context *ctx, char *failure_reason)
+#define PLATFORM_FAIL(func_name) void func_name(hajonta_thread_context *ctx, const char *failure_reason)
 typedef PLATFORM_FAIL(platform_fail_func);
 
 #define PLATFORM_QUIT(func_name) void func_name(hajonta_thread_context *ctx)
@@ -41,7 +41,7 @@ typedef PLATFORM_DEBUG_MESSAGE(platform_debug_message_func);
 #define PLATFORM_GLGETPROCADDRESS(func_name) void* func_name(hajonta_thread_context *ctx, char *function_name)
 typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 
-#define PLATFORM_LOAD_ASSET(func_name) bool func_name(hajonta_thread_context *ctx, char *asset_path, uint32_t size, uint8_t *dest)
+#define PLATFORM_LOAD_ASSET(func_name) bool func_name(hajonta_thread_context *ctx, const char *asset_path, uint32_t size, uint8_t *dest)
 typedef PLATFORM_LOAD_ASSET(platform_load_asset_func);
 
 #define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target)

@@ -15,7 +15,7 @@ typedef DEMO(demo_func);
 #include "hajonta/demos/model.h"
 
 struct demo_data {
-    char *name;
+    const char *name;
     demo_func *func;
 };
 

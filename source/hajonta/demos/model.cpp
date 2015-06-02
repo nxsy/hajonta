@@ -166,7 +166,7 @@ DEMO(demo_model)
 
         struct file_and_size
         {
-            char *filename;
+            const char *filename;
             uint32_t size;
         };
 

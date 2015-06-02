@@ -76,7 +76,7 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     game_state *state = (game_state *)memory->memory;
 
 #if !defined(NEEDS_EGL)
-    if (glGenVertexArrays != 0)
+    if (&glGenVertexArrays != 0)
     {
         glGenVertexArrays(1, &state->vao);
         glBindVertexArray(state->vao);
