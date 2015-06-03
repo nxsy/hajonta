@@ -384,7 +384,7 @@ handle_win32_messages(win32_state *state)
                 char dbg[1024] = {};
                 sprintf(dbg, "WM_LBUTTONUP at %dx%d\n", x_pos, y_pos);
                 OutputDebugStringA(dbg);
-                ReleaseCapture();
+                //ReleaseCapture();
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
                 win32_process_keypress(&state->new_input->mouse.buttons.left, true, false);
@@ -396,7 +396,7 @@ handle_win32_messages(win32_state *state)
                 char dbg[1024] = {};
                 sprintf(dbg, "WM_LBUTTONDOWN at %dx%d\n", x_pos, y_pos);
                 OutputDebugStringA(dbg);
-                SetCapture(state->window);
+                //SetCapture(state->window);
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
                 win32_process_keypress(&state->new_input->mouse.buttons.left, false, true);
