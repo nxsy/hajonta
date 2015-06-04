@@ -3024,14 +3024,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         state->lighting.point_lights[0] = {
             {-10.0f, -0.0f, -0.0f},
-            {1.0f, 0.3f, 0.3f},
+            {0.3f, 0.3f, 0.3f},
             0.0f,
             3.0f,
             { 1.0f, 0.0f, 0.0f },
         };
         state->lighting.point_lights[1] = {
             {10.0f, -0.0f, 3.0f},
-            {0.3f, 0.3f, 1.0f},
+            {0.3f, 0.3f, 0.3f},
             0.0f,
             3.0f,
             { 1.0f, 0.0f, 0.0f },
