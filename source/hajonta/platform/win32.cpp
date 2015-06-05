@@ -217,17 +217,17 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 case WA_INACTIVE:
                 {
                     OutputDebugStringA("WM_ACTIVATE with WA_INACTIVE\n");
-                    ClipCursor(0);
+                    // ClipCursor(0);
                 } break;
                 case WA_ACTIVE:
                 {
                     OutputDebugStringA("WM_ACTIVATE with WA_ACTIVE\n");
-                    ClipCursor(&window_rect);
+                    // ClipCursor(&window_rect);
                 } break;
                 case WA_CLICKACTIVE:
                 {
                     OutputDebugStringA("WM_ACTIVATE with WA_CLICKACTIVE\n");
-                    ClipCursor(&window_rect);
+                    //ClipCursor(&window_rect);
                 } break;
             }
         } break;
