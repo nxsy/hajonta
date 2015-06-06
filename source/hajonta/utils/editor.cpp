@@ -434,6 +434,7 @@ struct game_state
     char bitmap_scratch[4096 * 4096 * 4];
 
     bool hide_lines;
+    bool hide_bounds;
     shader_configuration shader_config;
 
     int x_rotation_correction;
@@ -1936,22 +1937,47 @@ void
 draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
 {
     game_state *state = (game_state *)memory->memory;
-    push_window(state, pushctx, 34, 92, 6, 2);
+    push_window(state, pushctx, 34, 92, 12, 2);
 
-    if (state->hide_lines)
-    {
-        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
-    }
-    else
-    {
-        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
-    }
+    float x = 34 + 8;
+    float y_base = 92 + 8;
 
+    struct {
+        char *name;
+        bool *toggle_on_click;
+    } config[] =
     {
-        char full_text[] = "hide lines";
-        char *text = (char *)full_text;
-        float x = 58;
-        float y = input->window.height - 103.0f;
+        { "hide lines", &state->hide_lines},
+        { "hide bounds", &state->hide_bounds},
+    };
+
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+
+    for (uint32_t idx = 0; idx < harray_count(config); ++idx)
+    {
+        char *text = config[idx].name;
+        float y = input->window.height - (y_base + 3.0f);
+
+        if (!*config[idx].toggle_on_click)
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+        else
+        {
+            push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
+        }
+
+        if (mouse_pressed)
+        {
+            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+            rectangle2 r = {{x,y_base+3},{16,16}};
+            if (point_in_rectangle(m, r))
+            {
+                *config[idx].toggle_on_click ^= 1;
+            }
+        }
+        x += 22;
+
         while (*text) {
             stbtt_aligned_quad q;
             stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
@@ -1959,20 +1985,8 @@ draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, g
             q.y1 = input->window.height - q.y1;
             push_quad(pushctx, q, state->stb_font.font_tex, 1);
         }
-    }
 
-    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
-    v2 mouse_loc = {
-        (float)input->mouse.x,
-        (float)input->window.height - (float)input->mouse.y,
-    };
-    if (mouse_pressed)
-    {
-        rectangle2 r = {{38,100},{16,16}};
-        if (point_in_rectangle(mouse_loc, r))
-        {
-            state->hide_lines ^= true;
-        }
+        x += 8;
     }
 }
 
@@ -3261,7 +3275,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         glDrawElements(GL_LINES, (GLsizei)state->num_line_elements, GL_UNSIGNED_INT, 0);
     }
 
-    draw_bounds(ctx, memory, input);
+    if (!state->hide_bounds)
+    {
+        draw_bounds(ctx, memory, input);
+    }
 
     draw_skybox(ctx, memory, input);
 
