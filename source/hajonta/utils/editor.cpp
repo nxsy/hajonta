@@ -1960,6 +1960,20 @@ draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, g
             push_quad(pushctx, q, state->stb_font.font_tex, 1);
         }
     }
+
+    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    v2 mouse_loc = {
+        (float)input->mouse.x,
+        (float)input->window.height - (float)input->mouse.y,
+    };
+    if (mouse_pressed)
+    {
+        rectangle2 r = {{38,100},{16,16}};
+        if (point_in_rectangle(mouse_loc, r))
+        {
+            state->hide_lines ^= true;
+        }
+    }
 }
 
 void
@@ -3164,21 +3178,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         if (controller->buttons.move_left.ended_down && !controller->buttons.move_left.repeat)
         {
             state->z_rotation_correction = (state->z_rotation_correction + 1) % 4;
-        }
-    }
-
-    bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
-    v2 mouse_loc = {
-        (float)input->mouse.x,
-        (float)input->window.height - (float)input->mouse.y,
-    };
-
-    if (mouse_pressed)
-    {
-        rectangle2 r = {{38,100},{16,16}};
-        if (point_in_rectangle(mouse_loc, r))
-        {
-            state->hide_lines ^= true;
         }
     }
 
