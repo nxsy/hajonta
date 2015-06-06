@@ -1933,6 +1933,36 @@ draw_camera_movement(hajonta_thread_context *ctx, platform_memory *memory, game_
 }
 
 void
+draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+    push_window(state, pushctx, 34, 92, 6, 2);
+
+    if (state->hide_lines)
+    {
+        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
+    }
+    else
+    {
+        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
+    }
+
+    {
+        char full_text[] = "hide lines";
+        char *text = (char *)full_text;
+        float x = 58;
+        float y = input->window.height - 103.0f;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(pushctx, q, state->stb_font.font_tex, 1);
+        }
+    }
+}
+
+void
 draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 {
     game_state *state = (game_state *)memory->memory;
@@ -1958,31 +1988,7 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     pushctx.textures = textures;
     pushctx.max_textures = harray_count(textures);
 
-    push_window(state, &pushctx, 34, 92, 6, 2);
-
-    if (state->hide_lines)
-    {
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
-    }
-    else
-    {
-        push_sprite(&pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{38, 100});
-    }
-
-    {
-        char full_text[] = "hide lines";
-        char *text = (char *)full_text;
-        float x = 58;
-        float y = input->window.height - 103.0f;
-        while (*text) {
-            stbtt_aligned_quad q;
-            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
-            q.y0 = input->window.height - q.y0;
-            q.y1 = input->window.height - q.y1;
-            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
-        }
-    }
-
+    draw_bounds_lines_config(ctx, memory, input, &pushctx);
     draw_shader_config(ctx, memory, input, &pushctx);
     draw_shader_mode(ctx, memory, input, &pushctx);
     draw_ambient_mode(ctx, memory, input, &pushctx);
