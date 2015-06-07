@@ -2017,16 +2017,19 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     pushctx.textures = textures;
     pushctx.max_textures = harray_count(textures);
 
-    draw_bounds_lines_config(ctx, memory, input, &pushctx);
-    draw_shader_config(ctx, memory, input, &pushctx);
-    draw_shader_mode(ctx, memory, input, &pushctx);
-    draw_ambient_mode(ctx, memory, input, &pushctx);
-    draw_diffuse_mode(ctx, memory, input, &pushctx);
-    draw_specular_mode(ctx, memory, input, &pushctx);
-    draw_tonemap_mode(ctx, memory, input, &pushctx);
+    if (!state->hide_ui)
+    {
+        draw_bounds_lines_config(ctx, memory, input, &pushctx);
+        draw_shader_config(ctx, memory, input, &pushctx);
+        draw_shader_mode(ctx, memory, input, &pushctx);
+        draw_ambient_mode(ctx, memory, input, &pushctx);
+        draw_diffuse_mode(ctx, memory, input, &pushctx);
+        draw_specular_mode(ctx, memory, input, &pushctx);
+        draw_tonemap_mode(ctx, memory, input, &pushctx);
 
-    draw_model_rotation(ctx, memory, input, &pushctx);
-    draw_camera_movement(ctx, memory, input, &pushctx);
+        draw_model_rotation(ctx, memory, input, &pushctx);
+        draw_camera_movement(ctx, memory, input, &pushctx);
+    }
 
     // Mouse should be last
     {
@@ -3283,10 +3286,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     draw_skybox(ctx, memory, input);
 
-    if (!state->hide_ui)
-    {
-        draw_ui(ctx, memory, input);
-    }
+    draw_ui(ctx, memory, input);
 
     glErrorAssert();
 }
