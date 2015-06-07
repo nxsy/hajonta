@@ -433,6 +433,7 @@ struct game_state
 
     char bitmap_scratch[4096 * 4096 * 4];
 
+    bool hide_ui;
     bool hide_lines;
     bool hide_bounds;
     shader_configuration shader_config;
@@ -3183,7 +3184,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
         {
-            state->hide_lines ^= true;
+            state->hide_ui ^= true;
         }
         if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
         {
@@ -3282,7 +3283,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     draw_skybox(ctx, memory, input);
 
-    draw_ui(ctx, memory, input);
+    if (!state->hide_ui)
+    {
+        draw_ui(ctx, memory, input);
+    }
 
     glErrorAssert();
 }
