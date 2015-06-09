@@ -1935,6 +1935,47 @@ draw_camera_movement(hajonta_thread_context *ctx, platform_memory *memory, game_
 }
 
 void
+draw_camera_rotation(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
+{
+    game_state *state = (game_state *)memory->memory;
+    push_window(state, pushctx, 174, 140, 4, 3);
+    v2 mouse_loc = {
+        (float)input->mouse.x,
+        (float)input->window.height - (float)input->mouse.y,
+    };
+
+    uint32_t xbase = 174 + 8;
+    uint32_t ybase = 140 + 8;
+
+    struct {
+        uint32_t sprite;
+        uint32_t x;
+        uint32_t y;
+        float *axis;
+        float iter;
+    } sprites[] =
+    {
+        { 13, 1, 1, &state->camera.rotation.x, 0.005f },
+        { 14, 1, 0, &state->camera.rotation.x,-0.005f },
+        { 15, 0, 0, &state->camera.rotation.y,-0.005f },
+        { 16, 2, 0, &state->camera.rotation.y, 0.005f },
+    };
+    for (uint32_t idx = 0; idx < harray_count(sprites); ++idx)
+    {
+        auto sprite = sprites + idx;
+        float x = (float)(xbase + (sprite->x * 16));
+        float y = (float)(ybase + (sprite->y * 16));
+        push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + sprite->sprite, state->kenney_ui.ui_pack_sheet.tex, v2{x, y});
+
+        rectangle2 r = {{x,y},{16,16}};
+        if (point_in_rectangle(mouse_loc, r))
+        {
+            *(sprite->axis) += sprite->iter;
+        }
+    }
+}
+
+void
 draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, ui2d_push_context *pushctx)
 {
     game_state *state = (game_state *)memory->memory;
@@ -2029,6 +2070,7 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 
         draw_model_rotation(ctx, memory, input, &pushctx);
         draw_camera_movement(ctx, memory, input, &pushctx);
+        draw_camera_rotation(ctx, memory, input, &pushctx);
     }
 
     // Mouse should be last
@@ -2278,8 +2320,14 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
         -(state->camera.target.z +state->camera.distance),
         1.0f,
     };
-    state->camera.view = view;
+    v3 axis_y = {0.0f, 1.0f, 0.0f};
+    v3 axis_x = {1.0f, 0.0f, 0.0f};
+    m4 rotate_y = m4rotation(axis_y, state->camera.rotation.y);
+    m4 rotate_x = m4rotation(axis_x, state->camera.rotation.x);
+    view = m4mul(view, rotate_y);
+    view = m4mul(view, rotate_x);
 
+    state->camera.view = view;
     float ratio = (float)input->window.width / (float)input->window.height;
     state->camera.projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
 }
