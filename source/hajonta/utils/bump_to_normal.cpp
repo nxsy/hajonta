@@ -1,10 +1,19 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#if defined(_MSC_VER)
+#pragma warning(push, 4)
+#pragma warning(disable: 4365 4312)
+#endif
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 struct vec4u8
 {
@@ -88,13 +97,13 @@ main(int argc, char **argv)
         return 1;
     }
 
-    vec4u8 *normal_data = (vec4u8 *)malloc(width * height * 4);
+    vec4u8 *normal_data = (vec4u8 *)malloc((size_t)(width * height * 4));
 
     vec4u8 *normal_pixel = normal_data;
     vec4u8 *data_pixel = data;
-    for (uint32_t y = 0; y < height; ++y)
+    for (uint32_t y = 0; y < (uint32_t)height; ++y)
     {
-        for (uint32_t x = 0; x < width; ++x)
+        for (uint32_t x = 0; x < (uint32_t)width; ++x)
         {
 #define X(xoff) ((x + xoff) % width)
 #define Y(yoff) ((y + yoff) % height)
@@ -133,7 +142,7 @@ main(int argc, char **argv)
     }
 
     char *dest = argv[2];
-    bool success = stbi_write_png(dest, width, height, 4, normal_data, width * 4);
+    int success = stbi_write_png(dest, width, height, 4, normal_data, width * 4);
     stbi_image_free(data);
 
     if (!success)

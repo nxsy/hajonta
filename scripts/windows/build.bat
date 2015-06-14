@@ -6,7 +6,7 @@ IF NOT EXIST %BUILDDIR% mkdir %BUILDDIR%
 IF NOT EXIST %BUILDDIR%\generated mkdir %BUILDDIR%\generated
 pushd %BUILDDIR%
 
-set INCLUDES=-I..\source -Igenerated -Zi
+set INCLUDES=-I..\source -Igenerated -Zi -I..\source\hajonta\thirdparty
 set CPPFLAGS=%includes% /FC /nologo /Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd4514 /wd4191 /wd4201 /wd4505
 
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
@@ -37,5 +37,7 @@ cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\ddsviewer.cpp -LD /l
 del ddsviewer.dll.lock
 copy ..\source\hajonta\platform\win32.cpp generated\win32_ddsviewer.cpp
 cl %CPPFLAGS% -DHAJONTA_LIBRARY_NAME=ddsviewer.dll -DHAJONTA_DEBUG=1 generated\win32_ddsviewer.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
+
+cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\bump_to_normal.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
 
 popd
