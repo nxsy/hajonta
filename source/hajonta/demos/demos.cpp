@@ -8,6 +8,7 @@ static const demo_data menu_items[] = {
     {"Bounce", (demo_func *)demo_bounce},
     {"Rotate", (demo_func *)demo_rotate},
     {"Model", (demo_func *)demo_model},
+    {"Firework", (demo_func *)demo_firework},
 };
 
 #include "hajonta/demos/rainbow.cpp"
@@ -17,3 +18,4 @@ static const demo_data menu_items[] = {
 #include "hajonta/demos/menu.cpp"
 #include "hajonta/demos/rotate.cpp"
 #include "hajonta/demos/model.cpp"
+#include "hajonta/demos/firework.cpp"
