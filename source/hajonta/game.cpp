@@ -21,6 +21,7 @@
 #include "hajonta/programs/a.h"
 #include "hajonta/programs/debug_font.h"
 #include "hajonta/programs/b.h"
+#include "hajonta/programs/c.h"
 
 #include "hajonta/math.cpp"
 #include "hajonta/bmp.cpp"
@@ -43,6 +44,7 @@ struct game_state
 {
     a_program_struct program_a;
     b_program_struct program_b;
+    c_program_struct program_c;
     debug_font_program_struct program_debug_font;
 
     uint32_t vao;
@@ -92,6 +94,12 @@ gl_setup(hajonta_thread_context *ctx, platform_memory *memory)
     }
 
     loaded = b_program(&state->program_b, ctx, memory);
+    if (!loaded)
+    {
+        return loaded;
+    }
+
+    loaded = c_program(&state->program_c, ctx, memory);
     if (!loaded)
     {
         return loaded;
