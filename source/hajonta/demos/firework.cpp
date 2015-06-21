@@ -15,6 +15,8 @@
 #include "hajonta/programs/ui2d.h"
 #include "hajonta/ui/ui2d.cpp"
 
+#include <time.h>
+
 enum struct shader_mode
 {
     standard,
@@ -26,6 +28,50 @@ enum struct shader_mode
     specular_exponent_texture,
 };
 
+float lerp(float a, float b, float s)
+{
+    return a + (b - a) * s;
+}
+
+float
+randfloat10()
+{
+    return (float)rand() / RAND_MAX;
+}
+
+void
+create_particle(firework_behaviour *behaviours, firework_particle *fp, firework_type type, v3 initial_position, v3 initial_velocity)
+{
+    firework_behaviour *fb = behaviours + (int32_t)type;
+
+    if (initial_position.y > 0)
+    {
+        fp->position = initial_position;
+    }
+    else
+    {
+        fp->position.x = lerp(-20, 20, randfloat10());
+        fp->position.y = 0;
+        fp->position.z = lerp(-20, 20, randfloat10());
+    }
+
+    fp->velocity = initial_velocity;
+    fp->velocity.x += lerp(fb->min_velocity.x, fb->max_velocity.x, randfloat10());
+    fp->velocity.y += lerp(fb->min_velocity.y, fb->max_velocity.x, randfloat10());
+    fp->velocity.z += lerp(fb->min_velocity.z, fb->max_velocity.z, randfloat10());
+
+    fp->constant_acceleration = {0.0f, -9.8f, 0.0f};
+    fp->type = type;
+
+    fp->ttl = lerp(fb->ttl_range.x, fb->ttl_range.y, randfloat10());
+}
+
+void
+create_particle(firework_behaviour *behaviours, firework_particle *fp, firework_type type)
+{
+    create_particle(behaviours, fp, type, v3{0,0,0}, v3{0,0,0});
+}
+
 DEMO(demo_firework)
 {
     glErrorAssert();
@@ -35,6 +81,7 @@ DEMO(demo_firework)
 
     if (!demo_state->firework_vbo)
     {
+        srand((uint32_t)(time(0)));
         glErrorAssert();
         glGenBuffers(1, &demo_state->firework_vbo);
 
@@ -112,8 +159,8 @@ DEMO(demo_firework)
             } vertices[] = {
                 {-200.000f, 0.000f,-100.000f, 1.000f},
                 {-200.000f, 0.000f, 100.000f, 1.000f},
-                { 200.000f, 0.000f,-100.000f, 1.000f},
                 { 200.000f, 0.000f, 100.000f, 1.000f},
+                { 200.000f, 0.000f,-100.000f, 1.000f},
             };
             glBindBuffer(GL_ARRAY_BUFFER, demo_state->ground_vbo);
             glBufferData(GL_ARRAY_BUFFER,
@@ -147,33 +194,30 @@ DEMO(demo_firework)
             glErrorAssert();
         }
 
-        firework_particle particles[] =
-        {
+        uint8_t num_behaviours_configured = 0;
+        demo_state->behaviours[(int)firework_type::basic_initial] = {
+            {0.75f, 1.4f},
+            {-5, 25,-5},
+            { 5, 27, 5},
             {
-                { 0.0f, 10.0f,-26.0f},
-                { 0.0f, 15.0f, -5.0f},
-                { 0.0f, -9.8f,  0.0f},
-                { 0.0f,  0.0f,  0.0f},
-            },
-            {
-                { 5.0f, 20.0f,-38.0f},
-                { 3.0f, 10.0f,  0.0f},
-                { 0.0f, -9.8f,  0.0f},
-                { 0.0f,  0.0f,  0.0f},
-            },
-            {
-                {-5.0f,  5.0f,-50.0f},
-                {10.0f, 20.0f,  7.0f},
-                { 0.0f, -9.8f,  0.0f},
-                { 0.0f,  0.0f,  0.0f},
+                {3, 12, firework_type::basic_second_part},
             },
         };
-        uint32_t num_particles = harray_count(particles);
-        for (uint32_t idx = 0; idx < num_particles; ++idx)
-        {
-            demo_state->particles[idx] = particles[idx];
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_second_part] = {
+            {0.7f, 1.2f},
+            {-10,-10,-10},
+            { 10, 10, 10},
+        };
+        num_behaviours_configured++;
+        hassert(num_behaviours_configured == (uint8_t)firework_type::NUMBER_FIREWORK_TYPES);
+    }
+
+    if (demo_state->num_particles < harray_count(demo_state->particles) / 2)
+    {
+        if (randfloat10() < 0.05f) {
+            create_particle(demo_state->behaviours, demo_state->particles + demo_state->num_particles++, firework_type::basic_initial);
         }
-        demo_state->num_particles = num_particles;
     }
 
     for (uint32_t i = 0;
@@ -220,7 +264,7 @@ DEMO(demo_firework)
     glErrorAssert();
 
     m4 view = m4identity();
-    view.cols[3] = v4{0,-6,0,1};
+    view.cols[3] = v4{0,-6,-30,1};
     float ratio = (float)input->window.width / (float)input->window.height;
     m4 projection = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
 
@@ -244,9 +288,31 @@ DEMO(demo_firework)
             v3mul(acceleration, input->delta_t),
             fp->velocity
         );
+        fp->ttl -= input->delta_t;
 
-        if (fp->position.y < 0.0f)
+        if (fp->position.y < 0.0f || fp->ttl <= 0.0f)
         {
+            if (fp->ttl <= 0.0f)
+            {
+                firework_behaviour *fb = demo_state->behaviours + (int32_t)fp->type;
+                for (uint32_t idx = 0; idx < harray_count(fb->payload); ++idx)
+                {
+                    firework_payload *payload = fb->payload + idx;
+                    if (payload->max_num_fireworks == 0)
+                    {
+                        break;
+                    }
+                    for (uint32_t payload_idx = 0; payload_idx < payload->max_num_fireworks; ++payload_idx)
+                    {
+                        create_particle(demo_state->behaviours,
+                                demo_state->particles + demo_state->num_particles++,
+                                payload->type,
+                                fp->position,
+                                fp->velocity);
+                    }
+                }
+            }
+
             firework_particle *last_particle = demo_state->particles + demo_state->num_particles - 1;
             *fp = *last_particle;
             demo_state->num_particles--;
@@ -289,9 +355,4 @@ DEMO(demo_firework)
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glErrorAssert();
-
-    if (!demo_state->num_particles)
-    {
-        memory->quit = true;
-    }
 }
