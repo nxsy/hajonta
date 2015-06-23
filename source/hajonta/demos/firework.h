@@ -2,10 +2,18 @@
 
 enum struct firework_type
 {
-    unused = -1,
     basic_initial,
     basic_second_part,
     NUMBER_FIREWORK_TYPES,
+};
+
+enum struct firework_color
+{
+    purple,
+    white,
+    green,
+    blue,
+    NUMBER_FIREWORK_COLORS,
 };
 
 struct firework_particle
@@ -18,6 +26,7 @@ struct firework_particle
     v3 force_accumulator;
 
     float ttl;
+    firework_color color;
     firework_type type;
 };
 
@@ -35,6 +44,7 @@ struct firework_behaviour
     v3 max_velocity;
 
     firework_payload payload[3];
+    firework_color colors[3];
 };
 
 struct demo_firework_state {
@@ -42,7 +52,7 @@ struct demo_firework_state {
 
     uint32_t firework_vbo;
     uint32_t firework_ibo;
-    uint32_t firework_texture;
+    uint32_t firework_textures[firework_color::NUMBER_FIREWORK_COLORS];
     uint32_t firework_num_faces;
 
     uint32_t ground_vbo;

@@ -64,6 +64,20 @@ create_particle(firework_behaviour *behaviours, firework_particle *fp, firework_
     fp->type = type;
 
     fp->ttl = lerp(fb->ttl_range.x, fb->ttl_range.y, randfloat10());
+
+    float color_rand = randfloat10();
+    if (color_rand < 0.33f)
+    {
+        fp->color = fb->colors[0];
+    }
+    else if (color_rand < 0.66f)
+    {
+        fp->color = fb->colors[1];
+    }
+    else
+    {
+        fp->color = fb->colors[2];
+    }
 }
 
 void
@@ -144,11 +158,25 @@ DEMO(demo_firework)
                 GL_STATIC_DRAW);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-        glGenTextures(1, &demo_state->firework_texture);
-        glBindTexture(GL_TEXTURE_2D, demo_state->firework_texture);
-        uint32_t color = 0xffff00ff;
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &color);
-
+        glGenTextures((GLsizei)firework_color::NUMBER_FIREWORK_COLORS, demo_state->firework_textures);
+        struct
+        {
+            firework_color color;
+            uint32_t color32;
+        } color_data[] =
+        {
+            { firework_color::purple, 0xffff00ff },
+            { firework_color::white, 0xffffffff },
+            { firework_color::green, 0xff00ff00 },
+            { firework_color::blue, 0xffff0000 },
+        };
+        uint32_t num_color_data = harray_count(color_data);
+        hassert(num_color_data == (uint32_t)firework_color::NUMBER_FIREWORK_COLORS);
+        for (uint32_t idx = 0; idx < (uint32_t)firework_color::NUMBER_FIREWORK_COLORS; ++idx)
+        {
+            glBindTexture(GL_TEXTURE_2D, demo_state->firework_textures[idx]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &color_data[idx].color32);
+        }
         glErrorAssert();
 
         {
@@ -202,12 +230,24 @@ DEMO(demo_firework)
             {
                 {3, 12, firework_type::basic_second_part},
             },
+            {
+                firework_color::white,
+                firework_color::white,
+                firework_color::white,
+            },
         };
         num_behaviours_configured++;
         demo_state->behaviours[(int)firework_type::basic_second_part] = {
             {0.7f, 1.2f},
             {-10,-10,-10},
             { 10, 10, 10},
+            {
+            },
+            {
+                firework_color::purple,
+                firework_color::green,
+                firework_color::blue,
+            },
         };
         num_behaviours_configured++;
         hassert(num_behaviours_configured == (uint8_t)firework_type::NUMBER_FIREWORK_TYPES);
@@ -259,7 +299,6 @@ DEMO(demo_firework)
         glGetUniformLocation(state->program_c.program, "tex"),
         0);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, demo_state->firework_texture);
 
     glErrorAssert();
 
@@ -326,6 +365,7 @@ DEMO(demo_firework)
         model = m4mul(model, translate);
 
         glUniformMatrix4fv(state->program_c.u_model_id, 1, false, (float *)&model);
+        glBindTexture(GL_TEXTURE_2D, demo_state->firework_textures[(uint32_t)fp->color]);
         glDrawElements(GL_TRIANGLES, (GLsizei)(demo_state->firework_num_faces * 3), GL_UNSIGNED_BYTE, 0);
     }
 
