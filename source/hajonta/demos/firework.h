@@ -4,6 +4,11 @@ enum struct firework_type
 {
     basic_initial,
     basic_second_part,
+    basic_second_part_green,
+    basic_second_part_blue,
+    basic_initial2,
+    basic_second_part_purple,
+    basic_second_part_yellow,
     NUMBER_FIREWORK_TYPES,
 };
 
@@ -13,6 +18,7 @@ enum struct firework_color
     white,
     green,
     blue,
+    yellow,
     NUMBER_FIREWORK_COLORS,
 };
 
@@ -37,13 +43,23 @@ struct firework_payload
     firework_type type;
 };
 
+enum struct firework_payload_mode
+{
+    all,
+    random,
+};
+
 struct firework_behaviour
 {
     v2 ttl_range;
     v3 min_velocity;
     v3 max_velocity;
 
+    firework_payload_mode payload_mode;
+    uint32_t num_payloads;
     firework_payload payload[3];
+
+    uint32_t num_colors;
     firework_color colors[3];
 };
 

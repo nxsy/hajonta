@@ -39,6 +39,13 @@ randfloat10()
     return (float)rand() / RAND_MAX;
 }
 
+uint32_t
+randint(uint32_t below)
+{
+    // Yes, this isn't fair.
+    return rand() % below;
+}
+
 void
 create_particle(firework_behaviour *behaviours, firework_particle *fp, firework_type type, v3 initial_position, v3 initial_velocity)
 {
@@ -65,18 +72,39 @@ create_particle(firework_behaviour *behaviours, firework_particle *fp, firework_
 
     fp->ttl = lerp(fb->ttl_range.x, fb->ttl_range.y, randfloat10());
 
-    float color_rand = randfloat10();
-    if (color_rand < 0.33f)
+    hassert(fb->num_colors > 0);
+    hassert(fb->num_colors <= harray_count(fb->colors));
+    if (fb->num_colors == 1)
     {
         fp->color = fb->colors[0];
     }
-    else if (color_rand < 0.66f)
+    else if (fb->num_colors == 2)
     {
-        fp->color = fb->colors[1];
+        float color_rand = randfloat10();
+        if (color_rand < 0.50f)
+        {
+            fp->color = fb->colors[0];
+        }
+        else
+        {
+            fp->color = fb->colors[1];
+        }
     }
-    else
+    else if (fb->num_colors == 3)
     {
-        fp->color = fb->colors[2];
+        float color_rand = randfloat10();
+        if (color_rand < 0.33f)
+        {
+            fp->color = fb->colors[0];
+        }
+        else if (color_rand < 0.66f)
+        {
+            fp->color = fb->colors[1];
+        }
+        else
+        {
+            fp->color = fb->colors[2];
+        }
     }
 }
 
@@ -84,6 +112,19 @@ void
 create_particle(firework_behaviour *behaviours, firework_particle *fp, firework_type type)
 {
     create_particle(behaviours, fp, type, v3{0,0,0}, v3{0,0,0});
+}
+
+void
+create_payload(demo_firework_state *demo_state, firework_particle *fp, firework_payload *payload)
+{
+    for (uint32_t payload_idx = 0; payload_idx < payload->max_num_fireworks; ++payload_idx)
+    {
+        create_particle(demo_state->behaviours,
+                demo_state->particles + demo_state->num_particles++,
+                payload->type,
+                fp->position,
+                fp->velocity);
+    }
 }
 
 DEMO(demo_firework)
@@ -169,6 +210,7 @@ DEMO(demo_firework)
             { firework_color::white, 0xffffffff },
             { firework_color::green, 0xff00ff00 },
             { firework_color::blue, 0xffff0000 },
+            { firework_color::yellow, 0xff7fffff },
         };
         uint32_t num_color_data = harray_count(color_data);
         hassert(num_color_data == (uint32_t)firework_color::NUMBER_FIREWORK_COLORS);
@@ -227,12 +269,31 @@ DEMO(demo_firework)
             {0.75f, 1.4f},
             {-5, 25,-5},
             { 5, 27, 5},
+            firework_payload_mode::random,
+            3,
             {
                 {3, 12, firework_type::basic_second_part},
+                {3, 12, firework_type::basic_second_part_green},
+                {3, 12, firework_type::basic_second_part_blue},
             },
+            1,
             {
                 firework_color::white,
-                firework_color::white,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_initial2] = {
+            {0.75f, 1.4f},
+            {-5, 25,-5},
+            { 5, 27, 5},
+            firework_payload_mode::random,
+            2,
+            {
+                {3, 12, firework_type::basic_second_part_purple},
+                {3, 12, firework_type::basic_second_part_yellow},
+            },
+            1,
+            {
                 firework_color::white,
             },
         };
@@ -241,12 +302,71 @@ DEMO(demo_firework)
             {0.7f, 1.2f},
             {-10,-10,-10},
             { 10, 10, 10},
+            firework_payload_mode::all,
+            0,
             {
             },
+            3,
             {
                 firework_color::purple,
                 firework_color::green,
                 firework_color::blue,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_second_part_green] = {
+            {0.7f, 1.2f},
+            {-10,-10,-10},
+            { 10, 10, 10},
+            firework_payload_mode::all,
+            0,
+            {
+            },
+            1,
+            {
+                firework_color::green,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_second_part_blue] = {
+            {0.7f, 1.2f},
+            {-10,-10,-10},
+            { 10, 10, 10},
+            firework_payload_mode::all,
+            0,
+            {
+            },
+            1,
+            {
+                firework_color::blue,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_second_part_purple] = {
+            {0.7f, 1.2f},
+            {-10,-10,-10},
+            { 10, 10, 10},
+            firework_payload_mode::all,
+            0,
+            {
+            },
+            1,
+            {
+                firework_color::purple,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_second_part_yellow] = {
+            {0.7f, 1.2f},
+            {-10,-10,-10},
+            { 10, 10, 10},
+            firework_payload_mode::all,
+            0,
+            {
+            },
+            1,
+            {
+                firework_color::yellow,
             },
         };
         num_behaviours_configured++;
@@ -255,8 +375,31 @@ DEMO(demo_firework)
 
     if (demo_state->num_particles < harray_count(demo_state->particles) / 2)
     {
-        if (randfloat10() < 0.05f) {
-            create_particle(demo_state->behaviours, demo_state->particles + demo_state->num_particles++, firework_type::basic_initial);
+        struct {
+            firework_type type;
+            float likelihood;
+        } initial_types[] = {
+            {
+                firework_type::basic_initial,
+                0.02f,
+            },
+            {
+                firework_type::basic_initial2,
+                0.02f,
+            },
+        };
+        float likelihood = randfloat10();
+        for (auto &&t : initial_types)
+        {
+            if (likelihood < t.likelihood)
+            {
+                create_particle(demo_state->behaviours, demo_state->particles + demo_state->num_particles++, t.type);
+                break;
+            }
+            else
+            {
+                likelihood -= t.likelihood;
+            }
         }
     }
 
@@ -334,21 +477,31 @@ DEMO(demo_firework)
             if (fp->ttl <= 0.0f)
             {
                 firework_behaviour *fb = demo_state->behaviours + (int32_t)fp->type;
-                for (uint32_t idx = 0; idx < harray_count(fb->payload); ++idx)
+                hassert(fb->num_payloads <= harray_count(fb->payload));
+                switch (fb->payload_mode)
                 {
-                    firework_payload *payload = fb->payload + idx;
-                    if (payload->max_num_fireworks == 0)
+                    case firework_payload_mode::all:
                     {
-                        break;
-                    }
-                    for (uint32_t payload_idx = 0; payload_idx < payload->max_num_fireworks; ++payload_idx)
+                        for (uint32_t idx = 0; idx < fb->num_payloads; ++idx)
+                        {
+                            firework_payload *payload = fb->payload + idx;
+                            if (payload->max_num_fireworks == 0)
+                            {
+                                break;
+                            }
+                            create_payload(demo_state, fp, payload);
+                        }
+                    } break;
+                    case firework_payload_mode::random:
                     {
-                        create_particle(demo_state->behaviours,
-                                demo_state->particles + demo_state->num_particles++,
-                                payload->type,
-                                fp->position,
-                                fp->velocity);
-                    }
+                        uint32_t idx = randint(fb->num_payloads);
+                        firework_payload *payload = fb->payload + idx;
+                        create_payload(demo_state, fp, payload);
+                    } break;
+                    default:
+                    {
+                        hassert(!"Unknown firework_payload_mode!");
+                    } break;
                 }
             }
 
