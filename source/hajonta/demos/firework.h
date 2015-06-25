@@ -9,6 +9,9 @@ enum struct firework_type
     basic_initial2,
     basic_second_part_purple,
     basic_second_part_yellow,
+    initial_trailer,
+    trailer_second_part_red,
+    trailer_yellow,
     NUMBER_FIREWORK_TYPES,
 };
 
@@ -19,6 +22,7 @@ enum struct firework_color
     green,
     blue,
     yellow,
+    red,
     NUMBER_FIREWORK_COLORS,
 };
 

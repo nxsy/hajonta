@@ -211,6 +211,7 @@ DEMO(demo_firework)
             { firework_color::green, 0xff00ff00 },
             { firework_color::blue, 0xffff0000 },
             { firework_color::yellow, 0xff7fffff },
+            { firework_color::red, 0xff0000ff },
         };
         uint32_t num_color_data = harray_count(color_data);
         hassert(num_color_data == (uint32_t)firework_color::NUMBER_FIREWORK_COLORS);
@@ -282,22 +283,6 @@ DEMO(demo_firework)
             },
         };
         num_behaviours_configured++;
-        demo_state->behaviours[(int)firework_type::basic_initial2] = {
-            {0.75f, 1.4f},
-            {-5, 25,-5},
-            { 5, 27, 5},
-            firework_payload_mode::random,
-            2,
-            {
-                {3, 12, firework_type::basic_second_part_purple},
-                {3, 12, firework_type::basic_second_part_yellow},
-            },
-            1,
-            {
-                firework_color::white,
-            },
-        };
-        num_behaviours_configured++;
         demo_state->behaviours[(int)firework_type::basic_second_part] = {
             {0.7f, 1.2f},
             {-10,-10,-10},
@@ -342,6 +327,22 @@ DEMO(demo_firework)
             },
         };
         num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::basic_initial2] = {
+            {0.75f, 1.4f},
+            {-5, 25,-5},
+            { 5, 27, 5},
+            firework_payload_mode::random,
+            2,
+            {
+                {3, 12, firework_type::basic_second_part_purple},
+                {3, 12, firework_type::basic_second_part_yellow},
+            },
+            1,
+            {
+                firework_color::white,
+            },
+        };
+        num_behaviours_configured++;
         demo_state->behaviours[(int)firework_type::basic_second_part_purple] = {
             {0.7f, 1.2f},
             {-10,-10,-10},
@@ -370,6 +371,50 @@ DEMO(demo_firework)
             },
         };
         num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::initial_trailer] = {
+            {0.75f, 1.4f},
+            {-5, 25,-5},
+            { 5, 27, 5},
+            firework_payload_mode::random,
+            1,
+            {
+                {3, 12, firework_type::trailer_second_part_red},
+            },
+            1,
+            {
+                firework_color::white,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::trailer_second_part_red] = {
+            {0.7f, 1.2f},
+            {-8,-8,-8},
+            { 8, 8, 8},
+            firework_payload_mode::all,
+            1,
+            {
+                {1, 1, firework_type::trailer_yellow},
+            },
+            1,
+            {
+                firework_color::red,
+            },
+        };
+        num_behaviours_configured++;
+        demo_state->behaviours[(int)firework_type::trailer_yellow] = {
+            {10.0f, 10.0f},
+            { 0, 0, 0},
+            { 0, 0, 0},
+            firework_payload_mode::all,
+            0,
+            {
+            },
+            1,
+            {
+                firework_color::yellow,
+            },
+        };
+        num_behaviours_configured++;
         hassert(num_behaviours_configured == (uint8_t)firework_type::NUMBER_FIREWORK_TYPES);
     }
 
@@ -381,10 +426,14 @@ DEMO(demo_firework)
         } initial_types[] = {
             {
                 firework_type::basic_initial,
-                0.02f,
+                0.00f,
             },
             {
                 firework_type::basic_initial2,
+                0.00f,
+            },
+            {
+                firework_type::initial_trailer,
                 0.02f,
             },
         };
