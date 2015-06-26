@@ -32,6 +32,7 @@ struct win32_state
 
     HDC device_context;
     HWND window;
+    WINDOWPLACEMENT previous_window_placement;
 
     char binary_path[MAX_PATH];
     char asset_path[MAX_PATH];
@@ -331,13 +332,46 @@ handle_win32_messages(win32_state *state)
                 */
                 bool was_down = ((message.lParam & (1 << 30)) != 0);
                 bool is_down = ((message.lParam & (1 << 31)) == 0);
+                bool alt_was_down = ((message.lParam & (1 << 29)) != 0);
                 if (!state->keyboard_mode)
                 {
                     switch(vkcode)
                     {
                         case VK_RETURN:
                         {
-                            win32_process_keypress(&new_keyboard_controller->buttons.start, was_down, is_down);
+                            if (alt_was_down)
+                            {
+                                if (!is_down)
+                                {
+                                    break;
+                                }
+                                LONG dwStyle = GetWindowLong(state->window, GWL_STYLE);
+                                if (dwStyle & WS_OVERLAPPEDWINDOW) {
+                                    MONITORINFO mi = { sizeof(mi) };
+                                    if (GetWindowPlacement(state->window, &state->previous_window_placement) &&
+                                       GetMonitorInfo(MonitorFromWindow(state->window,
+                                                      MONITOR_DEFAULTTOPRIMARY), &mi)) {
+                                     SetWindowLong(state->window, GWL_STYLE,
+                                                   dwStyle & ~WS_OVERLAPPEDWINDOW);
+                                     SetWindowPos(state->window, HWND_TOP,
+                                                  mi.rcMonitor.left, mi.rcMonitor.top,
+                                                  mi.rcMonitor.right - mi.rcMonitor.left,
+                                                  mi.rcMonitor.bottom - mi.rcMonitor.top,
+                                                  SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                                   }
+                                 } else {
+                                   SetWindowLong(state->window, GWL_STYLE,
+                                                 dwStyle | WS_OVERLAPPEDWINDOW);
+                                   SetWindowPlacement(state->window, &state->previous_window_placement);
+                                   SetWindowPos(state->window, NULL, 0, 0, 0, 0,
+                                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                                                SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                                }
+                            }
+                            else
+                            {
+                                win32_process_keypress(&new_keyboard_controller->buttons.start, was_down, is_down);
+                            }
                         } break;
                         case VK_ESCAPE:
                         {
@@ -694,6 +728,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     }
 
     state.window = window;
+    state.previous_window_placement = { sizeof(state.previous_window_placement) };
 
     ShowWindow(window, nCmdShow);
     ShowCursor(0);
