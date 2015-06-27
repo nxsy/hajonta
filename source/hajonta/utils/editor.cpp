@@ -378,6 +378,24 @@ write_binary_format_v1(
     fclose(f);
 }
 
+enum struct mouse_drag_mode
+{
+    disabled,
+    enabled,
+};
+
+struct mouse_drag_state
+{
+    mouse_drag_mode mode;
+    v2 drag_started_location;
+};
+
+struct mouse_state
+{
+    bool click_handled;
+    mouse_drag_state drag;
+};
+
 struct game_state
 {
     uint32_t vao;
@@ -450,6 +468,8 @@ struct game_state
     skybox_data skybox;
 
     Lighting lighting;
+
+    mouse_state mouse;
 };
 
 
@@ -1460,6 +1480,10 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
         "spec. exp.",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
+
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
         const char *text = shader_mode_names[idx];
@@ -1474,13 +1498,16 @@ draw_shader_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inpu
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config.shader_mode = idx;
+                if (mouse_pressed)
+                {
+                    state->shader_config.shader_mode = idx;
+                }
+                state->mouse.click_handled = true;
             }
         }
 
@@ -1512,6 +1539,9 @@ draw_ambient_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
         "none",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
         const char *text = shader_mode_names[idx];
@@ -1526,13 +1556,16 @@ draw_ambient_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config.ambient_mode = idx;
+                if (mouse_pressed)
+                {
+                    state->shader_config.ambient_mode = idx;
+                }
+                state->mouse.click_handled = true;
             }
         }
 
@@ -1566,6 +1599,9 @@ draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
         "oren-nayer",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
         const char *text = shader_mode_names[idx];
@@ -1580,13 +1616,16 @@ draw_diffuse_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config.diffuse_mode = idx;
+                if (mouse_pressed)
+                {
+                    state->shader_config.diffuse_mode = idx;
+                }
+                state->mouse.click_handled = true;
             }
         }
 
@@ -1620,6 +1659,9 @@ draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_in
         "gaussian",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
         const char *text = shader_mode_names[idx];
@@ -1634,13 +1676,16 @@ draw_specular_mode(hajonta_thread_context *ctx, platform_memory *memory, game_in
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config.specular_mode = idx;
+                if (mouse_pressed)
+                {
+                    state->shader_config.specular_mode = idx;
+                }
+                state->mouse.click_handled = true;
             }
         }
 
@@ -1675,6 +1720,9 @@ draw_tonemap_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
         "Filmic",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
     for (int32_t idx = 0; idx < harray_count(shader_mode_names); ++idx)
     {
         const char *text = shader_mode_names[idx];
@@ -1689,13 +1737,16 @@ draw_tonemap_mode(hajonta_thread_context *ctx, platform_memory *memory, game_inp
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 11, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config.tonemap_mode = idx;
+                if (mouse_pressed)
+                {
+                    state->shader_config.tonemap_mode = idx;
+                }
+                state->mouse.click_handled = true;
             }
         }
 
@@ -1731,7 +1782,9 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
         "gamma",
     };
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
-
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
     for (int32_t idx = 0; idx < harray_count(shader_config_names); ++idx)
     {
         const char *text = shader_config_names[idx];
@@ -1749,13 +1802,16 @@ draw_shader_config(hajonta_thread_context *ctx, platform_memory *memory, game_in
             }
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                state->shader_config.shader_config_flags ^= (1<<(idx-1));
+                if (mouse_pressed)
+                {
+                    state->shader_config.shader_config_flags ^= (1<<(idx-1));
+                }
+                state->mouse.click_handled = true;
             }
         }
 
@@ -2073,7 +2129,43 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
         draw_camera_rotation(ctx, memory, input, &pushctx);
     }
 
+    {
+        float x = (float)input->window.width - 250.0f;
+        float y = 100;
+        char ftext[100];
+        sprintf(ftext, "input->mouse.x = %d, input->mouse.y = %d", input->mouse.x, input->mouse.y);
+        char *text = (char *)ftext;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+        }
+    }
+
+    if (!state->mouse.click_handled)
+    {
+        bool mouse_down = input->mouse.buttons.left.ended_down;
+        bool first_time = input->mouse.buttons.left.repeat == false;
+        if (mouse_down && first_time)
+        {
+            state->mouse.drag.mode = mouse_drag_mode::enabled;
+            state->mouse.drag.drag_started_location = {(float)input->mouse.x, (float)input->mouse.y};
+            memory->cursor_settings.mode = platform_cursor_mode::unlimited;
+        }
+        if (!mouse_down && first_time)
+        {
+            if (state->mouse.drag.mode == mouse_drag_mode::enabled)
+            {
+                state->mouse.drag.mode = mouse_drag_mode::disabled;
+                memory->cursor_settings.mode = platform_cursor_mode::normal;
+            }
+        }
+    }
+
     // Mouse should be last
+    if (memory->cursor_settings.mode == platform_cursor_mode::normal)
     {
         stbtt_aligned_quad q = {};
         q.x0 = (float)input->mouse.x;
@@ -3085,6 +3177,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
     }
 #endif
+    state->mouse.click_handled = false;
 
     glErrorAssert();
 
@@ -3245,6 +3338,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->z_rotation_correction = (state->z_rotation_correction + 1) % 4;
         }
+    }
+
+    if (state->mouse.drag.mode == mouse_drag_mode::enabled)
+    {
+        state->camera.rotation.y += -0.005f * input->mouse.x;
+        state->camera.rotation.x += -0.005f * input->mouse.y;
     }
 
     glErrorAssert();

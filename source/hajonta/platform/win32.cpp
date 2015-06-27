@@ -497,6 +497,14 @@ handle_win32_messages(win32_state *state)
             }
         }
     }
+
+    if (state->cursor_mode == platform_cursor_mode::unlimited) {
+        state->new_input->mouse.x -= (state->window_width / 2);
+        state->new_input->mouse.y -= (state->window_height / 2);
+        POINT pos = { state->window_width / 2, state->window_height  / 2};
+        ClientToScreen(state->window, &pos);
+        SetCursorPos(pos.x, pos.y);
+    }
 }
 
 PLATFORM_FAIL(platform_fail)
@@ -845,31 +853,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
     while(!state.stopping)
     {
-        if (state.cursor_mode != memory.cursor_settings.mode)
-        {
-            switch(memory.cursor_settings.mode)
-            {
-                case platform_cursor_mode::normal:
-                {
-                    ClipCursor(0);
-                } break;
-                case platform_cursor_mode::unlimited:
-                {
-                    RECT window_rect = {};
-                    GetClientRect(state.window, &window_rect);
-                    ClientToScreen(state.window, (LPPOINT)&window_rect.left);
-                    ClientToScreen(state.window, (LPPOINT)&window_rect.right);
-                    ClipCursor(&window_rect);
-                } break;
-                case platform_cursor_mode::COUNT:
-                default:
-                {
-                    hassert(!"Unknown cursor mode");
-                } break;
-            }
-            state.cursor_mode = memory.cursor_settings.mode;
-        }
-
         bool updated = win32_load_game_code(&code, game_library_path);
         if (!code.game_code_module)
         {
@@ -911,7 +894,39 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         state.new_input->mouse.x = state.old_input->mouse.x;
         state.new_input->mouse.y = state.old_input->mouse.y;
 
+        bool switched_to_unlimited = false;
+
+        if (state.cursor_mode != memory.cursor_settings.mode)
+        {
+            switch(memory.cursor_settings.mode)
+            {
+                case platform_cursor_mode::normal:
+                {
+                    ClipCursor(0);
+                } break;
+                case platform_cursor_mode::unlimited:
+                {
+                    switched_to_unlimited = true;
+                    RECT window_rect = {};
+                    GetClientRect(state.window, &window_rect);
+                    ClientToScreen(state.window, (LPPOINT)&window_rect.left);
+                    ClientToScreen(state.window, (LPPOINT)&window_rect.right);
+                    ClipCursor(&window_rect);
+                } break;
+                case platform_cursor_mode::COUNT:
+                default:
+                {
+                    hassert(!"Unknown cursor mode");
+                } break;
+            }
+            state.cursor_mode = memory.cursor_settings.mode;
+        }
         handle_win32_messages(&state);
+        if (switched_to_unlimited)
+        {
+            state.new_input->mouse.x = 0;
+            state.new_input->mouse.y = 0;
+        }
 
         state.new_input->window.width = state.window_width;
         state.new_input->window.height = state.window_height;
