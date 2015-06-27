@@ -41,6 +41,7 @@ struct win32_state
     game_input *old_input;
 
     win32_mouse_state mouse;
+    platform_cursor_mode cursor_mode;
 };
 
 static bool
@@ -196,15 +197,41 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         } break;
         case WM_SIZE:
         {
+            OutputDebugStringA("WM_SIZE\n");
             int32_t window_width = LOWORD(lParam);
             int32_t window_height = HIWORD(lParam);
             state->window_height = window_height;
             state->window_width = window_width;
             glViewport(0, 0, window_width, window_height);
+            if (state->cursor_mode == platform_cursor_mode::unlimited)
+            {
+                RECT window_rect = {};
+                GetClientRect(hwnd, &window_rect);
+                ClientToScreen(hwnd, (LPPOINT)&window_rect.left);
+                ClientToScreen(hwnd, (LPPOINT)&window_rect.right);
+                ClipCursor(&window_rect);
+            }
         } break;
         case WM_CLOSE:
         {
             PostQuitMessage(0);
+        } break;
+        case WM_SETFOCUS:
+        {
+            OutputDebugStringA("WM_SETFOCUS\n");
+            if (state->cursor_mode == platform_cursor_mode::unlimited)
+            {
+                RECT window_rect = {};
+                GetClientRect(hwnd, &window_rect);
+                ClientToScreen(hwnd, (LPPOINT)&window_rect.left);
+                ClientToScreen(hwnd, (LPPOINT)&window_rect.right);
+                ClipCursor(&window_rect);
+            }
+        } break;
+        case WM_KILLFOCUS:
+        {
+            OutputDebugStringA("WM_KILLFOCUS\n");
+            ClipCursor(0);
         } break;
         case WM_ACTIVATE:
         {
@@ -741,6 +768,10 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     platform_memory memory = {};
     memory.size = 256 * 1024 * 1024;
     memory.memory = malloc(memory.size);
+    memory.cursor_settings.supported_modes[(uint32_t)platform_cursor_mode::normal] = true;
+    memory.cursor_settings.supported_modes[(uint32_t)platform_cursor_mode::unlimited] = true;
+    memory.cursor_settings.mode = platform_cursor_mode::normal;
+
     memory.platform_fail = platform_fail;
     memory.platform_glgetprocaddress = platform_glgetprocaddress;
     memory.platform_load_asset = win32_load_asset;
@@ -814,6 +845,31 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
     while(!state.stopping)
     {
+        if (state.cursor_mode != memory.cursor_settings.mode)
+        {
+            switch(memory.cursor_settings.mode)
+            {
+                case platform_cursor_mode::normal:
+                {
+                    ClipCursor(0);
+                } break;
+                case platform_cursor_mode::unlimited:
+                {
+                    RECT window_rect = {};
+                    GetClientRect(state.window, &window_rect);
+                    ClientToScreen(state.window, (LPPOINT)&window_rect.left);
+                    ClientToScreen(state.window, (LPPOINT)&window_rect.right);
+                    ClipCursor(&window_rect);
+                } break;
+                case platform_cursor_mode::COUNT:
+                default:
+                {
+                    hassert(!"Unknown cursor mode");
+                } break;
+            }
+            state.cursor_mode = memory.cursor_settings.mode;
+        }
+
         bool updated = win32_load_game_code(&code, game_library_path);
         if (!code.game_code_module)
         {

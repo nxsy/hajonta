@@ -50,6 +50,24 @@ typedef PLATFORM_EDITOR_LOAD_FILE(platform_editor_load_file_func);
 #define PLATFORM_EDITOR_LOAD_NEARBY_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target, loaded_file existing_file, char *name)
 typedef PLATFORM_EDITOR_LOAD_NEARBY_FILE(platform_editor_load_nearby_file_func);
 
+// Normal means the OS is keeping track of the mouse cursor location.
+// The program still needs to render the cursor, though.
+//
+// Unlimited means that the cursor location is given as delta from previous
+// location.
+enum struct platform_cursor_mode
+{
+    normal,
+    unlimited,
+    COUNT,
+};
+
+struct platform_cursor_settings
+{
+    bool supported_modes[platform_cursor_mode::COUNT];
+    platform_cursor_mode mode;
+};
+
 struct platform_memory
 {
     bool initialized;
@@ -57,6 +75,8 @@ struct platform_memory
     void *memory;
     bool quit;
     bool debug_keyboard;
+
+    platform_cursor_settings cursor_settings;
 
     platform_fail_func *platform_fail;
     platform_glgetprocaddress_func *platform_glgetprocaddress;

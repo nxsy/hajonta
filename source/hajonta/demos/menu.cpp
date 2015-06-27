@@ -51,6 +51,26 @@ DEMO(demo_menu)
             demo->selected_index++;
             demo->selected_index %= state->demos.number_of_demos;
         }
+        if (controller->buttons.move_left.ended_down && !controller->buttons.move_left.repeat)
+        {
+            switch(memory->cursor_settings.mode)
+            {
+                case platform_cursor_mode::normal:
+                {
+                    memory->cursor_settings.mode = platform_cursor_mode::unlimited;
+                } break;
+                case platform_cursor_mode::unlimited:
+                {
+                    memory->cursor_settings.mode = platform_cursor_mode::normal;
+                } break;
+                case platform_cursor_mode::COUNT:
+                default:
+                {
+                    hassert(!"Unknown current cursor setting");
+
+                } break;
+            }
+        }
         if (controller->buttons.move_up.ended_down && !controller->buttons.move_up.repeat)
         {
             if (demo->selected_index == 0)
