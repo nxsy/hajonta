@@ -277,6 +277,8 @@ struct Camera
     // How far away we're viewing from
     float distance;
 
+    v3 location;
+
     m4 view;
     m4 projection;
 
@@ -2104,7 +2106,7 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     glUniform2fv(state->program_ui2d.screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
     ui2d_push_context pushctx = {};
-    ui2d_vertex_format vertices[4000];
+    ui2d_vertex_format vertices[6000];
     uint32_t elements[harray_count(vertices) / 4 * 6];
     uint32_t textures[10];
     pushctx.vertices = vertices;
@@ -2134,6 +2136,43 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
         float y = 100;
         char ftext[100];
         sprintf(ftext, "input->mouse.x = %d, input->mouse.y = %d", input->mouse.x, input->mouse.y);
+        char *text = (char *)ftext;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+        }
+    }
+
+    {
+        float x = (float)input->window.width - 250.0f;
+        float y = 200;
+        char ftext[100];
+
+        sprintf(ftext, "x = %0.2f, y = %0.2f, z = %0.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
+        char *text = (char *)ftext;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+        }
+    }
+
+    for (uint32_t row = 0; row < 4; ++row)
+    {
+        float x = (float)input->window.width - 350.0f;
+        float y = (float)(300 + (row * 10));
+        char ftext[100];
+        sprintf(ftext, "[0][%d] = %0.2f, [1][%d] = %0.2f, [2][%d] = %0.2f, [3][%d] = %0.2f",
+                row, state->camera.view.cols[0].E[row],
+                row, state->camera.view.cols[1].E[row],
+                row, state->camera.view.cols[2].E[row],
+                row, state->camera.view.cols[3].E[row]);
+
         char *text = (char *)ftext;
         while (*text) {
             stbtt_aligned_quad q;
@@ -2405,19 +2444,37 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
 {
     game_state *state = (game_state *)memory->memory;
 
-    m4 view = m4identity();
-    view.cols[3] = {
-        -state->camera.target.x,
-        -state->camera.target.y,
-        -(state->camera.target.z +state->camera.distance),
-        1.0f,
+    float rho = state->camera.distance;
+    float theta = state->camera.rotation.y;
+    float phi = state->camera.rotation.x;
+
+    state->camera.location = {
+        sin(theta) * cos(phi) * rho,
+        sin(phi) * rho,
+        cos(theta) * cos(phi) * rho,
     };
-    v3 axis_y = {0.0f, 1.0f, 0.0f};
-    v3 axis_x = {1.0f, 0.0f, 0.0f};
-    m4 rotate_y = m4rotation(axis_y, state->camera.rotation.y);
-    m4 rotate_x = m4rotation(axis_x, state->camera.rotation.x);
-    view = m4mul(view, rotate_y);
-    view = m4mul(view, rotate_x);
+
+    v3 eye = state->camera.location;
+    v3 target = {0, 0, 0};
+    v3 up = {0, 1, 0};
+
+    v3 forward = v3normalize(v3sub(target, eye));
+    v3 side = v3normalize(v3cross(forward, up));
+    v3 calc_up = v3cross(side, forward);
+
+    m4 view = m4identity();
+    view.cols[0].E[0] = side.x;
+    view.cols[1].E[0] = side.y;
+    view.cols[2].E[0] = side.z;
+    view.cols[0].E[1] = calc_up.x;
+    view.cols[1].E[1] = calc_up.y;
+    view.cols[2].E[1] = calc_up.z;
+    view.cols[0].E[2] = -forward.x;
+    view.cols[1].E[2] = -forward.y;
+    view.cols[2].E[2] = -forward.z;
+    view.cols[3].E[0] = -v3dot(side, eye);
+    view.cols[3].E[1] = -v3dot(calc_up, eye);
+    view.cols[3].E[2] = v3dot(forward, eye);
 
     state->camera.view = view;
     float ratio = (float)input->window.width / (float)input->window.height;
@@ -3338,12 +3395,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->z_rotation_correction = (state->z_rotation_correction + 1) % 4;
         }
+        if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
+        {
+            state->camera.rotation.x = 0;
+            state->camera.rotation.y = 0;
+        }
     }
 
     if (state->mouse.drag.mode == mouse_drag_mode::enabled)
     {
         state->camera.rotation.y += -0.005f * input->mouse.x;
-        state->camera.rotation.x += -0.005f * input->mouse.y;
+        state->camera.rotation.x += 0.005f * input->mouse.y;
     }
 
     glErrorAssert();
