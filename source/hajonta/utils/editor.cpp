@@ -66,6 +66,8 @@ struct PointLight
 };
 
 static float pi = 3.14159265358979f;
+static float halfpi = pi / 2.0f;
+static float twopi = pi * 2.0f;
 
 struct vertex
 {
@@ -2147,6 +2149,21 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
     }
 
     {
+        float x = (float)input->window.width - 350.0f;
+        float y = 110;
+        char ftext[100];
+        sprintf(ftext, "camera.rotation.x = %0.2f, camera.rotation.y = %0.2f", state->camera.rotation.x, state->camera.rotation.y);
+        char *text = (char *)ftext;
+        while (*text) {
+            stbtt_aligned_quad q;
+            stbtt_GetPackedQuad(state->stb_font.chardata, 512, 512, *text++, &x, &y, &q, 0);
+            q.y0 = input->window.height - q.y0;
+            q.y1 = input->window.height - q.y1;
+            push_quad(&pushctx, q, state->stb_font.font_tex, 1);
+        }
+    }
+
+    {
         float x = (float)input->window.width - 250.0f;
         float y = 200;
         char ftext[100];
@@ -2456,7 +2473,15 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
 
     v3 eye = state->camera.location;
     v3 target = {0, 0, 0};
-    v3 up = {0, 1, 0};
+    v3 up;
+    if (state->camera.rotation.x < halfpi && state->camera.rotation.x > -halfpi)
+    {
+        up = {0, 1, 0};
+    }
+    else
+    {
+        up = {0, -1, 0};
+    }
 
     v3 forward = v3normalize(v3sub(target, eye));
     v3 side = v3normalize(v3cross(forward, up));
@@ -3404,8 +3429,26 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if (state->mouse.drag.mode == mouse_drag_mode::enabled)
     {
-        state->camera.rotation.y += -0.005f * input->mouse.x;
-        state->camera.rotation.x += 0.005f * input->mouse.y;
+        if (input->mouse.x)
+        {
+            state->camera.rotation.y += -0.005f * input->mouse.x;
+            while (state->camera.rotation.y > pi) {
+                state->camera.rotation.y -= twopi;
+            }
+            while (state->camera.rotation.y <= -pi) {
+                state->camera.rotation.y += twopi;
+            }
+        }
+        if (input->mouse.y)
+        {
+            state->camera.rotation.x += 0.005f * input->mouse.y;
+            while (state->camera.rotation.x > pi) {
+                state->camera.rotation.x -= twopi;
+            }
+            while (state->camera.rotation.x <= -pi) {
+                state->camera.rotation.x += twopi;
+            }
+        }
     }
 
     glErrorAssert();
