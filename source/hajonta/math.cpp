@@ -775,3 +775,26 @@ m4frustumprojection(float near_, float far_, v2 bottom_left, v2 top_right)
     result.cols[3].E[2] = -((2 * near_ * far_) / (far_ - near_));
     return result;
 }
+
+m4
+m4lookat(v3 eye, v3 target, v3 up)
+{
+    v3 forward = v3normalize(v3sub(target, eye));
+    v3 side = v3normalize(v3cross(forward, up));
+    v3 calc_up = v3cross(side, forward);
+
+    m4 view = m4identity();
+    view.cols[0].E[0] = side.x;
+    view.cols[1].E[0] = side.y;
+    view.cols[2].E[0] = side.z;
+    view.cols[0].E[1] = calc_up.x;
+    view.cols[1].E[1] = calc_up.y;
+    view.cols[2].E[1] = calc_up.z;
+    view.cols[0].E[2] = -forward.x;
+    view.cols[1].E[2] = -forward.y;
+    view.cols[2].E[2] = -forward.z;
+    view.cols[3].E[0] = -v3dot(side, eye);
+    view.cols[3].E[1] = -v3dot(calc_up, eye);
+    view.cols[3].E[2] = v3dot(forward, eye);
+    return view;
+}

@@ -2483,24 +2483,7 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
         up = {0, -1, 0};
     }
 
-    v3 forward = v3normalize(v3sub(target, eye));
-    v3 side = v3normalize(v3cross(forward, up));
-    v3 calc_up = v3cross(side, forward);
-
-    m4 view = m4identity();
-    view.cols[0].E[0] = side.x;
-    view.cols[1].E[0] = side.y;
-    view.cols[2].E[0] = side.z;
-    view.cols[0].E[1] = calc_up.x;
-    view.cols[1].E[1] = calc_up.y;
-    view.cols[2].E[1] = calc_up.z;
-    view.cols[0].E[2] = -forward.x;
-    view.cols[1].E[2] = -forward.y;
-    view.cols[2].E[2] = -forward.z;
-    view.cols[3].E[0] = -v3dot(side, eye);
-    view.cols[3].E[1] = -v3dot(calc_up, eye);
-    view.cols[3].E[2] = v3dot(forward, eye);
-
+    m4 view = m4lookat(eye, target, up);
     state->camera.view = view;
     float ratio = (float)input->window.width / (float)input->window.height;
     state->camera.projection = m4frustumprojection(state->near_, state->far_, {-ratio, -1.0f}, {ratio, 1.0f});
