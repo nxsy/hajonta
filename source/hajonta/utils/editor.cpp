@@ -2054,7 +2054,9 @@ draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, g
     };
 
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
-
+    bool mouse_down = input->mouse.buttons.left.ended_down;
+    bool mouse_interest = mouse_pressed || mouse_down;
+    v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
     for (uint32_t idx = 0; idx < harray_count(config); ++idx)
     {
         char *text = config[idx].name;
@@ -2069,13 +2071,16 @@ draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, g
             push_sprite(pushctx, state->kenney_ui.ui_pack_sprites + 1, state->kenney_ui.ui_pack_sheet.tex, v2{x, y_base});
         }
 
-        if (mouse_pressed)
+        if (mouse_interest)
         {
-            v2 m = {(float)input->mouse.x, (float)input->window.height - (float)input->mouse.y};
             rectangle2 r = {{x,y_base+3},{16,16}};
             if (point_in_rectangle(m, r))
             {
-                *config[idx].toggle_on_click ^= 1;
+                if (mouse_pressed)
+                {
+                    *config[idx].toggle_on_click ^= 1;
+                }
+                state->mouse.click_handled = true;
             }
         }
         x += 22;
