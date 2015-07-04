@@ -485,6 +485,29 @@ handle_win32_messages(win32_state *state)
                 DispatchMessageA(&message);
                 win32_process_keypress(&state->new_input->mouse.buttons.right, false, true);
             } break;
+            case WM_MBUTTONUP:
+            {
+                int x_pos = GET_X_LPARAM(message.lParam);
+                int y_pos = GET_Y_LPARAM(message.lParam);
+                char dbg[1024] = {};
+                sprintf(dbg, "WM_MBUTTONUP at %dx%d\n", x_pos, y_pos);
+                OutputDebugStringA(dbg);
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+                win32_process_keypress(&state->new_input->mouse.buttons.middle, true, false);
+            } break;
+            case WM_MBUTTONDOWN:
+            {
+                int x_pos = GET_X_LPARAM(message.lParam);
+                int y_pos = GET_Y_LPARAM(message.lParam);
+                char dbg[1024] = {};
+                sprintf(dbg, "WM_MBUTTONDOWN at %dx%d\n", x_pos, y_pos);
+                OutputDebugStringA(dbg);
+                //SetCapture(state->window);
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+                win32_process_keypress(&state->new_input->mouse.buttons.middle, false, true);
+            } break;
             case WM_MOUSELEAVE:
             {
                 int x_pos = GET_X_LPARAM(message.lParam);
