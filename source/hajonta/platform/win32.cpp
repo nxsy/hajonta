@@ -921,6 +921,16 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             }
             state.cursor_mode = memory.cursor_settings.mode;
         }
+        if (memory.cursor_settings.position_set)
+        {
+            POINT pos = {
+                memory.cursor_settings.mouse_x,
+                memory.cursor_settings.mouse_y,
+            };
+            memory.cursor_settings.position_set = false;
+            ClientToScreen(state.window, &pos);
+            SetCursorPos(pos.x, pos.y);
+        }
         handle_win32_messages(&state);
         if (switched_to_unlimited)
         {

@@ -2154,6 +2154,9 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
             {
                 state->mouse.drag.mode = mouse_drag_mode::disabled;
                 memory->cursor_settings.mode = platform_cursor_mode::normal;
+                memory->cursor_settings.position_set = true;
+                memory->cursor_settings.mouse_x = (int32_t)state->mouse.drag.drag_started_location.x;
+                memory->cursor_settings.mouse_y = (int32_t)state->mouse.drag.drag_started_location.y;
             }
         }
     }
