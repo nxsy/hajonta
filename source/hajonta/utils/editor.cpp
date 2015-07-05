@@ -398,6 +398,7 @@ struct mouse_state
 {
     bool click_handled;
     mouse_drag_state drag;
+    mouse_drag_state right_drag;
 };
 
 struct game_state
@@ -2161,6 +2162,26 @@ draw_ui(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
         }
     }
 
+    bool mouse_down = input->mouse.buttons.right.ended_down;
+    bool first_time = input->mouse.buttons.right.repeat == false;
+    if (mouse_down && first_time)
+    {
+        state->mouse.right_drag.mode = mouse_drag_mode::enabled;
+        state->mouse.right_drag.drag_started_location = {(float)input->mouse.x, (float)input->mouse.y};
+        memory->cursor_settings.mode = platform_cursor_mode::unlimited;
+    }
+    if (!mouse_down && first_time)
+    {
+        if (state->mouse.right_drag.mode == mouse_drag_mode::enabled)
+        {
+            state->mouse.right_drag.mode = mouse_drag_mode::disabled;
+            memory->cursor_settings.mode = platform_cursor_mode::normal;
+            memory->cursor_settings.position_set = true;
+            memory->cursor_settings.mouse_x = (int32_t)state->mouse.right_drag.drag_started_location.x;
+            memory->cursor_settings.mouse_y = (int32_t)state->mouse.right_drag.drag_started_location.y;
+        }
+    }
+
     // Mouse should be last
     if (memory->cursor_settings.mode == platform_cursor_mode::normal)
     {
@@ -3372,6 +3393,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             while (state->camera.rotation.x <= -pi) {
                 state->camera.rotation.x += twopi;
             }
+        }
+    }
+
+    if (state->mouse.right_drag.mode == mouse_drag_mode::enabled)
+    {
+        if (input->mouse.y)
+        {
+            state->camera.distance -= 0.005f * input->mouse.y;
         }
     }
 
