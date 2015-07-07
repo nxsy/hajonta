@@ -157,7 +157,11 @@ struct mouse_buttons
 struct mouse_input
 {
     bool is_active;
-    int32_t x, y;
+    int32_t x;
+    int32_t y;
+
+    int32_t vertical_wheel_delta;
+
     union
     {
         game_button_state _buttons[sizeof(mouse_buttons) / sizeof(game_button_state)];

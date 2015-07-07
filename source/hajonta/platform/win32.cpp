@@ -508,6 +508,18 @@ handle_win32_messages(win32_state *state)
                 DispatchMessageA(&message);
                 win32_process_keypress(&state->new_input->mouse.buttons.middle, false, true);
             } break;
+            case WM_MOUSEWHEEL:
+            {
+                int16_t zDelta = GET_WHEEL_DELTA_WPARAM(message.wParam);
+                char dbg[1024] = {};
+                state->new_input->mouse.vertical_wheel_delta += zDelta;
+                sprintf(dbg, "WM_MOUSEWHEEL of %d, total of %d\n", zDelta, state->new_input->mouse.vertical_wheel_delta);
+                OutputDebugStringA(dbg);
+                //SetCapture(state->window);
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+                win32_process_keypress(&state->new_input->mouse.buttons.middle, false, true);
+            } break;
             case WM_MOUSELEAVE:
             {
                 int x_pos = GET_X_LPARAM(message.lParam);
@@ -939,6 +951,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
         state.new_input->mouse.x = state.old_input->mouse.x;
         state.new_input->mouse.y = state.old_input->mouse.y;
+        state.new_input->mouse.vertical_wheel_delta = 0;
 
         bool switched_to_unlimited = false;
 

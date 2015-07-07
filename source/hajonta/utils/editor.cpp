@@ -3404,6 +3404,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
+    if (input->mouse.vertical_wheel_delta)
+    {
+        state->camera.distance -= 0.5f * (input->mouse.vertical_wheel_delta / 120);
+    }
+
     glErrorAssert();
 
     glBindVertexArray(state->vao);
