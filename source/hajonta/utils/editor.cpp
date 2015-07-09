@@ -2433,8 +2433,8 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
         cos(theta) * cos(phi) * rho,
     };
 
-    v3 eye = state->camera.location;
-    v3 target = {0, 0, 0};
+    v3 eye = v3add(state->camera.target, state->camera.location);
+    v3 target = {state->camera.target.x, state->camera.target.y, state->camera.target.z};
     v3 up;
     if (state->camera.rotation.x < halfpi && state->camera.rotation.x > -halfpi)
     {
@@ -3184,6 +3184,7 @@ build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input 
     m4 d = translate;
 
     m4 u_model = m4mul(d, m4mul(c, m4mul(b, a)));
+    u_model = m4identity();
 
     update_camera(ctx, memory, input);
 
@@ -3218,7 +3219,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         memory->initialized = 1;
 
         state->camera.distance = 10.0f;
-        state->near_ = {5.0f};
+        state->near_ = {0.5f};
         state->far_ = {50.0f};
 
         state->lighting.directional_light = {
@@ -3408,9 +3409,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         state->camera.distance -= 0.5f * (input->mouse.vertical_wheel_delta / 120);
     }
-    if (state->camera.distance < 6.5f)
+    if (state->camera.distance < 1.5f)
     {
-        state->camera.distance = 6.5f;
+        state->camera.distance = 1.5f;
     }
 
     glErrorAssert();
