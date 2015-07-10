@@ -2684,7 +2684,8 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
             else if (line[1] == ' ')
             {
                 float a, b, c;
-                if (sscanf(line + 2, "%f %f %f", &a, &b, &c) == 3)
+                int num_found = sscanf(line + 2, "%f %f %f", &a, &b, &c);
+                if (num_found == 3)
                 {
                     if (state->num_vertices == 0)
                     {
@@ -2719,8 +2720,21 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
                         }
                     }
                     v3 vertex = {a,b,c};
+                    hassert(a != 0 || b != 0 || c != 0);
                     hassert(state->num_vertices <= harray_count(state->vertices));
                     state->vertices[state->num_vertices++] = vertex;
+                }
+                else
+                {
+                    a = NAN;
+                    b = NAN;
+                    c = NAN;
+                    v3 vertex = {a,b,c};
+                    hassert(state->num_vertices <= harray_count(state->vertices));
+                    state->vertices[state->num_vertices++] = vertex;
+                    // Use a vertices slot so indices in faces work correctly.
+                    // Only die if used by a face?
+                    //hassert(!"Invalid code path");
                 }
             }
             else
