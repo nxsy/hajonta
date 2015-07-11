@@ -3423,9 +3423,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         state->camera.distance -= 0.5f * (input->mouse.vertical_wheel_delta / 120);
     }
-    if (state->camera.distance < 1.5f)
+
+    if (state->camera.distance < state->near_ + 1.0f)
     {
-        state->camera.distance = 1.5f;
+        state->camera.distance = state->near_ + 1.0f;
     }
 
     glErrorAssert();
