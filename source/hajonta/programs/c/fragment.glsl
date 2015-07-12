@@ -463,4 +463,8 @@ void main(void)
             o_color = texture(specular_exponent_texture, v_tex_coord);
         } break;
     }
+    if (o_color.a == 0)
+    {
+        discard;
+    }
 }
