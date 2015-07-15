@@ -3,7 +3,9 @@
 Here's a rough guide to taking a Blender model and exporting it to .obj with
 all relevant information.  Short version: bake a texture.
 
-## Choose your poison
+## Standard pipeline
+
+### Choose your poison
 
 You either have to:
 * create a UV set, create and configure a material on each object, adding a
@@ -15,7 +17,7 @@ Probably easiest to apply all modifiers on each object one by one (it is a lot
 less troublesome), then join all the object, and then save a new .blend file to
 start from.
 
-## Create UV set
+### Create UV set
 
 Select the relevant object (either in the Outliner, or in the 3D view).  This
 should change the object in the Properties area.
@@ -23,12 +25,12 @@ should change the object in the Properties area.
 In the "Object Data" tab in the Properties area, under "UV Maps", create a new
 UV Map.  I tend to call it "BAKE".
 
-## Create a new material
+### Create a new material
 
 With the object still selected, in the "Material" tab, create a new material. I
 tend to call it "BAKE".
 
-## Create a texture
+### Create a texture
 
 With the material you just created still selected, in the "Texture" tab, create
 a new texture.  Surprisingly, I tend to call this "BAKE".
@@ -41,7 +43,7 @@ existed before you started.
 
 Under "Influence", select at least Color.
 
-## Remap UVs
+### Remap UVs
 
 Thankfully, you generally don't need to unwrap again, just move the existing
 unwrapped locations around.
@@ -56,7 +58,7 @@ Select all objects/islands.
 Remap UVs.  In simple cases, try Ctrl-A ("Average Islands Scale") and Ctrl-P
 ("Pack Islands").
 
-## Bake
+### Bake
 
 Back in the default layout, select the object's BAKE material in the outliner
 (or change to that tab in the properties area).  Ensure the relevant material
@@ -70,20 +72,41 @@ existing UV map to the single new texture in the new UV map.
 
 Save this image to a file.
 
-## Assign the materials
+### Assign the materials
 
 Enter edit mode and select all faces.  In the "Materials" properties tab,
 select the "BAKE" material, and press the "Assign" key.
 
-## Export the model
+### Export the model
 
 Select all relevant objects.  Under the "File" menu, select "Export".  Choose
 "Wavefront (.obj)".  In the following file dialog, ensure "Triangulate faces" is selected.
 
-## Verify materials
+### Verify materials
 
 There should be a single material in the .mtl file next to the .obj file.
 
-## Load in editor
+### Load in editor
 
 Start the editor and select the .obj file at startup.
+
+## Special cases
+
+### Lines
+
+Sometimes there are inexplicable line objects in the .obj file (basically, two
+pointed faces?).  Since this is seemingly garbage, the editor will crash on
+this.  Delete them.
+
+### NaN
+
+Sometimes vertices are exported with value "nan".  The editor will accept them
+(otherwise the faces will reference the wrong vertices), but something is
+obviously a little broken.
+
+### Multiple faces using the same existing UVs
+
+If you bake an object where there are overlapping UVs, the bake tool will
+basically overwrite-bake them with the same values and take a long time.
+Either wait, or separate out a single instance of this particular UV map and
+just bake that one.
