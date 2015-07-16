@@ -14,6 +14,7 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Basic line/line 2d collision detection
 * MVP matrices
 * Texture loading
+* Fireworks basic physics demo
 
 ### Model Editor
 
@@ -28,6 +29,8 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 * Directional light
 * Compressed texture loading (DDS, DXT)
 * Multiple lights
+* Export to asset structure
+* Camera control
 
 ## To do (short-term)
 
@@ -38,12 +41,9 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 ### Model Editor
 
 * “Resize” to common (1 = 1m) format
-* Export to asset structure
 * Spotlight
 * Shadows
-* Camera control
 * Ambient light factor control
-* Non-texture materials (plain old color)
 * Better skybox
 * FXAA
 * HDR
@@ -70,4 +70,3 @@ Mostly a list of things to try implement in demos/stand-alone apps for now.
 
 * Center-point selection?
 * Scene editor mode?
-    * translation/rotation
