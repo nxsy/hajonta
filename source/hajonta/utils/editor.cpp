@@ -3372,6 +3372,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         load_fbo_objects(state);
     }
 
+    float acceleration_magnitude = 0.0f;
+
     for (uint32_t i = 0;
             i < harray_count(input->controllers);
             ++i)
@@ -3389,20 +3391,45 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->hide_ui ^= true;
         }
-        if (controller->buttons.move_down.ended_down && !controller->buttons.move_down.repeat)
+
+        if (controller->buttons.move_down.ended_down)
         {
-            state->x_rotation_correction = (state->x_rotation_correction + 1) % 4;
+            acceleration_magnitude += 1.0f;
         }
-        if (controller->buttons.move_left.ended_down && !controller->buttons.move_left.repeat)
+        if (controller->buttons.move_up.ended_down)
         {
-            state->z_rotation_correction = (state->z_rotation_correction + 1) % 4;
+            acceleration_magnitude -= 1.0f;
         }
+
         if (controller->buttons.move_right.ended_down && !controller->buttons.move_right.repeat)
         {
             state->camera.rotation.x = 0;
             state->camera.rotation.y = 0;
+            state->camera.target = {0,0,0};
         }
     }
+
+    float delta_t = input->delta_t;
+    float theta = state->camera.rotation.y;
+
+    v3 acceleration = {
+        sin(theta) * acceleration_magnitude,
+        0,
+        cos(theta) * acceleration_magnitude,
+    };
+
+    acceleration = v3mul(v3normalize(acceleration), 10.0f);
+    acceleration = v3sub(acceleration, v3mul(state->camera.target_velocity, 5.0f));
+    v3 movement = v3add(
+            v3mul(acceleration, 0.5f * (delta_t * delta_t)),
+            v3mul(state->camera.target_velocity, delta_t)
+    );
+    state->camera.target = v3add(state->camera.target, movement);
+    state->camera.target_velocity = v3add(
+            v3mul(acceleration, delta_t),
+            state->camera.target_velocity
+    );
+
 
     if (state->mouse.drag.mode == mouse_drag_mode::enabled)
     {
