@@ -1327,22 +1327,39 @@ populate_spritesheet(spritesheet *sp, sprite *s0, uint32_t num_sprites)
         uint32_t height;
     } configs[] =
     {
+        // 0
         {486, 90, 16, 16}, // checkbox empty
+        // 1
         {486, 90 + 18, 16, 16}, // checkbox checked
+        // 2
         {234, 360, 16, 16}, // top left blue dungeon tile
-        {234 + 18, 360, 16, 16},
-        {234 + 36, 360, 16, 16},
-        {234, 360 + 18, 16, 16},
-        {234 + 18, 360 + 18, 16, 16},
-        {234 + 36, 360 + 18, 16, 16},
-        {234, 360 + 36, 16, 16},
-        {234 + 18, 360 + 36, 16, 16},
-        {234 + 36, 360 + 36, 16, 16},
+        // 3
+        {234 + 18, 360, 16, 16}, // top middle blue dungeon tile
+        // 4
+        {234 + 36, 360, 16, 16}, // top right blue dungeon tile
+        // 5
+        {234, 360 + 18, 16, 16}, // middle left blue dungeon tile
+        // 6
+        {234 + 18, 360 + 18, 16, 16}, // middle blue dungeon tile
+        // 7
+        {234 + 36, 360 + 18, 16, 16}, // middle right dungeon tile
+        // 8
+        {234, 360 + 36, 16, 16}, // bottom left dungeon tile
+        // 9
+        {234 + 18, 360 + 36, 16, 16}, // bottom middle dungeon tile
+        // 10
+        {234 + 36, 360 + 36, 16, 16}, // bottom right dungeon tile
+        // 11
         {486 + 18, 90, 16, 16}, // radio empty
+        // 12
         {486 + 36, 90, 16, 16}, // radio selected
+        // 13
         {396, 414, 16, 16}, // top left green long arrow ("up")
+        // 14
         {396 + 18, 414, 16, 16}, // top right green long arrow ("down")
+        // 15
         {396, 414 + 18, 16, 16}, // bottom left green long arrow ("left")
+        // 16
         {396 + 18, 414 + 18, 16, 16}, // bottom right green long arrow ("right")
     };
     sp->sprites = s0;
