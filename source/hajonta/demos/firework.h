@@ -72,7 +72,7 @@ struct demo_firework_state {
 
     uint32_t firework_vbo;
     uint32_t firework_ibo;
-    uint32_t firework_textures[firework_color::NUMBER_FIREWORK_COLORS];
+    uint32_t firework_textures[(int)firework_color::NUMBER_FIREWORK_COLORS];
     uint32_t firework_num_faces;
 
     uint32_t ground_vbo;
@@ -83,7 +83,7 @@ struct demo_firework_state {
     uint32_t num_particles;
     firework_particle particles[1024];
 
-    firework_behaviour behaviours[firework_type::NUMBER_FIREWORK_TYPES];
+    firework_behaviour behaviours[(int)firework_type::NUMBER_FIREWORK_TYPES];
 };
 
 DEMO(demo_firework);

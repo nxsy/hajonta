@@ -64,7 +64,7 @@ enum struct platform_cursor_mode
 
 struct platform_cursor_settings
 {
-    bool supported_modes[platform_cursor_mode::COUNT];
+    bool supported_modes[(int)platform_cursor_mode::COUNT];
     platform_cursor_mode mode;
     bool position_set;
     int32_t mouse_x;

@@ -2067,8 +2067,8 @@ draw_bounds_lines_config(hajonta_thread_context *ctx, platform_memory *memory, g
         bool *toggle_on_click;
     } config[] =
     {
-        { "hide lines", &state->hide_lines},
-        { "hide bounds", &state->hide_bounds},
+        { (char *)"hide lines", &state->hide_lines},
+        { (char *)"hide bounds", &state->hide_bounds},
     };
 
     bool mouse_pressed = input->mouse.buttons.left.ended_down == false && input->mouse.buttons.left.repeat == false;
@@ -2445,9 +2445,9 @@ update_camera(hajonta_thread_context *ctx, platform_memory *memory, game_input *
     float phi = state->camera.rotation.x;
 
     state->camera.location = {
-        sin(theta) * cos(phi) * rho,
-        sin(phi) * rho,
-        cos(theta) * cos(phi) * rho,
+        sinf(theta) * cosf(phi) * rho,
+        sinf(phi) * rho,
+        cosf(theta) * cosf(phi) * rho,
     };
 
     v3 eye = v3add(state->camera.target, state->camera.location);
@@ -3413,9 +3413,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     float theta = state->camera.rotation.y;
 
     v3 acceleration = {
-        sin(theta) * acceleration_magnitude,
+        sinf(theta) * acceleration_magnitude,
         0,
-        cos(theta) * acceleration_magnitude,
+        cosf(theta) * acceleration_magnitude,
     };
 
     acceleration = v3mul(v3normalize(acceleration), 10.0f);
