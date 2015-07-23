@@ -1924,8 +1924,10 @@ draw_bounds(hajonta_thread_context *ctx, platform_memory *memory, game_input *in
     glBindBuffer(GL_ARRAY_BUFFER, state->debug_model_objects.bounding_sphere_vbo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->debug_model_objects.bounding_sphere_ibo);
     setup_vertex_attrib_array_b(state);
+    glEnable(GL_PRIMITIVE_RESTART);
     glPrimitiveRestartIndex(65535);
     glDrawElements(GL_LINE_LOOP, (GLsizei)state->debug_model_objects.num_bounding_sphere_elements, GL_UNSIGNED_SHORT, 0);
+    glDisable(GL_PRIMITIVE_RESTART);
 
     glErrorAssert();
 }
@@ -2426,7 +2428,6 @@ draw_model(hajonta_thread_context *ctx, platform_memory *memory, game_input *inp
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
         }
-
         glDrawElements(GL_TRIANGLES, (GLsizei)(i->final_vertex_id - last_vertex), GL_UNSIGNED_INT, (uint32_t *)0 + last_vertex);
         last_vertex = i->final_vertex_id;
         glErrorAssert();
@@ -3486,7 +3487,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_CULL_FACE);
-    glEnable(GL_PRIMITIVE_RESTART);
+    glDisable(GL_PRIMITIVE_RESTART);
 
     glErrorAssert();
 
