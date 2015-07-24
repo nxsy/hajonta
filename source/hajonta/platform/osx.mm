@@ -230,10 +230,12 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 - (void) keyDown: (NSEvent*) event {
     [appLock lock];
     if ([event isARepeat] != NO) {
+        [appLock unlock];
         return;
     }
     if (state.pending_keys.num_messages == harray_count(state.pending_keys.messages))
     {
+        [appLock unlock];
         return;
     }
     keyboard_message *message = state.pending_keys.messages + state.pending_keys.num_messages++;
@@ -248,6 +250,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [appLock lock];
     if (state.pending_keys.num_messages == harray_count(state.pending_keys.messages))
     {
+        [appLock unlock];
         return;
     }
     keyboard_message *message = state.pending_keys.messages + state.pending_keys.num_messages++;
