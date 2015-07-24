@@ -419,6 +419,9 @@ struct game_state
     int32_t fbo_width;
     int32_t fbo_height;
 
+    uint32_t shadowmap_fbo;
+    uint32_t shadowmap_depth_texture;
+
     float near_;
     float far_;
     float delta_t;
@@ -3227,6 +3230,47 @@ build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input 
     };
 }
 
+void
+draw_model_to_fbo(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, Matrices *matrices)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    if ((input->window.height != state->fbo_height) || (input->window.width != state->fbo_width))
+    {
+        state->fbo_width = input->window.width;
+        state->fbo_height = input->window.height;
+
+        glBindRenderbuffer(GL_RENDERBUFFER, state->fbo_depth_render_buffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, state->fbo_width, state->fbo_height);
+
+        glBindTexture(GL_TEXTURE_2D, state->fbo_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, state->fbo_width, state->fbo_height, 0, GL_RGBA, GL_BYTE, NULL);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, state->fbo);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state->fbo_texture, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, state->fbo_depth_render_buffer);
+
+    GLenum draw_buffers[] =
+    {
+        GL_COLOR_ATTACHMENT0,
+    };
+    glDrawBuffers(harray_count(draw_buffers), draw_buffers);
+    glViewport(0, 0, state->fbo_width, state->fbo_height);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    draw_model(ctx, memory, input, matrices);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDrawBuffer(GL_BACK);
+}
+
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -3251,8 +3295,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         memory->initialized = 1;
 
         state->camera.distance = 10.0f;
-        state->near_ = {0.5f};
-        state->far_ = {50.0f};
+        state->near_ = {2.0f};
+        state->far_ = {100.0f};
 
         state->lighting.directional_light = {
             {0.0f, 1.0f, 0.0f},
@@ -3357,6 +3401,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+        glGenFramebuffers(1, &state->shadowmap_fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, state->shadowmap_fbo);
+        glGenTextures(1, &state->shadowmap_depth_texture);
+        glBindTexture(GL_TEXTURE_2D, state->shadowmap_depth_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, state->shadowmap_depth_texture, 0);
+        glDrawBuffer(GL_NONE);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         glErrorAssert();
 
         while (!memory->platform_editor_load_file(ctx, &state->model_file))
@@ -3406,7 +3464,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->camera.rotation.x = 0;
             state->camera.rotation.y = 0;
-            state->camera.target = {0,0,0};
+            state->camera.target = {0,18.0f,0};
         }
     }
 
@@ -3499,39 +3557,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     Matrices matrices = build_matrices(ctx, memory, input);
 
-    if ((input->window.height != state->fbo_height) || (input->window.width != state->fbo_width))
-    {
-        state->fbo_width = input->window.width;
-        state->fbo_height = input->window.height;
-
-        glBindRenderbuffer(GL_RENDERBUFFER, state->fbo_depth_render_buffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, state->fbo_width, state->fbo_height);
-
-        glBindTexture(GL_TEXTURE_2D, state->fbo_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, state->fbo_width, state->fbo_height, 0, GL_RGBA, GL_BYTE, NULL);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, state->fbo);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state->fbo_texture, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, state->fbo_depth_render_buffer);
-
-    GLenum draw_buffers[] =
-    {
-        GL_COLOR_ATTACHMENT0,
-    };
-    glDrawBuffers(harray_count(draw_buffers), draw_buffers);
-    glViewport(0, 0, state->fbo_width, state->fbo_height);
-
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    draw_model(ctx, memory, input, &matrices);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDrawBuffer(GL_BACK);
+    draw_model_to_fbo(ctx, memory, input, &matrices);
 
     glViewport(0, 0, input->window.width, input->window.height);
     draw_fbo_texture(ctx, memory, input);
