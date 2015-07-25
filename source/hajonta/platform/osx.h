@@ -50,6 +50,8 @@ struct osx_state
     void *view;
 
     keyboard_message_array pending_keys;
+
+    platform_cursor_mode cursor_mode;
 };
 
 

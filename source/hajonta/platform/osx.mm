@@ -320,6 +320,16 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     NSLog(@"Window resize: %lf, %lf", size.width, size.height);
     state.window_width = size.width;
     state.window_height = size.height;
+    if (state.cursor_mode == platform_cursor_mode::unlimited)
+    {
+        float x = size.width / 2.0f;
+        float y = size.height / 2.0f;
+        NSRect windowSpaceRect = NSMakeRect(x, y, 0, 0);
+        NSRect globalSpaceRect = [_window convertRectToScreen:windowSpaceRect];
+        NSPoint globalSpacePoint = globalSpaceRect.origin;
+
+        CGWarpMouseCursorPosition(globalSpacePoint);
+    }
     [appLock unlock];
 }
 
