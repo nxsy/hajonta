@@ -290,9 +290,11 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     }
     state.pending_keys.num_messages = 0;
 
+    CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]); 
     [appLock unlock];
     loop_cycle(&state);
     [appLock lock];
+    CGLLockContext((CGLContextObj)[[self openGLContext] CGLContextObj]);
 
     // EndTemp
 
