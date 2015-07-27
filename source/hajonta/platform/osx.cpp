@@ -176,7 +176,7 @@ find_asset_path(osx_state *state)
 }
 
 void
-osx_init(osx_state *state, int window_width, int window_height, void *view)
+osx_init(osx_state *state, void *view)
 {
     *state = {};
     get_binary_name(state);
@@ -203,9 +203,6 @@ osx_init(osx_state *state, int window_width, int window_height, void *view)
 
     state->new_input = &state->inputs[0];
     state->old_input = &state->inputs[1];
-
-    state->window_width = window_width;
-    state->window_height = window_height;
 
     state->view = view;
 }

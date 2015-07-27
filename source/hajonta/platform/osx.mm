@@ -46,8 +46,6 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 @implementation View
 // Initialize
 - (id) initWithFrame: (NSRect) frame {
-
-    osx_init(&state, frame.size.width, frame.size.height, (void *)self);
     running = true;
 
     // No multisampling
@@ -91,6 +89,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     }
 
     self = [super initWithFrame:frame pixelFormat:[pf autorelease]];
+    osx_init(&state, (void *)self);
     appLock = [[NSRecursiveLock alloc] init];
 
     return self;
@@ -118,10 +117,6 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     CGLPixelFormatObj cglPixelFormat = (CGLPixelFormatObj)[[self pixelFormat] CGLPixelFormatObj];
     CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(displayLink, cglContext, cglPixelFormat);
 
-    GLint dim[2] = {(int32_t)windowRect.size.width, (int32_t)windowRect.size.height};
-    CGLSetParameter(cglContext, kCGLCPSurfaceBackingSize, dim);
-    CGLEnable(cglContext, kCGLCESurfaceBackingSize);
-
     [appLock lock];
     CGLLockContext((CGLContextObj)[[self openGLContext] CGLContextObj]);
 
@@ -130,7 +125,10 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     NSLog(@"GL version:   %s", glGetString(GL_VERSION));
     NSLog(@"GLSL version: %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-    glViewport(0, 0, windowRect.size.width, windowRect.size.height);
+    NSRect backingBounds = [self convertRectToBacking:[self bounds]];
+    NSLog(@"Window resize: %lf, %lf", NSWidth(backingBounds), NSHeight(backingBounds));
+    state.window_width = NSWidth(backingBounds);
+    state.window_height = NSHeight(backingBounds);
 
     CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]); 
     [appLock unlock];
@@ -318,14 +316,16 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 // Resize
 - (void)windowDidResize:(NSNotification*)notification {
     [appLock lock];
-    NSSize size = [ [ _window contentView ] frame ].size;
-    NSLog(@"Window resize: %lf, %lf", size.width, size.height);
-    state.window_width = size.width;
-    state.window_height = size.height;
+
+    NSRect backingBounds = [self convertRectToBacking:[self bounds]];
+    NSLog(@"Window resize: %lf, %lf", NSWidth(backingBounds), NSHeight(backingBounds));
+    state.window_width = NSWidth(backingBounds);
+    state.window_height = NSHeight(backingBounds);
+
     if (state.cursor_mode == platform_cursor_mode::unlimited)
     {
-        float x = size.width / 2.0f;
-        float y = size.height / 2.0f;
+        float x = state.window_width / 2.0f;
+        float y = state.window_height / 2.0f;
         NSRect windowSpaceRect = NSMakeRect(x, y, 0, 0);
         NSRect globalSpaceRect = [_window convertRectToScreen:windowSpaceRect];
         NSPoint globalSpacePoint = globalSpaceRect.origin;
