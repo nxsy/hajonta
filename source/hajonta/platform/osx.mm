@@ -90,6 +90,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 
     self = [super initWithFrame:frame pixelFormat:[pf autorelease]];
     osx_init(&state, (void *)self);
+    [self setWantsBestResolutionOpenGLSurface:YES];
     appLock = [[NSRecursiveLock alloc] init];
 
     return self;
