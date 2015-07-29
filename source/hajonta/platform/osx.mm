@@ -146,6 +146,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 - (void)mouseMoved:(NSEvent*) event {
     [appLock lock];
     NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+    point = [self convertPointToBacking:point];
     // NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
     if (point.x < 0)
     {
