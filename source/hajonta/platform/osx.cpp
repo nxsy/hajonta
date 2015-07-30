@@ -265,8 +265,40 @@ loop_cycle(osx_state *state)
         state->new_input->mouse._buttons[button_index].repeat = true;
     }
 
-    state->new_input->mouse.x = state->old_input->mouse.x;
-    state->new_input->mouse.y = state->old_input->mouse.y;
+    bool switched_to_unlimited = false;
+
+    if (state->cursor_mode != state->memory.cursor_settings.mode)
+    {
+        switch(state->memory.cursor_settings.mode)
+        {
+            case platform_cursor_mode::normal:
+            {
+                CGAssociateMouseAndMouseCursorPosition(true);
+            } break;
+            case platform_cursor_mode::unlimited:
+            {
+                switched_to_unlimited = true;
+                CGAssociateMouseAndMouseCursorPosition(false);
+            } break;
+            case platform_cursor_mode::COUNT:
+            default:
+            {
+                hassert(!"Unknown cursor mode");
+            } break;
+        }
+        state->cursor_mode = state->memory.cursor_settings.mode;
+    }
+
+    if (state->cursor_mode == platform_cursor_mode::normal)
+    {
+        state->new_input->mouse.x = state->old_input->mouse.x;
+        state->new_input->mouse.y = state->old_input->mouse.y;
+    }
+    else
+    {
+        state->new_input->mouse.x = 0;
+        state->new_input->mouse.y = 0;
+    }
 
     if (state->memory.quit)
     {

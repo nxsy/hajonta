@@ -147,13 +147,22 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     [appLock lock];
     NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
     point = [self convertPointToBacking:point];
-    // NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
-    if (point.x < 0)
+
+    if (state.cursor_mode == platform_cursor_mode::unlimited)
     {
-        point.x = 0;
+        state.new_input->mouse.x += [event deltaX];
+        state.new_input->mouse.y += [event deltaY];
     }
-    state.new_input->mouse.x = point.x;
-    state.new_input->mouse.y = state.window_height - point.y;
+    else
+    {
+        // NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
+        if (point.x < 0)
+        {
+            point.x = 0;
+        }
+        state.new_input->mouse.x = point.x;
+        state.new_input->mouse.y = state.window_height - point.y;
+    }
     [appLock unlock];
 }
 
