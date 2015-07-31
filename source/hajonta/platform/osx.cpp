@@ -294,10 +294,10 @@ loop_cycle(osx_state *state)
         state->new_input->mouse.x = state->old_input->mouse.x;
         state->new_input->mouse.y = state->old_input->mouse.y;
     }
-    else
+    if (switched_to_unlimited)
     {
-        state->new_input->mouse.x = 0;
-        state->new_input->mouse.y = 0;
+        state->mouse_events.x = 0;
+        state->mouse_events.y = 0;
     }
 
     if (state->memory.quit)

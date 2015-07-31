@@ -148,29 +148,28 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
     point = [self convertPointToBacking:point];
 
+
     if (state.cursor_mode == platform_cursor_mode::unlimited)
     {
-        state.new_input->mouse.x += [event deltaX];
-        state.new_input->mouse.y += [event deltaY];
+        state.mouse_events.x += [event deltaX];
+        state.mouse_events.y += [event deltaY];
+        NSLog(@"Mouse delta move: %lf, %lf", [event deltaX], [event deltaY]);
     }
     else
     {
-        // NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
+        NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
         if (point.x < 0)
         {
             point.x = 0;
         }
-        state.new_input->mouse.x = point.x;
-        state.new_input->mouse.y = state.window_height - point.y;
+        state.mouse_events.x = point.x;
+        state.mouse_events.y = state.window_height - point.y;
     }
     [appLock unlock];
 }
 
 - (void) mouseDragged: (NSEvent*) event {
-    [appLock lock];
-    NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
-    NSLog(@"Mouse pos: %lf, %lf", point.x, point.y);
-    [appLock unlock];
+    [self mouseMoved:event];
 }
 
 - (void)scrollWheel: (NSEvent*) event  {
@@ -298,6 +297,13 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
         }
     }
     state.pending_keys.num_messages = 0;
+    state.new_input->mouse.x = state.mouse_events.x;
+    state.new_input->mouse.y = state.mouse_events.y;
+    state.new_input->mouse.vertical_wheel_delta = state.mouse_events.vertical_wheel_delta;
+    if (state.cursor_mode == platform_cursor_mode::unlimited)
+    {
+        state.mouse_events = {};
+    }
 
     CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]); 
     [appLock unlock];

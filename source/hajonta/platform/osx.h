@@ -25,6 +25,14 @@ struct keyboard_message_array
     keyboard_message messages[10];
 };
 
+struct mouse_event_summary
+{
+    float x;
+    float y;
+
+    float vertical_wheel_delta;
+};
+
 struct osx_state
 {
     bool stopping;
@@ -50,6 +58,7 @@ struct osx_state
     void *view;
 
     keyboard_message_array pending_keys;
+    mouse_event_summary mouse_events;
 
     platform_cursor_mode cursor_mode;
 };
