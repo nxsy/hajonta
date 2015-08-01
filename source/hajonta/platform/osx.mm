@@ -174,8 +174,7 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
 
 - (void)scrollWheel: (NSEvent*) event  {
     [appLock lock];
-    NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
-    NSLog(@"Mouse wheel at: %lf, %lf. Delta: %lf", point.x, point.y, [event deltaY]);
+    state.mouse_events.vertical_wheel_delta += [event scrollingDeltaY];
     [appLock unlock];
 }
 
@@ -299,10 +298,14 @@ static CVReturn GlobalDisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp*, 
     state.pending_keys.num_messages = 0;
     state.new_input->mouse.x = state.mouse_events.x;
     state.new_input->mouse.y = state.mouse_events.y;
-    state.new_input->mouse.vertical_wheel_delta = state.mouse_events.vertical_wheel_delta;
+    state.new_input->mouse.vertical_wheel_delta = state.mouse_events.vertical_wheel_delta * 120;
     if (state.cursor_mode == platform_cursor_mode::unlimited)
     {
         state.mouse_events = {};
+    }
+    else
+    {
+        state.mouse_events.vertical_wheel_delta = 0;
     }
 
     CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]); 
