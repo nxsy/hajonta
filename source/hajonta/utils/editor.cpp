@@ -421,6 +421,8 @@ struct game_state
 
     uint32_t shadowmap_fbo;
     uint32_t shadowmap_depth_texture;
+    int32_t shadowmap_fbo_width;
+    int32_t shadowmap_fbo_height;
 
     float near_;
     float far_;
@@ -3231,6 +3233,38 @@ build_matrices(hajonta_thread_context *ctx, platform_memory *memory, game_input 
 }
 
 void
+draw_model_to_shadowmap_fbo(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, Matrices *matrices)
+{
+    game_state *state = (game_state *)memory->memory;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, state->shadowmap_fbo);
+    if ((input->window.height != state->shadowmap_fbo_height) || (input->window.width != state->shadowmap_fbo_width))
+    {
+        state->shadowmap_fbo_width = input->window.width;
+        state->shadowmap_fbo_height = input->window.height;
+
+        glBindTexture(GL_TEXTURE_2D, state->shadowmap_depth_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, state->shadowmap_fbo_width, state->shadowmap_fbo_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    }
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, state->shadowmap_depth_texture, 0);
+    glDrawBuffer(GL_NONE);
+    glViewport(0, 0, state->shadowmap_fbo_width, state->shadowmap_fbo_height);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    draw_model(ctx, memory, input, matrices);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDrawBuffer(GL_BACK);
+}
+
+void
 draw_model_to_fbo(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, Matrices *matrices)
 {
     game_state *state = (game_state *)memory->memory;
@@ -3556,6 +3590,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->delta_t += input->delta_t;
 
     Matrices matrices = build_matrices(ctx, memory, input);
+
+    draw_model_to_shadowmap_fbo(ctx, memory, input, &matrices);
 
     draw_model_to_fbo(ctx, memory, input, &matrices);
 
