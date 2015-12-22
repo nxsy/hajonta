@@ -42,3 +42,10 @@ set switchbuf=useopen,split
 
 let NERDTreeShowHidden=0
 let NERDTreeDirArrows=1
+
+if has("gui_running")
+    set guioptions-=l
+    set guioptions-=L
+    set guioptions-=r
+    set guioptions-=R
+endif
