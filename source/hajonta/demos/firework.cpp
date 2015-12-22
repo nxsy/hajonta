@@ -140,64 +140,68 @@ DEMO(demo_firework)
         glErrorAssert();
         glGenBuffers(1, &demo_state->firework_vbo);
 
-        struct
         {
-            float position[4];
-        } vertices[] = {
-            { 0.000f,  0.000f,  1.000f, 1.000f},
-            { 0.894f,  0.000f,  0.447f, 1.000f},
-            { 0.276f,  0.851f,  0.447f, 1.000f},
-            {-0.724f,  0.526f,  0.447f, 1.000f},
-            {-0.724f, -0.526f,  0.447f, 1.000f},
-            { 0.276f, -0.851f,  0.447f, 1.000f},
-            { 0.724f,  0.526f, -0.447f, 1.000f},
-            {-0.276f,  0.851f, -0.447f, 1.000f},
-            {-0.894f,  0.000f, -0.447f, 1.000f},
-            {-0.276f, -0.851f, -0.447f, 1.000f},
-            { 0.724f, -0.526f, -0.447f, 1.000f},
-            { 0.000f,  0.000f, -1.000f, 1.000f},
-        };
-        glBindBuffer(GL_ARRAY_BUFFER, demo_state->firework_vbo);
-        glBufferData(GL_ARRAY_BUFFER,
-                sizeof(vertices),
-                vertices,
-                GL_STATIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+            struct
+            {
+                float position[4];
+            } vertices[] = {
+                { 0.000f,  0.000f,  1.000f, 1.000f},
+                { 0.894f,  0.000f,  0.447f, 1.000f},
+                { 0.276f,  0.851f,  0.447f, 1.000f},
+                {-0.724f,  0.526f,  0.447f, 1.000f},
+                {-0.724f, -0.526f,  0.447f, 1.000f},
+                { 0.276f, -0.851f,  0.447f, 1.000f},
+                { 0.724f,  0.526f, -0.447f, 1.000f},
+                {-0.276f,  0.851f, -0.447f, 1.000f},
+                {-0.894f,  0.000f, -0.447f, 1.000f},
+                {-0.276f, -0.851f, -0.447f, 1.000f},
+                { 0.724f, -0.526f, -0.447f, 1.000f},
+                { 0.000f,  0.000f, -1.000f, 1.000f},
+            };
+            glBindBuffer(GL_ARRAY_BUFFER, demo_state->firework_vbo);
+            glBufferData(GL_ARRAY_BUFFER,
+                    sizeof(vertices),
+                    vertices,
+                    GL_STATIC_DRAW);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+        }
 
-        struct
         {
-            uint8_t vertex_ids[3];
-        } faces[] =
-        {
-            { 0, 1, 2},
-            { 0, 2, 3},
-            { 0, 3, 4},
-            { 0, 4, 5},
-            { 0, 5, 1},
-            {11, 6, 7},
-            {11, 7, 8},
-            {11, 8, 9},
-            {11, 9,10},
-            {11,10, 6},
-            { 1, 2, 6},
-            { 2, 3, 7},
-            { 3, 4, 8},
-            { 4, 5, 9},
-            { 5, 1,10},
-            { 6, 7, 2},
-            { 7, 8, 3},
-            { 8, 9, 4},
-            { 9,10, 5},
-            {10, 6, 1},
-        };
-        demo_state->firework_num_faces = harray_count(faces);
-        glGenBuffers(1, &demo_state->firework_ibo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->firework_ibo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                sizeof(faces),
-                faces,
-                GL_STATIC_DRAW);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+            struct
+            {
+                uint8_t vertex_ids[3];
+            } faces[] =
+            {
+                { 0, 1, 2},
+                { 0, 2, 3},
+                { 0, 3, 4},
+                { 0, 4, 5},
+                { 0, 5, 1},
+                {11, 6, 7},
+                {11, 7, 8},
+                {11, 8, 9},
+                {11, 9,10},
+                {11,10, 6},
+                { 1, 2, 6},
+                { 2, 3, 7},
+                { 3, 4, 8},
+                { 4, 5, 9},
+                { 5, 1,10},
+                { 6, 7, 2},
+                { 7, 8, 3},
+                { 8, 9, 4},
+                { 9,10, 5},
+                {10, 6, 1},
+            };
+            demo_state->firework_num_faces = harray_count(faces);
+            glGenBuffers(1, &demo_state->firework_ibo);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, demo_state->firework_ibo);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                    sizeof(faces),
+                    faces,
+                    GL_STATIC_DRAW);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        }
 
         glGenTextures((GLsizei)firework_color::NUMBER_FIREWORK_COLORS, demo_state->firework_textures);
         struct
@@ -531,9 +535,9 @@ DEMO(demo_firework)
                 {
                     case firework_payload_mode::all:
                     {
-                        for (uint32_t idx = 0; idx < fb->num_payloads; ++idx)
+                        for (uint32_t payload_idx = 0; payload_idx < fb->num_payloads; ++payload_idx)
                         {
-                            firework_payload *payload = fb->payload + idx;
+                            firework_payload *payload = fb->payload + payload_idx;
                             if (payload->max_num_fireworks == 0)
                             {
                                 break;
@@ -543,8 +547,8 @@ DEMO(demo_firework)
                     } break;
                     case firework_payload_mode::random:
                     {
-                        uint32_t idx = randint(fb->num_payloads);
-                        firework_payload *payload = fb->payload + idx;
+                        uint32_t payload_idx = randint(fb->num_payloads);
+                        firework_payload *payload = fb->payload + payload_idx;
                         create_payload(demo_state, fp, payload);
                     } break;
                     default:

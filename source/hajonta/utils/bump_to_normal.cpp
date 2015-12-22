@@ -3,7 +3,7 @@
 
 #if defined(_MSC_VER)
 #pragma warning(push, 4)
-#pragma warning(disable: 4365 4312)
+#pragma warning(disable: 4365 4312 4456 4457)
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION

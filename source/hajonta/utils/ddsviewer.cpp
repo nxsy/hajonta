@@ -273,8 +273,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             uint8_t image[636];
             int32_t x, y;
             char filename[] = "ui/kenney/glassPanel.png";
-            bool loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->other_tex, GL_TEXTURE_2D);
-            hassert(loaded);
+            bool gp_loaded = load_texture_asset(ctx, memory, filename, image, sizeof(image), &x, &y, &state->other_tex, GL_TEXTURE_2D);
+            hassert(gp_loaded);
         }
 
         glErrorAssert();

@@ -55,7 +55,7 @@ int main()
     EnvDTE::DebuggerPtr debugger;
     if (!SUCCEEDED(dte->get_Debugger(&debugger)))
     {
-        printf("%p\n", debugger);
+        printf("%p\n", (void *)debugger);
         printf("Could not get the Debugger from the interface\n");
         exit(1);
     }

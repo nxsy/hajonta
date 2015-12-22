@@ -2784,15 +2784,15 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
                     uint32_t b_vertex_id, b_texture_coord_id;
                     uint32_t c_vertex_id, c_texture_coord_id;
                     uint32_t d_vertex_id, d_texture_coord_id;
-                    int num_found2;
-                    num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
-                    hassert(num_found2 == 2);
-                    num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
-                    hassert(num_found2 == 2);
-                    num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
-                    hassert(num_found2 == 2);
-                    num_found2 = sscanf(d, "%d/%d", &d_vertex_id, &d_texture_coord_id);
-                    hassert(num_found2 == 2);
+                    int num_found3;
+                    num_found3 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
+                    hassert(num_found3 == 2);
+                    num_found3 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
+                    hassert(num_found3 == 2);
+                    num_found3 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
+                    hassert(num_found3 == 2);
+                    num_found3 = sscanf(d, "%d/%d", &d_vertex_id, &d_texture_coord_id);
+                    hassert(num_found3 == 2);
                     face face1 = {
                         {
                             {a_vertex_id, a_texture_coord_id},
@@ -2831,13 +2831,13 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
                     uint32_t a_vertex_id, a_texture_coord_id;
                     uint32_t b_vertex_id, b_texture_coord_id;
                     uint32_t c_vertex_id, c_texture_coord_id;
-                    int num_found2;
-                    num_found2 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
-                    hassert(num_found2 == 2);
-                    num_found2 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
-                    hassert(num_found2 == 2);
-                    num_found2 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
-                    hassert(num_found2 == 2);
+                    int num_found3;
+                    num_found3 = sscanf(a, "%d/%d", &a_vertex_id, &a_texture_coord_id);
+                    hassert(num_found3 == 2);
+                    num_found3 = sscanf(b, "%d/%d", &b_vertex_id, &b_texture_coord_id);
+                    hassert(num_found3 == 2);
+                    num_found3 = sscanf(c, "%d/%d", &c_vertex_id, &c_texture_coord_id);
+                    hassert(num_found3 == 2);
                     face face1 = {
                         {
                             {a_vertex_id, a_texture_coord_id},
@@ -2854,13 +2854,13 @@ load_model_from_obj(hajonta_thread_context *ctx, platform_memory *memory, game_i
                     uint32_t a_vertex_id, a_texture_coord_id, a_normal_id;
                     uint32_t b_vertex_id, b_texture_coord_id, b_normal_id;
                     uint32_t c_vertex_id, c_texture_coord_id, c_normal_id;
-                    int num_found2;
-                    num_found2 = sscanf(a, "%d/%d/%d", &a_vertex_id, &a_texture_coord_id, &a_normal_id);
-                    hassert(num_found2 == 3);
-                    num_found2 = sscanf(b, "%d/%d/%d", &b_vertex_id, &b_texture_coord_id, &b_normal_id);
-                    hassert(num_found2 == 3);
-                    num_found2 = sscanf(c, "%d/%d/%d", &c_vertex_id, &c_texture_coord_id, &c_normal_id);
-                    hassert(num_found2 == 3);
+                    int num_found3;
+                    num_found3 = sscanf(a, "%d/%d/%d", &a_vertex_id, &a_texture_coord_id, &a_normal_id);
+                    hassert(num_found3 == 3);
+                    num_found3 = sscanf(b, "%d/%d/%d", &b_vertex_id, &b_texture_coord_id, &b_normal_id);
+                    hassert(num_found3 == 3);
+                    num_found3 = sscanf(c, "%d/%d/%d", &c_vertex_id, &c_texture_coord_id, &c_normal_id);
+                    hassert(num_found3 == 3);
                     face face1 = {
                         {
                             {a_vertex_id, a_texture_coord_id, a_normal_id},

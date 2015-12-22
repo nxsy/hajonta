@@ -600,7 +600,7 @@ PLATFORM_LOAD_ASSET(win32_load_asset)
     if (_size.QuadPart != size)
     {
         char msg[1024];
-        sprintf(msg, "File size mismatch: Got %d, expected %d", _size.QuadPart, size);
+        sprintf(msg, "File size mismatch: Got %lld, expected %d", _size.QuadPart, size);
         MessageBoxA(0, msg, 0, MB_OK | MB_ICONSTOP);
         return false;
     }
@@ -612,7 +612,7 @@ PLATFORM_LOAD_ASSET(win32_load_asset)
     if (bytes_read != size)
     {
         char msg[1024];
-        sprintf(msg, "File read mismatch: Got %d, expected %d", bytes_read, size);
+        sprintf(msg, "File read mismatch: Got %ld, expected %d", bytes_read, size);
         MessageBoxA(0, msg, 0, MB_OK | MB_ICONSTOP);
         return false;
     }
@@ -787,12 +787,12 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
     state.window_width = 960;
     state.window_height = 540;
-    RECT window_rect = {};
-    window_rect.left = 0;
-    window_rect.top = 0;
-    window_rect.right = window_rect.left + state.window_width;
-    window_rect.bottom = window_rect.top + state.window_height;
-    BOOL result = AdjustWindowRect(&window_rect, style, 0);
+    RECT create_window_rect = {};
+    create_window_rect.left = 0;
+    create_window_rect.top = 0;
+    create_window_rect.right = create_window_rect.left + state.window_width;
+    create_window_rect.bottom = create_window_rect.top + state.window_height;
+    BOOL result = AdjustWindowRect(&create_window_rect, style, 0);
     if (!result)
     {
         MessageBoxA(0, "Unable to determine window size", 0, MB_OK | MB_ICONSTOP);
@@ -806,8 +806,8 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         style,
         0,
         0,
-        window_rect.right - window_rect.left,
-        window_rect.bottom - window_rect.top,
+        create_window_rect.right - create_window_rect.left,
+        create_window_rect.bottom - create_window_rect.top,
         0,
         0,
         hInstance,
@@ -1021,7 +1021,9 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             sprintf(longmsg, "BuffersQueued: "
 "%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
 "%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
-"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d\n",
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d"
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d\n",
             BQ(0, 6, 0), BQ(0, 6, 1), BQ(0, 6, 2), BQ(0, 6, 3), BQ(0, 6, 4), BQ(0, 6, 5),
             BQ(1, 6, 0), BQ(1, 6, 1), BQ(1, 6, 2), BQ(1, 6, 3), BQ(1, 6, 4), BQ(1, 6, 5),
             BQ(2, 6, 0), BQ(2, 6, 1), BQ(2, 6, 2), BQ(2, 6, 3), BQ(2, 6, 4), BQ(2, 6, 5),
@@ -1039,11 +1041,13 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             BQ(14, 6, 0), BQ(14, 6, 1), BQ(14, 6, 2), BQ(14, 6, 3), BQ(14, 6, 4), BQ(14, 6, 5));
             OutputDebugStringA(longmsg);
             audio_offset = 0;
-#define SP(x, y, z) audio_history[(x*y)+z].SamplesPlayed
+#define SP(x, y, z) (int32_t)audio_history[(x*y)+z].SamplesPlayed
             sprintf(longmsg, "SamplesPlayed: "
 "%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
 "%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d "
-"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d\n",
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d"
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d %4d"
+"%4d %4d %4d %4d %4d %4d %4d %4d %4d %4d\n",
             SP(0, 6, 0), SP(0, 6, 1), SP(0, 6, 2), SP(0, 6, 3), SP(0, 6, 4), SP(0, 6, 5),
             SP(1, 6, 0), SP(1, 6, 1), SP(1, 6, 2), SP(1, 6, 3), SP(1, 6, 4), SP(1, 6, 5),
             SP(2, 6, 0), SP(2, 6, 1), SP(2, 6, 2), SP(2, 6, 3), SP(2, 6, 4), SP(2, 6, 5),
