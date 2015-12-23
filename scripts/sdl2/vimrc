@@ -1,0 +1,51 @@
+let hajonta_loaded=1
+function! s:build()
+  let &makeprg='build'
+  silent make
+  botright copen
+  wincmd p
+endfunction
+
+command! Build call s:build()
+map <Leader>b :Build<cr>
+
+function! s:run()
+    execute "silent !start /b build\\win32_msvc.exe"
+endfunction
+
+command! Run call s:run()
+map <Leader>r :Run<cr>
+
+function! s:run_editor()
+    execute "silent !start /b build\\win32_editor.exe"
+endfunction
+
+command! RunEditor call s:run_editor()
+map <Leader>E :RunEditor<cr>
+
+command! Build call s:build()
+map <Leader>b :Build<cr>
+
+function! s:load_url(url)
+    execute "silent !start explorer \"" . a:url . "\""
+endfunction
+
+function! s:lookup()
+    let s:url = "http://social.msdn.microsoft.com/Search/en-US/?Refinement=181&Query=" . expand("<cword>")
+    call s:load_url(s:url)
+endfunction
+
+command! Lookup call s:lookup()
+map <silent> <F1> :Lookup<CR>
+
+set switchbuf=useopen,split
+
+let NERDTreeShowHidden=0
+let NERDTreeDirArrows=1
+
+if has("gui_running")
+    set guioptions-=l
+    set guioptions-=L
+    set guioptions-=r
+    set guioptions-=R
+endif
