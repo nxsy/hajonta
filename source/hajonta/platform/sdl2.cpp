@@ -7,6 +7,11 @@
 #include <gl/gl.h>
 #include "hajonta/platform/common.h"
 
+struct sdl2_state
+{
+    bool stopping;
+};
+
 int CALLBACK
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -62,9 +67,21 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         SDL_Quit();
         return 1;
     }
+    sdl2_state state = {};
+    SDL_Event sdl_event;
 
-    for (uint32_t i = 0; i < 10; ++i)
+    while (!state.stopping)
     {
+        while(SDL_PollEvent(&sdl_event))
+        {
+            switch (sdl_event.type)
+            {
+                case SDL_QUIT:
+                {
+                    state.stopping = true;
+                } break;
+            }
+        }
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, 0, 0);
         SDL_RenderPresent(renderer);
