@@ -2,72 +2,120 @@
 #include <stdio.h>
 
 #include <SDL.h>
-#include <windows.h>
-#include <windowsx.h>
-#include <gl/gl.h>
+#include <SDL_opengl.h>
 #include "hajonta/platform/common.h"
 
 struct sdl2_state
 {
     bool stopping;
+    char *stop_reason;
+
+    bool sdl_inited;
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Texture *texture;
+
+    char *base_path;
 };
 
-int CALLBACK
-WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+bool
+_fail(sdl2_state *state, char *failure_reason)
 {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0)
-    {
-        hassert(!"SDL_Init failed");
-        return 1;
-    }
+    state->stopping = true;
+    state->stop_reason = strdup(failure_reason);
+    return false;
+}
 
-    SDL_Window *window = SDL_CreateWindow("My First Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN);
-    if (!window)
+void
+sdl_cleanup(sdl2_state *state)
+{
+    if (state->texture)
     {
-        const char *error = SDL_GetError();
-        hassert(!"SDL_CreateWindow failed");
-        hassert(!error);
-        return 1;
+        SDL_DestroyTexture(state->texture);
+        state->texture = 0;
     }
-
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer)
+    if (state->renderer)
     {
-        const char *error = SDL_GetError();
-        SDL_DestroyWindow(window);
-        hassert(!"SDL_CreateRenderer failed");
-        hassert(!error);
+        SDL_DestroyRenderer(state->renderer);
+        state->renderer = 0;
+    }
+    if (state->window)
+    {
+        SDL_DestroyWindow(state->window);
+        state->window = 0;
+    }
+    if (state->sdl_inited)
+    {
         SDL_Quit();
-        return 1;
+        state->sdl_inited = false;
+    }
+}
+
+bool
+sdl_init(sdl2_state *state)
+{
+    state->base_path = SDL_GetBasePath();
+    if (SDL_Init(SDL_INIT_VIDEO))
+    {
+        const char *error = SDL_GetError();
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_Init failed");
+    }
+    state->sdl_inited = true;
+
+    state->window = SDL_CreateWindow("My First Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN);
+    if (!state->window)
+    {
+        const char *error = SDL_GetError();
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_CreateWindow failed");
+    }
+
+    state->renderer = SDL_CreateRenderer(state->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!state->renderer)
+    {
+        const char *error = SDL_GetError();
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_CreateRenderer failed");
     }
 
     SDL_Surface *surface = SDL_CreateRGBSurface(0, 100, 100, 32, 0, 0, 0, 0);
     if (!surface)
     {
         const char *error = SDL_GetError();
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        hassert(!"SDL_CreateRGBSurface failed");
-        hassert(!error);
-        SDL_Quit();
-        return 1;
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_CreateRGBSurface failed");
     }
 
     SDL_FillRect(surface, 0, SDL_MapRGB(surface->format, 255, 0, 0));
 
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    state->texture = SDL_CreateTextureFromSurface(state->renderer, surface);
     SDL_FreeSurface(surface);
-    if (!texture)
+    if (!state->texture)
     {
         const char *error = SDL_GetError();
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        hassert(!"SDL_CreateTextureFromSurface failed");
-        hassert(!error);
-        SDL_Quit();
-        return 1;
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_CreateTextureFromSurface failed");
     }
+
+    return true;
+}
+
+int
+#ifdef _WIN32
+WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+#else
+main(int argc, char *argv[])
+#endif
+{
     sdl2_state state = {};
+    sdl_init(&state);
+
     SDL_Event sdl_event;
 
     while (!state.stopping)
@@ -82,15 +130,11 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
                 } break;
             }
         }
-        SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, texture, 0, 0);
-        SDL_RenderPresent(renderer);
-        SDL_Delay(1000);
+        SDL_RenderClear(state.renderer);
+        SDL_RenderCopy(state.renderer, state.texture, 0, 0);
+        SDL_RenderPresent(state.renderer);
     }
 
-    SDL_DestroyTexture(texture);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    sdl_cleanup(&state);
     return 0;
 }

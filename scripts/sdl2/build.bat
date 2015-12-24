@@ -24,7 +24,7 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\win32_msvc.cpp /link /incremental:
 echo > game.dll.lock
 cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\game.cpp -LD /link /incremental:no -PDB:game-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib
 del game.dll.lock
-cl %CPPFLAGS% -DHAJONTA_DEBUG=1 ..\source\hajonta\platform\sdl2.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib ..\thirdparty\sdl2\lib\x64\SDL2.lib
+cl /MD %CPPFLAGS% -DHAJONTA_DEBUG=1 ..\source\hajonta\platform\sdl2.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib ..\thirdparty\sdl2\lib\x64\SDL2.lib
 
 echo > editor.dll.lock
 cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\editor.cpp -LD /link /incremental:no -PDB:editor-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib
