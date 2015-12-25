@@ -1,8 +1,13 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#if defined(SDL_WITH_SUBDIR)
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
+#else
 #include <SDL.h>
 #include <SDL_opengl.h>
+#endif
 #include "hajonta/platform/common.h"
 
 struct sdl2_state
@@ -178,14 +183,17 @@ PLATFORM_LOAD_ASSET(platform_load_asset)
     return true;
 }
 
-bool sdl_load_game_code(game_code *code, char *filename)
+bool sdl_load_game_code(sdl2_state *state, game_code *code, const char *filename)
 {
+    char libfile[1024];
+    _snprintf(libfile, sizeof(libfile), "%s%s", state->base_path, filename);
     if (code->handle)
     {
         SDL_UnloadObject(code->handle);
     }
-    code->handle = SDL_LoadObject(filename);
+    code->handle = SDL_LoadObject(libfile);
     code->game_update_and_render = (game_update_and_render_func *)SDL_LoadFunction(code->handle, "game_update_and_render");
+    hassert(code->game_update_and_render);
     return true;
 }
 
@@ -291,7 +299,7 @@ main(int argc, char *argv[])
     state.window_height = 480;
 
     game_code code = {};
-    sdl_load_game_code(&code, "game.dll");
+    sdl_load_game_code(&state, &code, hquoted(HAJONTA_LIBRARY_NAME));
 
     while (!state.stopping)
     {
