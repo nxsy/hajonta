@@ -189,6 +189,79 @@ bool sdl_load_game_code(game_code *code, char *filename)
     return true;
 }
 
+static void
+sdl2_process_keypress(game_button_state *new_button_state, bool was_down, bool is_down)
+{
+    if (was_down == is_down)
+    {
+        return;
+    }
+
+    if(new_button_state->ended_down != is_down)
+    {
+        new_button_state->ended_down = is_down;
+        new_button_state->repeat = false;
+    }
+}
+
+static void
+handle_sdl2_events(sdl2_state *state)
+{
+    SDL_Event sdl_event;
+    game_controller_state *new_keyboard_controller = get_controller(state->new_input, 0);
+
+    while(SDL_PollEvent(&sdl_event))
+    {
+        switch (sdl_event.type)
+        {
+            case SDL_QUIT:
+            {
+                state->stopping = true;
+            } break;
+            case SDL_KEYDOWN:
+            case SDL_KEYUP:
+            {
+                bool was_down = (sdl_event.type == SDL_KEYUP);
+                bool is_down = (sdl_event.type != SDL_KEYUP);
+
+                game_button_state *button_state = 0;
+                switch(sdl_event.key.keysym.sym)
+                {
+                    case SDLK_w:
+                    {
+                        button_state = &new_keyboard_controller->buttons.move_up;
+                    } break;
+                    case SDLK_s:
+                    {
+                        button_state = &new_keyboard_controller->buttons.move_down;
+                    } break;
+                    case SDLK_a:
+                    {
+                        button_state = &new_keyboard_controller->buttons.move_left;
+                    } break;
+                    case SDLK_d:
+                    {
+                        button_state = &new_keyboard_controller->buttons.move_right;
+                    } break;
+                    case SDLK_ESCAPE:
+                    {
+                        button_state = &new_keyboard_controller->buttons.back;
+                    } break;
+                    case SDLK_RETURN:
+                    case SDLK_RETURN2:
+                    {
+                        button_state = &new_keyboard_controller->buttons.start;
+                    } break;
+                }
+                if (button_state)
+                {
+                    sdl2_process_keypress(button_state, was_down, is_down);
+                }
+            } break;
+        }
+    }
+}
+
 int
 #ifdef _WIN32
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -220,33 +293,56 @@ main(int argc, char *argv[])
     game_code code = {};
     sdl_load_game_code(&code, "game.dll");
 
-    SDL_Event sdl_event;
     while (!state.stopping)
     {
         state.new_input->delta_t = 1.0f / 60.0f;
+
+        game_controller_state *old_keyboard_controller = get_controller(state.old_input, 0);
+        game_controller_state *new_keyboard_controller = get_controller(state.new_input, 0);
+        *new_keyboard_controller = {};
+        new_keyboard_controller->is_active = true;
+        for (
+                uint32_t button_index = 0;
+                button_index < harray_count(new_keyboard_controller->_buttons);
+                ++button_index)
+        {
+            new_keyboard_controller->_buttons[button_index].ended_down =
+                old_keyboard_controller->_buttons[button_index].ended_down;
+            new_keyboard_controller->_buttons[button_index].repeat = true;
+        }
+
+        state.new_input->mouse.is_active = true;
+        for (
+                uint32_t button_index = 0;
+                button_index < harray_count(state.new_input->mouse._buttons);
+                ++button_index)
+        {
+            state.new_input->mouse._buttons[button_index].ended_down = state.old_input->mouse._buttons[button_index].ended_down;
+            state.new_input->mouse._buttons[button_index].repeat = true;
+        }
+
+        state.new_input->mouse.x = state.old_input->mouse.x;
+        state.new_input->mouse.y = state.old_input->mouse.y;
+        state.new_input->mouse.vertical_wheel_delta = 0;
+
+        state.new_input->window.width = state.window_width;
+        state.new_input->window.height = state.window_height;
 
         game_sound_output sound_output;
         sound_output.samples_per_second = 48000;
         sound_output.channels = 2;
         sound_output.number_of_samples = 48000 / 60;
 
-        state.new_input->window.width = state.window_width;
-        state.new_input->window.height = state.window_height;
-
-        while(SDL_PollEvent(&sdl_event))
-        {
-            switch (sdl_event.type)
-            {
-                case SDL_QUIT:
-                {
-                    state.stopping = true;
-                } break;
-            }
-        }
+        handle_sdl2_events(&state);
 
         SDL_GL_SwapWindow(state.window);
 
         code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
+
+        if (memory.quit)
+        {
+            state.stopping = 1;
+        }
     }
 
     hassert(!state.stop_reason);
