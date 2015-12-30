@@ -10,6 +10,13 @@
 #endif
 #include "hajonta/platform/common.h"
 
+struct sdl2_audio_buffer
+{
+    uint8_t bytes[48000*2*2]; // 48000Hz, two samples, 16 bit
+    uint32_t play_position;
+    uint32_t write_position;
+};
+
 struct sdl2_state
 {
     bool stopping;
@@ -20,6 +27,14 @@ struct sdl2_state
     SDL_Renderer *renderer;
     SDL_Texture *texture;
     SDL_GLContext context;
+
+    SDL_AudioDeviceID audio_device;
+    SDL_AudioSpec audio_spec;
+    bool audio_started;
+
+#if !SDL_VERSION_ATLEAST(2,0,4)
+    sdl2_audio_buffer audio_buffer;
+#endif
 
     char *base_path;
     char asset_path[MAX_PATH];
@@ -64,10 +79,38 @@ sdl_cleanup(sdl2_state *state)
         SDL_DestroyWindow(state->window);
         state->window = 0;
     }
+    if (state->audio_device)
+    {
+         SDL_CloseAudioDevice(state->audio_device);
+         state->audio_device = 0;
+    }
     if (state->sdl_inited)
     {
         SDL_Quit();
         state->sdl_inited = false;
+    }
+}
+
+void
+sdl_audio_callback(void *userdata, uint8_t *stream, int32_t len)
+{
+    sdl2_state *state = (sdl2_state *)userdata;
+    sdl2_audio_buffer *buffer = &state->audio_buffer;
+    hassert(len > 0);
+
+    uint32_t bytes_from_play_to_end = sizeof(buffer->bytes) - buffer->play_position;
+
+    uint32_t bytes_to_play = bytes_from_play_to_end < (uint32_t)len ? bytes_from_play_to_end : (uint32_t)len;
+    memcpy(stream, buffer->bytes + buffer->play_position, bytes_to_play);
+    buffer->play_position += bytes_to_play;
+    buffer->play_position %= sizeof(buffer->bytes);
+    len -= bytes_to_play;
+
+    if (len > 0)
+    {
+        memcpy(stream, buffer->bytes + buffer->play_position, (uint32_t)len);
+        buffer->play_position += len;
+        buffer->play_position %= sizeof(buffer->bytes);
     }
 }
 
@@ -83,7 +126,7 @@ sdl_init(sdl2_state *state)
 {
     state->base_path = SDL_GetBasePath();
     find_asset_path(state);
-    if (SDL_Init(SDL_INIT_VIDEO))
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
     {
         const char *error = SDL_GetError();
         hassert(error);
@@ -140,6 +183,22 @@ sdl_init(sdl2_state *state)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     state->context = SDL_GL_CreateContext(state->window);
+
+    SDL_AudioSpec wanted = {};
+    wanted.freq = 48000;
+    wanted.format = AUDIO_S16;
+    wanted.channels = 2;
+    wanted.samples = 4096;
+    wanted.userdata = (void *)state;
+#if !SDL_VERSION_ATLEAST(2,0,4)
+    wanted.callback = sdl_audio_callback;
+#endif
+    state->audio_device = SDL_OpenAudioDevice(0, 0, &wanted, &state->audio_spec, 0);
+    if (!state->audio_device)
+    {
+        const char *error = SDL_GetError();
+        hassert(!error);
+    }
 
     return true;
 }
@@ -270,6 +329,49 @@ handle_sdl2_events(sdl2_state *state)
     }
 }
 
+void
+sdl_queue_sound(sdl2_state *state, game_sound_output *sound_output)
+{
+    bool free_samples = false;
+    if (state->audio_device)
+    {
+        uint32_t sample_size = (16 / 8);
+        uint32_t len = sound_output->number_of_samples * sound_output->channels * sample_size;
+        void *samples = sound_output->samples;
+        if (!samples)
+        {
+            samples = calloc(1, len);
+            free_samples = true;
+        }
+#if SDL_VERSION_ATLEAST(2,0,4)
+        SDL_QueueAudio(state->audio_device, samples, len);
+#else
+        sdl2_audio_buffer *buffer = &state->audio_buffer;
+        while (len)
+        {
+            uint32_t bytes_to_write = len;
+            if ((sizeof(buffer->bytes) - buffer->write_position) < len)
+            {
+                bytes_to_write = sizeof(buffer->bytes) - buffer->write_position;
+            }
+            memcpy(buffer->bytes + buffer->write_position, samples, bytes_to_write);
+            len -= bytes_to_write;
+            buffer->write_position += bytes_to_write;
+            buffer->write_position %= sizeof(buffer->bytes);
+        }
+#endif
+        if (!state->audio_started)
+        {
+            SDL_PauseAudioDevice(state->audio_device, 0);
+            state->audio_started = true;
+        }
+        if (free_samples)
+        {
+             free(samples);
+        }
+    }
+}
+
 int
 #ifdef _WIN32
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -346,6 +448,8 @@ main(int argc, char *argv[])
         SDL_GL_SwapWindow(state.window);
 
         code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
+
+        sdl_queue_sound(&state, &sound_output);
 
         if (memory.quit)
         {
