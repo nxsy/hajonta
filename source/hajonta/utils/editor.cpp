@@ -16,6 +16,7 @@
 #include <GL/gl.h>
 #endif
 
+#define HJ_DIRECTGL 1
 #include "hajonta/platform/common.h"
 #include "hajonta/math.cpp"
 #include "hajonta/image.cpp"

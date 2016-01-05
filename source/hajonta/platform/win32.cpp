@@ -73,6 +73,14 @@ struct game_code
     FILETIME last_updated;
 };
 
+struct renderer_code
+{
+    renderer_setup_func *renderer_setup;
+
+    HMODULE renderer_code_module;
+    FILETIME last_updated;
+};
+
 LRESULT CALLBACK
 main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -764,6 +772,55 @@ bool win32_load_game_code(game_code *code, char *filename)
     return true;
 }
 
+bool win32_load_renderer_code(renderer_code *code, char *filename)
+{
+    WIN32_FILE_ATTRIBUTE_DATA data;
+    if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &data))
+    {
+        return false;
+    }
+    FILETIME last_updated = data.ftLastWriteTime;
+    if (CompareFileTime(&last_updated, &code->last_updated) != 1)
+    {
+        return true;
+    }
+
+    char locksuffix[] = ".lck";
+    char lockfilename[MAX_PATH];
+    strcpy(lockfilename, filename);
+    strcat(lockfilename, locksuffix);
+    if (GetFileAttributesEx(lockfilename, GetFileExInfoStandard, &data))
+    {
+        return false;
+    }
+
+    char tempsuffix[] = ".tmp";
+    char tempfilename[MAX_PATH];
+    strcpy(tempfilename, filename);
+    strcat(tempfilename, tempsuffix);
+    if (code->renderer_code_module)
+    {
+        FreeLibrary(code->renderer_code_module);
+    }
+    CopyFile(filename, tempfilename, 0);
+    HMODULE new_module = LoadLibraryA(tempfilename);
+    if (!new_module)
+    {
+        return false;
+    }
+
+    renderer_setup_func *renderer_setup = (renderer_setup_func *)GetProcAddress(new_module, "renderer_setup");
+    if (!renderer_setup)
+    {
+        return false;
+    }
+
+    code->renderer_code_module = new_module;
+    code->last_updated = last_updated;
+    code->renderer_setup = renderer_setup;
+    return true;
+}
+
 int CALLBACK
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -825,7 +882,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
     ShowWindow(window, nCmdShow);
     ShowCursor(0);
-    game_code code = {};
 
     wglSwapIntervalEXT =
         (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
@@ -854,6 +910,15 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     strcat(game_library_path, hquoted(HAJONTA_LIBRARY_NAME));
 #else
     strcat(game_library_path, "game.dll");
+#endif
+
+    char renderer_library_path[sizeof(state.binary_path)];
+    strncpy(renderer_library_path, state.binary_path, (size_t)(location_of_last_slash - state.binary_path));
+    strcat(renderer_library_path, "\\");
+#if defined(HAJONTA_RENDERER_LIBRARY_NAME)
+    strcat(renderer_library_path, hquoted(HAJONTA_RENDERER_LIBRARY_NAME));
+#else
+    strcat(renderer_library_path, "renderer.dll");
 #endif
     if (!find_asset_path(&state))
     {
@@ -909,10 +974,12 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     state.new_input = &input[0];
     state.old_input = &input[1];
 
+    game_code gamecode = {};
+    renderer_code renderercode = {};
     while(!state.stopping)
     {
-        bool updated = win32_load_game_code(&code, game_library_path);
-        if (!code.game_code_module)
+        bool updated = win32_load_game_code(&gamecode, game_library_path);
+        if (!gamecode.game_code_module)
         {
             state.stopping = 1;
             state.stop_reason = "Unable to load game code";
@@ -922,6 +989,20 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             state.stopping = 1;
             state.stop_reason = "Unable to reload game code";
         }
+
+        updated = win32_load_renderer_code(&renderercode, renderer_library_path);
+        if (!renderercode.renderer_code_module)
+        {
+            state.stopping = 1;
+            state.stop_reason = "Unable to load renderer code";
+        }
+        if (!updated)
+        {
+            state.stopping = 1;
+            state.stop_reason = "Unable to reload renderer code";
+        }
+
+        renderercode.renderer_setup((hajonta_thread_context *)&state, &memory);
 
         state.new_input->delta_t = 1.0f / 60.0f;
 
@@ -1004,7 +1085,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         sound_output.samples_per_second = 48000;
         sound_output.channels = 2;
         sound_output.number_of_samples = 48000 / 60;
-        code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
+        gamecode.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
 
         source_voice->GetState(&voice_state);
         audio_buffer.AudioBytes = 48000 * 2 * (16 / 8) / 60;

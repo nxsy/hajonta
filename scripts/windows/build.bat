@@ -21,10 +21,13 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no Use
 del *.pdb > NUL 2> NUL
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\win32_msvc.cpp /link /incremental:no -PDB:win32_msvc.pdb User32.lib
 
-echo > game.dll.lock
-cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\game.cpp -LD /link /incremental:no -PDB:game-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib
-del game.dll.lock
-cl %CPPFLAGS% -DHAJONTA_DEBUG=1 ..\source\hajonta\platform\win32.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
+echo > game2.dll.lock
+cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\game2.cpp -LD /link /incremental:no -PDB:game-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib
+del game2.dll.lock
+echo > renderer.dll.lock
+cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\renderer\opengl.cpp -LD /link /incremental:no -PDB:renderer-%random%.pdb -EXPORT:renderer_setup Opengl32.lib
+del renderer.dll.lock
+cl %CPPFLAGS% -DHAJONTA_LIBRARY_NAME=game2.dll -DHAJONTA_RENDERER_LIBRARY_NAME=opengl.dll -DHAJONTA_DEBUG=1 ..\source\hajonta\platform\win32.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
 
 echo > editor.dll.lock
 cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\editor.cpp -LD /link /incremental:no -PDB:editor-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib

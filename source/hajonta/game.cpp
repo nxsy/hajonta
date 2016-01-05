@@ -16,7 +16,7 @@
 #include <GL/gl.h>
 #endif
 
-
+#define HJ_DIRECTGL 1
 #include "hajonta/platform/common.h"
 #include "hajonta/programs/a.h"
 #include "hajonta/programs/debug_font.h"
