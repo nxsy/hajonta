@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "hajonta/platform/neutral.h"
+#include "hajonta/math.h"
 
 #ifdef HAJONTA_DEBUG
 #define hassert(expression) if(!(expression)) {*(volatile int *)0 = 0;}
@@ -71,6 +72,8 @@ struct platform_cursor_settings
     int32_t mouse_y;
 };
 
+struct render_entry_list;
+
 struct platform_memory
 {
     bool initialized;
@@ -78,6 +81,9 @@ struct platform_memory
     void *memory;
     bool quit;
     bool debug_keyboard;
+
+    render_entry_list *render_lists[10];
+    uint8_t render_lists_count;
 
     platform_cursor_settings cursor_settings;
 
@@ -208,6 +214,9 @@ typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 #define RENDERER_SETUP(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory)
 typedef RENDERER_SETUP(renderer_setup_func);
 
+#define RENDERER_RENDER(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory)
+typedef RENDERER_RENDER(renderer_render_func);
+
 
 #ifdef HJ_DIRECTGL
 #include "hajonta/thirdparty/glext.h"
@@ -278,3 +287,70 @@ glErrorAssert()
     }
 }
 #endif
+
+enum struct
+render_entry_type
+{
+    clear,
+};
+
+struct
+render_entry_header
+{
+     render_entry_type type;
+};
+
+struct
+render_entry_type_clear
+{
+    render_entry_header header;
+    v4 color;
+};
+
+struct
+render_entry_list
+{
+    uint32_t max_size;
+    uint32_t current_size;
+    uint8_t *base;
+    uint32_t element_count;
+};
+
+#define PushRenderElement(list, type) (render_entry_type_##type *)PushRenderElement_(list, sizeof(render_entry_type_##type), render_entry_type::##type)
+inline void *
+PushRenderElement_(render_entry_list *list, uint32_t size, render_entry_type type)
+{
+    void *res = 0;
+
+    if (list->current_size + size > list->max_size)
+    {
+        hassert(!"render list too small");
+         return res;
+    }
+
+    render_entry_header *header = (render_entry_header *)(list->base + list->current_size);
+    header->type = type;
+    res = header;
+    list->current_size += size;
+    ++list->element_count;
+
+    return res;
+}
+
+inline void
+PushClear(render_entry_list *list, v4 color)
+{
+     render_entry_type_clear *entry = PushRenderElement(list, clear);
+     if (entry)
+     {
+         entry->color = color;
+     }
+}
+
+inline void
+AddRenderList(platform_memory *memory, render_entry_list *list)
+{
+    hassert(memory->render_lists_count < sizeof(memory->render_lists) - 1);
+    memory->render_lists[memory->render_lists_count] = list;
+    ++memory->render_lists_count;
+}

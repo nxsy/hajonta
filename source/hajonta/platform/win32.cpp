@@ -76,6 +76,7 @@ struct game_code
 struct renderer_code
 {
     renderer_setup_func *renderer_setup;
+    renderer_render_func *renderer_render;
 
     HMODULE renderer_code_module;
     FILETIME last_updated;
@@ -815,9 +816,16 @@ bool win32_load_renderer_code(renderer_code *code, char *filename)
         return false;
     }
 
+    renderer_render_func *renderer_render = (renderer_render_func *)GetProcAddress(new_module, "renderer_render");
+    if (!renderer_render)
+    {
+        return false;
+    }
+
     code->renderer_code_module = new_module;
     code->last_updated = last_updated;
     code->renderer_setup = renderer_setup;
+    code->renderer_render = renderer_render;
     return true;
 }
 
@@ -995,6 +1003,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         {
             state.stopping = 1;
             state.stop_reason = "Unable to load renderer code";
+            break;
         }
         if (!updated)
         {
@@ -1150,7 +1159,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
         source_voice->SubmitSourceBuffer(&audio_buffer);
 
-
+        renderercode.renderer_render((hajonta_thread_context *)&state, &memory);
         SwapBuffers(state.device_context);
 
         game_input *temp_input = state.new_input;

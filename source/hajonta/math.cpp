@@ -2,15 +2,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "hajonta/math.h"
+
 #ifndef harray_count
 #define harray_count(array) (sizeof(array) / sizeof((array)[0]))
 #endif
-
-struct v2
-{
-    float x;
-    float y;
-};
 
 v2
 v2add(v2 left, v2 right)
@@ -81,13 +77,6 @@ v2projection(v2 q, v2 p)
      */
     return v2mul(q, v2dot(p, q) / v2dot(q, q));
 }
-
-struct v3
-{
-    float x;
-    float y;
-    float z;
-};
 
 v3
 v3add(v3 left, v3 right)
@@ -275,13 +264,6 @@ v3unittests()
     return true;
 }
 
-struct triangle2
-{
-    v2 p0;
-    v2 p1;
-    v2 p2;
-};
-
 bool
 point_in_triangle(v2 point, triangle2 tri)
 {
@@ -301,13 +283,6 @@ point_in_triangle(v2 point, triangle2 tri)
     return (s > 0) && (t > 0) && ((s + t) < a);
 }
 
-struct triangle3
-{
-    v3 p0;
-    v3 p1;
-    v3 p2;
-};
-
 v3
 winded_triangle_normal(triangle3 tri)
 {
@@ -318,12 +293,6 @@ winded_triangle_normal(triangle3 tri)
     return normal;
 }
 
-struct rectangle2
-{
-    v2 position;
-    v2 dimension;
-};
-
 bool
 point_in_rectangle(v2 point, rectangle2 rect)
 {
@@ -332,12 +301,6 @@ point_in_rectangle(v2 point, rectangle2 rect)
         (point.x < (rect.position.x + rect.dimension.x)) &&
         (point.y < (rect.position.y + rect.dimension.y));
 }
-
-struct line2
-{
-    v2 position;
-    v2 direction;
-};
 
 bool
 line_intersect(line2 ppr, line2 qqs, v2 *intersect_point)
@@ -363,29 +326,6 @@ line_intersect(line2 ppr, line2 qqs, v2 *intersect_point)
     }
     return false;
 }
-
-union v4
-{
-    struct {
-        union {
-            float x;
-            float r;
-        };
-        union {
-            float y;
-            float g;
-        };
-        union {
-            float z;
-            float b;
-        };
-        union {
-            float w;
-            float a;
-        };
-    };
-    float E[4];
-};
 
 v4
 v4add(v4 left, v4 right)
@@ -442,11 +382,6 @@ v4dot(v4 left, v4 right)
     return result;
 }
 
-
-struct m4
-{
-    v4 cols[4];
-};
 
 m4
 m4identity()

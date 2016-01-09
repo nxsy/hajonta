@@ -80,5 +80,40 @@ RENDERER_SETUP(renderer_setup)
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
     }
 #endif
+    memory->render_lists_count = 0;
     return true;
 }
+
+RENDERER_RENDER(renderer_render)
+{
+    hassert(memory->render_lists_count > 0);
+    for (uint32_t i = 0; i < memory->render_lists_count; ++i)
+    {
+        render_entry_list *render_list = memory->render_lists[i];
+        uint32_t offset = 0;
+        hassert(render_list->element_count > 0);
+        for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
+        {
+            render_entry_header *header = (render_entry_header *)(render_list->base + offset);
+            uint32_t element_size = 0;
+            switch (header->type)
+            {
+                case render_entry_type::clear:
+                {
+                    render_entry_type_clear *clear = (render_entry_type_clear *)header;
+                    element_size = sizeof(*clear);
+                    v4 *color = &clear->color;
+                    glClearColor(color->r, color->g, color->b, color->a);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                } break;
+                default:
+                {
+                    hassert(!"Unhandled render entry type")
+                };
+            }
+            offset += element_size;
+        }
+    }
+    glErrorAssert();
+    return true;
+};
