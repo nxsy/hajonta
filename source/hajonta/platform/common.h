@@ -82,6 +82,8 @@ struct platform_memory
     bool quit;
     bool debug_keyboard;
 
+    void *imgui_state;
+
     render_entry_list *render_lists[10];
     uint8_t render_lists_count;
 

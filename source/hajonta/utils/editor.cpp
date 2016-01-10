@@ -28,9 +28,9 @@
 #pragma warning(disable: 4365 4312 4505)
 #endif
 #define STB_RECT_PACK_IMPLEMENTATION
-#include "hajonta/thirdparty/stb_rect_pack.h"
+#include "stb_rect_pack.h"
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "hajonta/thirdparty/stb_truetype.h"
+#include "stb_truetype.h"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif

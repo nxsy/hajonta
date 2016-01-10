@@ -6,7 +6,7 @@ IF NOT EXIST %BUILDDIR% mkdir %BUILDDIR%
 IF NOT EXIST %BUILDDIR%\generated mkdir %BUILDDIR%\generated
 pushd %BUILDDIR%
 
-set INCLUDES=-I..\source -Igenerated -Zi -I..\source\hajonta\thirdparty
+set INCLUDES=-I..\source -Igenerated -Zi -I..\source\hajonta\thirdparty -I..\thirdparty\stb -I..\thirdparty\imgui
 set CPPFLAGS=%includes% /FC /nologo /Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd4514 /wd4191 /wd4201 /wd4505 /wd4710
 
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
@@ -16,6 +16,7 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no 
 .\program.exe ..\source hajonta\programs ui2d
 .\program.exe ..\source hajonta\programs skybox
 .\program.exe ..\source hajonta\programs c
+.\program.exe ..\source hajonta\programs imgui
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\unit.exe
 del *.pdb > NUL 2> NUL
