@@ -17,6 +17,11 @@ extern "C" {
 #undef HGLD
 
 #include "hajonta/programs/imgui.h"
+#include "hajonta/programs/ui2d.h"
+
+#include "stb_truetype.h"
+#include "hajonta/ui/ui2d.cpp"
+#include "hajonta/image.cpp"
 
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
@@ -85,6 +90,15 @@ glErrorAssert()
 #pragma warning(pop)
 #endif
 
+struct ui2d_state
+{
+    ui2d_program_struct ui2d_program;
+    uint32_t vbo;
+    uint32_t ibo;
+    uint32_t vao;
+    uint32_t mouse_texture;
+};
+
 struct renderer_state
 {
     bool initialized;
@@ -95,9 +109,156 @@ struct renderer_state
     uint32_t vao;
     int32_t tex_id;
     uint32_t font_texture;
+
+    ui2d_state ui_state;
+
+    char bitmap_scratch[4096 * 4096 * 4];
 };
 
 static renderer_state GlobalRendererState;
+
+void
+draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, ui2d_push_context *pushctx)
+{
+    ui2d_state *ui_state = &state->ui_state;
+    ui2d_program_struct *ui2d_program = &ui_state->ui2d_program;
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glUseProgram(ui2d_program->program);
+    glBindVertexArray(ui_state->vao);
+
+    float screen_pixel_size[] =
+    {
+        960.0,
+        540.0,
+    };
+    glUniform2fv(ui2d_program->screen_pixel_size_id, 1, (float *)&screen_pixel_size);
+
+    glBindBuffer(GL_ARRAY_BUFFER, ui_state->vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            (GLsizei)(pushctx->num_vertices * sizeof(pushctx->vertices[0])),
+            pushctx->vertices,
+            GL_DYNAMIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ui_state->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            (GLsizei)(pushctx->num_elements * sizeof(pushctx->elements[0])),
+            pushctx->elements,
+            GL_DYNAMIC_DRAW);
+
+    glEnableVertexAttribArray((GLuint)ui2d_program->a_pos_id);
+    glEnableVertexAttribArray((GLuint)ui2d_program->a_tex_coord_id);
+    glEnableVertexAttribArray((GLuint)ui2d_program->a_texid_id);
+    glEnableVertexAttribArray((GLuint)ui2d_program->a_options_id);
+    glEnableVertexAttribArray((GLuint)ui2d_program->a_channel_color_id);
+    glVertexAttribPointer((GLuint)ui2d_program->a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), 0);
+    glVertexAttribPointer((GLuint)ui2d_program->a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
+    glVertexAttribPointer((GLuint)ui2d_program->a_texid_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
+    glVertexAttribPointer((GLuint)ui2d_program->a_options_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
+    glVertexAttribPointer((GLuint)ui2d_program->a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
+
+    GLint uniform_locations[10] = {};
+    char msg[] = "tex[xx]";
+    for (int idx = 0; idx < harray_count(uniform_locations); ++idx)
+    {
+        sprintf(msg, "tex[%d]", idx);
+        uniform_locations[idx] = glGetUniformLocation(ui2d_program->program, msg);
+
+    }
+
+    for (uint32_t i = 0; i < pushctx->num_textures; ++i)
+    {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, pushctx->textures[i]);
+        glUniform1i(
+            uniform_locations[i],
+            (GLint)i);
+    }
+
+    // TODO(nbm): Get textures working properly.
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, ui_state->mouse_texture);
+    glUniform1i(uniform_locations[0], 0);
+
+    glDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, 0);
+    glErrorAssert();
+}
+
+bool
+load_texture_asset(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    const char *filename,
+    uint8_t *image_buffer,
+    uint32_t image_size,
+    int32_t *x,
+    int32_t *y,
+    GLuint *tex,
+    GLenum target
+)
+{
+    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
+        return false;
+    }
+
+    uint32_t actual_size;
+    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
+            x, y, &actual_size);
+
+    if (tex)
+    {
+        if (!*tex)
+        {
+            glGenTextures(1, tex);
+        }
+        glBindTexture(GL_TEXTURE_2D, *tex);
+    }
+
+    glTexImage2D(target, 0, GL_RGBA,
+        *x, *y, 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    return true;
+}
+void
+load_texture_asset_failed(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    char *filename
+)
+{
+    char msg[1024];
+    sprintf(msg, "Could not load %s\n", filename);
+    memory->platform_fail(ctx, msg);
+    memory->quit = true;
+}
+
+bool
+ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
+{
+    ui2d_state *ui_state = &state->ui_state;
+    ui2d_program_struct *program = &ui_state->ui2d_program;
+    ui2d_program(program, ctx, memory);
+
+    glGenBuffers(1, &ui_state->vbo);
+    glGenBuffers(1, &ui_state->ibo);
+
+    glGenVertexArrays(1, &ui_state->vao);
+    glBindVertexArray(ui_state->vao);
+
+    uint8_t image[256];
+    int32_t x, y;
+    char filename[] = "ui/slick_arrows/slick_arrow-delta.png";
+    bool loaded = load_texture_asset(ctx, memory, state, filename, image, sizeof(image), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
+    if (!loaded)
+    {
+        load_texture_asset_failed(ctx, memory, filename);
+        return false;
+    }
+    return true;
+}
 
 bool program_init(hajonta_thread_context *ctx, platform_memory *memory)
 {
@@ -150,6 +311,7 @@ RENDERER_SETUP(renderer_setup)
     if (!GlobalRendererState.initialized)
     {
         program_init(ctx, memory);
+        hassert(ui2d_program_init(ctx, memory, &GlobalRendererState));
         GlobalRendererState.initialized = true;
     }
 
@@ -231,6 +393,7 @@ void render_draw_lists(ImDrawData* draw_data)
             idx_buffer_offset += pcmd->ElemCount;
         }
     }
+    glBindVertexArray(0);
 }
 
 RENDERER_RENDER(renderer_render)
@@ -255,6 +418,11 @@ RENDERER_RENDER(renderer_render)
                     glScissor(0, 0, 960, 540);
                     glClearColor(color->r, color->g, color->b, color->a);
                     glClear(GL_COLOR_BUFFER_BIT);
+                } break;
+                case render_entry_type::ui2d:
+                {
+                    render_entry_type_ui2d *ui2d = (render_entry_type_ui2d *)header;
+                    draw_ui2d(ctx, memory, &GlobalRendererState, ui2d->pushctx);
                 } break;
                 default:
                 {

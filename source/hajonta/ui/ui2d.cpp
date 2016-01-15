@@ -12,7 +12,7 @@ struct ui2d_push_context
     ui2d_vertex_format *vertices;
     uint32_t num_vertices;
     uint32_t max_vertices;
-    GLuint *elements;
+    uint32_t *elements;
     uint32_t num_elements;
     uint32_t max_elements;
     uint32_t *textures;
@@ -21,6 +21,7 @@ struct ui2d_push_context
 
     uint32_t seen_textures[1024];
 };
+
 
 uint32_t
 push_texture(ui2d_push_context *pushctx, uint32_t tex)
@@ -98,6 +99,7 @@ push_quad(ui2d_push_context *pushctx, stbtt_aligned_quad q, uint32_t tex, uint32
         elements[(*num_elements)++] = bl_vertex;
 }
 
+#ifdef HJ_DIRECTGL
 void
 ui2d_render_elements(ui2d_push_context *pushctx, ui2d_program_struct *program_ui2d, uint32_t vbo, uint32_t ibo)
 {
@@ -142,5 +144,5 @@ ui2d_render_elements(ui2d_push_context *pushctx, ui2d_program_struct *program_ui
     }
 
     glDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, 0);
-    glErrorAssert();
 }
+#endif
