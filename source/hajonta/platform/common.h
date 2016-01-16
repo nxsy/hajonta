@@ -327,6 +327,9 @@ render_entry_list
     uint32_t element_count;
 };
 
+#define RenderListBuffer(r, b) { r.max_size = sizeof(b); r.base = b; }
+#define RenderListReset(r) { r.current_size = r.element_count = 0; }
+
 #define PushRenderElement(list, type) (render_entry_type_##type *)PushRenderElement_(list, sizeof(render_entry_type_##type), render_entry_type::##type)
 inline void *
 PushRenderElement_(render_entry_list *list, uint32_t size, render_entry_type type)
