@@ -69,7 +69,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     q.s1 = 1;
     q.t0 = 0;
     q.t1 = 1;
-    push_quad(pushctx, q, state->mouse_texture + 1, 0);
+    push_quad(pushctx, q, state->mouse_texture, 0);
     PushUi2d(&state->render_list, &state->pushctx);
 
     AddRenderList(memory, &state->render_list);

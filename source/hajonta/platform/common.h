@@ -213,7 +213,7 @@ struct game_sound_output
 #define GAME_UPDATE_AND_RENDER(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 
-#define RENDERER_SETUP(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory)
+#define RENDERER_SETUP(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 typedef RENDERER_SETUP(renderer_setup_func);
 
 #define RENDERER_RENDER(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory)

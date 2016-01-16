@@ -1011,8 +1011,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
             state.stop_reason = "Unable to reload renderer code";
         }
 
-        renderercode.renderer_setup((hajonta_thread_context *)&state, &memory);
-
         state.new_input->delta_t = 1.0f / 60.0f;
 
         game_controller_state *old_keyboard_controller = get_controller(state.old_input, 0);
@@ -1089,6 +1087,8 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
         state.new_input->window.width = state.window_width;
         state.new_input->window.height = state.window_height;
+
+        renderercode.renderer_setup((hajonta_thread_context *)&state, &memory, state.new_input);
 
         game_sound_output sound_output;
         sound_output.samples_per_second = 48000;

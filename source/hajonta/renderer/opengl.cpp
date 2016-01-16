@@ -113,6 +113,7 @@ struct renderer_state
     ui2d_state ui_state;
 
     char bitmap_scratch[4096 * 4096 * 4];
+    game_input *input;
 };
 
 static renderer_state GlobalRendererState;
@@ -130,8 +131,8 @@ draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     float screen_pixel_size[] =
     {
-        960.0,
-        540.0,
+        (float)GlobalRendererState.input->window.width,
+        (float)GlobalRendererState.input->window.height,
     };
     glUniform2fv(ui2d_program->screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
@@ -315,18 +316,17 @@ RENDERER_SETUP(renderer_setup)
         GlobalRendererState.initialized = true;
     }
 
+    GlobalRendererState.input = input;
+
     ImGuiIO& io = ImGui::GetIO();
 
-    int w, h;
-    w = 960;
-    h = 540;
-    io.DisplaySize = ImVec2((float)w, (float)h);
+    io.DisplaySize = ImVec2((float)input->window.width, (float)input->window.height);
     io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
 
-    io.DeltaTime = (float)(1.0f / 60.0f);
+    io.DeltaTime = input->delta_t;
 
-    io.MousePos = ImVec2(-1, -1);
-    io.MouseDown[0] = 0;
+    io.MousePos = ImVec2((float)input->mouse.x, (float)input->mouse.y);
+    io.MouseDown[0] = input->mouse.buttons.left.ended_down;
     io.MouseDown[1] = 0;
     io.MouseDown[2] = 0;
     io.MouseWheel = 0.0f;
@@ -415,7 +415,7 @@ RENDERER_RENDER(renderer_render)
                     render_entry_type_clear *clear = (render_entry_type_clear *)header;
                     element_size = sizeof(*clear);
                     v4 *color = &clear->color;
-                    glScissor(0, 0, 960, 540);
+                    glScissor(0, 0, GlobalRendererState.input->window.width, GlobalRendererState.input->window.height);
                     glClearColor(color->r, color->g, color->b, color->a);
                     glClear(GL_COLOR_BUFFER_BIT);
                 } break;
