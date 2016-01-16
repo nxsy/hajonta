@@ -23,6 +23,8 @@ struct game_state
     uint32_t textures[10];
     ui2d_push_context pushctx;
 
+    float clear_color[3];
+
     uint32_t mouse_texture;
 };
 
@@ -54,10 +56,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     pushctx->textures = state->textures;
     pushctx->max_textures = harray_count(state->textures);
 
-    v4 color = {0, 1.0f, 0, 0};
-    PushClear(&state->render_list, color);
-
     ImGui::Text("Hello, world!");
+    ImGui::ColorEdit3("Clear colour", state->clear_color);
+
+    v4 colorv4 = {
+        state->clear_color[0],
+        state->clear_color[1],
+        state->clear_color[2],
+        1.0f,
+    };
+
+    PushClear(&state->render_list, colorv4);
 
     stbtt_aligned_quad q = {};
     q.x0 = (float)input->mouse.x;
