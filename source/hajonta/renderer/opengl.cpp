@@ -443,21 +443,6 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     window_data *window = &state->input->window;
     glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
-    const float ortho_projection[4][4] =
-    {
-        /*
-        { 2.0f/window->width, 0.0f,                0.0f, 0.0f },
-        { 0.0f,               2.0f/window->height, 0.0f, 0.0f },
-        { 0.0f,               0.0f,                1.0f, 0.0f },
-        { 0.0f,               0.0f,                0.0f, 1.0f },
-        */
-        /*
-        { 1.0f, 0.0f, 0.0f, 0.0f },
-        { 0.0f, 1.0f, 0.0f, 0.0f },
-        { 0.0f, 0.0f, 1.0f, 0.0f },
-        { 0.0f, 0.0f, 0.0f, 1.0f },
-        */
-    };
     float ratio = (float)window->width / (float)window->height;
     m4 projection = m4orthographicprojection(1.0f, -1.0f, {-ratio, -1.0f}, {ratio, 1.0f});
 
