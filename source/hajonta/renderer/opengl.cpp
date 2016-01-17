@@ -438,13 +438,21 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 }
 
 void
-draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, render_entry_type_quad *quad)
+draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, render_entry_type_quad *quad)
 {
 
     window_data *window = &state->input->window;
     glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
     float ratio = (float)window->width / (float)window->height;
-    m4 projection = m4orthographicprojection(1.0f, -1.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+    m4 projection;
+    if (quad->matrix_id == -1)
+    {
+        projection = m4orthographicprojection(1.0f, -1.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+    }
+    else
+    {
+        projection = matrices[quad->matrix_id];
+    }
 
     glUseProgram(state->imgui_program.program);
     glActiveTexture(GL_TEXTURE0);
@@ -509,10 +517,15 @@ RENDERER_RENDER(renderer_render)
         render_entry_list *render_list = memory->render_lists[i];
         uint32_t offset = 0;
         hassert(render_list->element_count > 0);
+
+        m4 *matrices = {};
+        uint32_t matrix_count = 0;
+
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
         {
             render_entry_header *header = (render_entry_header *)(render_list->base + offset);
             uint32_t element_size = 0;
+
             switch (header->type)
             {
                 case render_entry_type::clear:
@@ -531,12 +544,19 @@ RENDERER_RENDER(renderer_render)
                 case render_entry_type::quad:
                 {
                     ExtractRenderElementWithSize(quad, item, header, element_size);
-                    draw_quad(ctx, memory, state, item);
+                    hassert(matrix_count > 0 || item->matrix_id == -1);
+                    draw_quad(ctx, memory, state, matrices, item);
                 } break;
                 default:
                 {
                     hassert(!"Unhandled render entry type")
                 };
+                case render_entry_type::matrices:
+                {
+                    ExtractRenderElementWithSize(matrices, item, header, element_size);
+                    matrices = item->matrices;
+                    matrix_count = item->count;
+                } break;
             }
             hassert(element_size > 0);
             offset += element_size;

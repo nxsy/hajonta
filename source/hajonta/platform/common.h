@@ -296,6 +296,7 @@ render_entry_type
     clear,
     ui2d,
     quad,
+    matrices,
 };
 
 struct
@@ -326,6 +327,15 @@ render_entry_type_quad
     v3 position;
     v3 size;
     v4 color;
+    int32_t matrix_id;
+};
+
+struct
+render_entry_type_matrices
+{
+    render_entry_header header;
+    uint32_t count;
+    m4 *matrices;
 };
 
 struct
@@ -385,7 +395,7 @@ PushUi2d(render_entry_list *list, ui2d_push_context *pushctx)
 }
 
 inline void
-PushQuad(render_entry_list *list, v3 position, v3 size, v4 color)
+PushQuad(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id)
 {
      render_entry_type_quad *entry = PushRenderElement(list, quad);
      if (entry)
@@ -393,6 +403,18 @@ PushQuad(render_entry_list *list, v3 position, v3 size, v4 color)
          entry->position = position;
          entry->size = size;
          entry->color = color;
+         entry->matrix_id = matrix_id;
+     }
+}
+
+inline void
+PushMatrices(render_entry_list *list, uint32_t count, m4 *matrices)
+{
+     render_entry_type_matrices *entry = PushRenderElement(list, matrices);
+     if (entry)
+     {
+         entry->count = count;
+         entry->matrices = matrices;
      }
 }
 
