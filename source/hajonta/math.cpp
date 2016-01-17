@@ -712,6 +712,22 @@ m4frustumprojection(float near_, float far_, v2 bottom_left, v2 top_right)
 }
 
 m4
+m4orthographicprojection(float near_, float far_, v2 bottom_left, v2 top_right)
+{
+    float b = bottom_left.y;
+    float l = bottom_left.x;
+    float t = top_right.y;
+    float r = top_right.x;
+
+    m4 result = {};
+    result.cols[0].E[0] = 2.0f / (r - l);
+    result.cols[1].E[1] = 2.0f / (t - b);
+    result.cols[2].E[2] = -2.0f / (far_ - near_);
+    result.cols[3].E[3] = 1.0f;
+    return result;
+}
+
+m4
 m4lookat(v3 eye, v3 target, v3 up)
 {
     v3 forward = v3normalize(v3sub(target, eye));

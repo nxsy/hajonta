@@ -295,6 +295,7 @@ render_entry_type
 {
     clear,
     ui2d,
+    quad,
 };
 
 struct
@@ -316,6 +317,15 @@ render_entry_type_ui2d
 {
     render_entry_header header;
     ui2d_push_context *pushctx;
+};
+
+struct
+render_entry_type_quad
+{
+    render_entry_header header;
+    v3 position;
+    v3 size;
+    v4 color;
 };
 
 struct
@@ -351,6 +361,9 @@ PushRenderElement_(render_entry_list *list, uint32_t size, render_entry_type typ
     return res;
 }
 
+#define ExtractRenderElement(type, name, header) render_entry_type_##type *##name = (render_entry_type_##type *)header
+#define ExtractRenderElementWithSize(type, name, header, size) ExtractRenderElement(type, name, header); size = sizeof(*##name)
+
 inline void
 PushClear(render_entry_list *list, v4 color)
 {
@@ -368,6 +381,18 @@ PushUi2d(render_entry_list *list, ui2d_push_context *pushctx)
      if (entry)
      {
          entry->pushctx = pushctx;
+     }
+}
+
+inline void
+PushQuad(render_entry_list *list, v3 position, v3 size, v4 color)
+{
+     render_entry_type_quad *entry = PushRenderElement(list, quad);
+     if (entry)
+     {
+         entry->position = position;
+         entry->size = size;
+         entry->color = color;
      }
 }
 

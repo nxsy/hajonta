@@ -22,6 +22,7 @@ extern "C" {
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
 #include "hajonta/image.cpp"
+#include "hajonta/math.cpp"
 
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
@@ -109,6 +110,7 @@ struct renderer_state
     uint32_t vao;
     int32_t tex_id;
     uint32_t font_texture;
+    uint32_t white_texture;
 
     ui2d_state ui_state;
 
@@ -116,7 +118,7 @@ struct renderer_state
     game_input *input;
 };
 
-static renderer_state GlobalRendererState;
+static renderer_state _GlobalRendererState;
 
 void
 draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, ui2d_push_context *pushctx)
@@ -131,8 +133,8 @@ draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     float screen_pixel_size[] =
     {
-        (float)GlobalRendererState.input->window.width,
-        (float)GlobalRendererState.input->window.height,
+        (float)state->input->window.width,
+        (float)state->input->window.height,
     };
     glUniform2fv(ui2d_program->screen_pixel_size_id, 1, (float *)&screen_pixel_size);
 
@@ -261,19 +263,20 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
     return true;
 }
 
-bool program_init(hajonta_thread_context *ctx, platform_memory *memory)
+bool
+program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
 {
-    imgui_program_struct *program = &GlobalRendererState.imgui_program;
+    imgui_program_struct *program = &state->imgui_program;
     imgui_program(program, ctx, memory);
 
-    GlobalRendererState.tex_id = glGetUniformLocation(program->program, "tex");
+    state->tex_id = glGetUniformLocation(program->program, "tex");
 
-    glGenBuffers(1, &GlobalRendererState.vbo);
-    glGenBuffers(1, &GlobalRendererState.ibo);
+    glGenBuffers(1, &state->vbo);
+    glGenBuffers(1, &state->ibo);
 
-    glGenVertexArrays(1, &GlobalRendererState.vao);
-    glBindVertexArray(GlobalRendererState.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, GlobalRendererState.vbo);
+    glGenVertexArrays(1, &state->vao);
+    glBindVertexArray(state->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     glEnableVertexAttribArray((GLuint)program->a_position_id);
     glEnableVertexAttribArray((GLuint)program->a_uv_id);
     glEnableVertexAttribArray((GLuint)program->a_color_id);
@@ -287,13 +290,18 @@ bool program_init(hajonta_thread_context *ctx, platform_memory *memory)
     int width, height;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
-    glGenTextures(1, &GlobalRendererState.font_texture);
-    glBindTexture(GL_TEXTURE_2D, GlobalRendererState.font_texture);
+    glGenTextures(1, &state->font_texture);
+    glBindTexture(GL_TEXTURE_2D, state->font_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-    io.Fonts->TexID = (void *)(intptr_t)GlobalRendererState.font_texture;
+    io.Fonts->TexID = (void *)(intptr_t)state->font_texture;
+
+    glGenTextures(1, &state->white_texture);
+    glBindTexture(GL_TEXTURE_2D, state->white_texture);
+    uint32_t color32 = 0xffffffff;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &color32);
 
     return true;
 }
@@ -309,14 +317,14 @@ RENDERER_SETUP(renderer_setup)
     memory->render_lists_count = 0;
 
     memory->imgui_state = ImGui::GetInternalState();
-    if (!GlobalRendererState.initialized)
+    if (!_GlobalRendererState.initialized)
     {
-        program_init(ctx, memory);
-        hassert(ui2d_program_init(ctx, memory, &GlobalRendererState));
-        GlobalRendererState.initialized = true;
+        program_init(ctx, memory, &_GlobalRendererState);
+        hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
+        _GlobalRendererState.initialized = true;
     }
 
-    GlobalRendererState.input = input;
+    _GlobalRendererState.input = input;
 
     ImGuiIO& io = ImGui::GetIO();
 
@@ -336,7 +344,7 @@ RENDERER_SETUP(renderer_setup)
     return true;
 }
 
-void render_draw_lists(ImDrawData* draw_data)
+void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 {
     // Setup render state: alpha-blending enabled, no face culling, no depth testing, scissor enabled
     glEnable(GL_BLEND);
@@ -362,20 +370,20 @@ void render_draw_lists(ImDrawData* draw_data)
         { 0.0f,                  0.0f,                  -1.0f, 0.0f },
         {-1.0f,                  1.0f,                   0.0f, 1.0f },
     };
-    glUseProgram(GlobalRendererState.imgui_program.program);
-    glUniform1i(GlobalRendererState.tex_id, 0);
-    glUniformMatrix4fv(GlobalRendererState.imgui_program.u_projection_id, 1, GL_FALSE, &ortho_projection[0][0]);
-    glBindVertexArray(GlobalRendererState.vao);
+    glUseProgram(state->imgui_program.program);
+    glUniform1i(state->tex_id, 0);
+    glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, &ortho_projection[0][0]);
+    glBindVertexArray(state->vao);
 
     for (int n = 0; n < draw_data->CmdListsCount; n++)
     {
         const ImDrawList* cmd_list = draw_data->CmdLists[n];
         const ImDrawIdx* idx_buffer_offset = 0;
 
-        glBindBuffer(GL_ARRAY_BUFFER, GlobalRendererState.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(cmd_list->VtxBuffer.size() * sizeof(ImDrawVert)), (GLvoid*)&cmd_list->VtxBuffer.front(), GL_STREAM_DRAW);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, GlobalRendererState.ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(cmd_list->IdxBuffer.size() * sizeof(ImDrawIdx)), (GLvoid*)&cmd_list->IdxBuffer.front(), GL_STREAM_DRAW);
 
         for (const ImDrawCmd* pcmd = cmd_list->CmdBuffer.begin(); pcmd != cmd_list->CmdBuffer.end(); pcmd++)
@@ -396,8 +404,87 @@ void render_draw_lists(ImDrawData* draw_data)
     glBindVertexArray(0);
 }
 
+void
+draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, render_entry_type_quad *quad)
+{
+
+    window_data *window = &state->input->window;
+    glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
+    const float ortho_projection[4][4] =
+    {
+        /*
+        { 2.0f/window->width, 0.0f,                0.0f, 0.0f },
+        { 0.0f,               2.0f/window->height, 0.0f, 0.0f },
+        { 0.0f,               0.0f,                1.0f, 0.0f },
+        { 0.0f,               0.0f,                0.0f, 1.0f },
+        */
+        /*
+        { 1.0f, 0.0f, 0.0f, 0.0f },
+        { 0.0f, 1.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 1.0f, 0.0f },
+        { 0.0f, 0.0f, 0.0f, 1.0f },
+        */
+    };
+    float ratio = (float)window->width / (float)window->height;
+    m4 projection = m4orthographicprojection(1.0f, -1.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+
+    glUseProgram(state->imgui_program.program);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(state->tex_id, 0);
+    glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glBindVertexArray(state->vao);
+
+    uint32_t col = 0xff000000;
+    col |= (uint32_t)(quad->color.z * 255.0f) << 16;
+    col |= (uint32_t)(quad->color.y * 255.0f) << 8;
+    col |= (uint32_t)(quad->color.x * 255.0f) << 0;
+    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    struct
+    {
+        v2 pos;
+        v2 uv;
+        uint32_t col;
+    } vertices[] = {
+        {
+            { quad->position.x, quad->position.y, },
+            { 0.0, 0.0 },
+            col,
+        },
+        {
+            { quad->position.x + quad->size.x, quad->position.y, },
+            { 1.0, 0.0 },
+            col,
+        },
+        {
+            { quad->position.x + quad->size.x, quad->position.y + quad->size.y, },
+            { 1.0, 1.0 },
+            col,
+        },
+        {
+            { quad->position.x, quad->position.y + quad->size.y, },
+            { 0.0, 1.0 },
+            col,
+        },
+    };
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+
+    uint32_t indices[] = {
+        0, 1, 2,
+        2, 3, 0,
+    };
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
+
+    glBindTexture(GL_TEXTURE_2D, state->white_texture);
+    glScissor(0, 0, window->width, window->height);
+    glDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, 0);
+
+    glBindVertexArray(0);
+}
+
 RENDERER_RENDER(renderer_render)
 {
+    renderer_state *state = &_GlobalRendererState;
     hassert(memory->render_lists_count > 0);
     for (uint32_t i = 0; i < memory->render_lists_count; ++i)
     {
@@ -412,30 +499,35 @@ RENDERER_RENDER(renderer_render)
             {
                 case render_entry_type::clear:
                 {
-                    render_entry_type_clear *clear = (render_entry_type_clear *)header;
-                    element_size = sizeof(*clear);
-                    v4 *color = &clear->color;
-                    glScissor(0, 0, GlobalRendererState.input->window.width, GlobalRendererState.input->window.height);
+                    ExtractRenderElementWithSize(clear, item, header, element_size);
+                    v4 *color = &item->color;
+                    glScissor(0, 0, state->input->window.width, state->input->window.height);
                     glClearColor(color->r, color->g, color->b, color->a);
                     glClear(GL_COLOR_BUFFER_BIT);
                 } break;
                 case render_entry_type::ui2d:
                 {
-                    render_entry_type_ui2d *ui2d = (render_entry_type_ui2d *)header;
-                    draw_ui2d(ctx, memory, &GlobalRendererState, ui2d->pushctx);
+                    ExtractRenderElementWithSize(ui2d, item, header, element_size);
+                    draw_ui2d(ctx, memory, state, item->pushctx);
+                } break;
+                case render_entry_type::quad:
+                {
+                    ExtractRenderElementWithSize(quad, item, header, element_size);
+                    draw_quad(ctx, memory, state, item);
                 } break;
                 default:
                 {
                     hassert(!"Unhandled render entry type")
                 };
             }
+            hassert(element_size > 0);
             offset += element_size;
         }
     }
 
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
-    render_draw_lists(draw_data);
+    render_draw_lists(draw_data, state);
 
     glErrorAssert();
 

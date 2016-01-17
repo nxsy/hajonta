@@ -24,6 +24,7 @@ struct game_state
     ui2d_push_context pushctx;
 
     float clear_color[3];
+    float quad_color[3];
 
     uint32_t mouse_texture;
 };
@@ -55,6 +56,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     ImGui::Text("Hello, world!");
     ImGui::ColorEdit3("Clear colour", state->clear_color);
+    ImGui::ColorEdit3("Quad colour", state->quad_color);
 
     v4 colorv4 = {
         state->clear_color[0],
@@ -77,6 +79,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     q.t1 = 1;
     push_quad(pushctx, q, state->mouse_texture, 0);
     PushUi2d(&state->render_list, &state->pushctx);
+
+    v4 quad_color = {
+        state->quad_color[0],
+        state->quad_color[1],
+        state->quad_color[2],
+        1.0f,
+    };
+    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color);
 
     AddRenderList(memory, &state->render_list);
 }
