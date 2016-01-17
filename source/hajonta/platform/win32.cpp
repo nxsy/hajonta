@@ -311,6 +311,7 @@ handle_win32_messages(win32_state *state)
                 char c = 0;
                 switch (message.wParam)
                 {
+                    /*
                     case 0x08: // backspace
                     {
                     } break;
@@ -326,6 +327,7 @@ handle_win32_messages(win32_state *state)
                     case 0x0D: // carriage return
                     {
                     } break;
+                    */
                     case '`':
                     {
                         state->keyboard_mode = false;
@@ -1178,6 +1180,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
         {
             state.stopping = 1;
         }
+        state.keyboard_mode = memory.debug_keyboard;
     }
 
     if (state.stop_reason)

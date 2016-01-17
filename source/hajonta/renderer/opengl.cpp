@@ -335,11 +335,44 @@ RENDERER_SETUP(renderer_setup)
 
     io.MousePos = ImVec2((float)input->mouse.x, (float)input->mouse.y);
     io.MouseDown[0] = input->mouse.buttons.left.ended_down;
-    io.MouseDown[1] = 0;
-    io.MouseDown[2] = 0;
+    io.MouseDown[1] = input->mouse.buttons.middle.ended_down;
+    io.MouseDown[2] = input->mouse.buttons.right.ended_down;
     io.MouseWheel = 0.0f;
 
+    io.KeysDown[8] = false;
+    io.KeyMap[ImGuiKey_Backspace] = 8;
+
+    if (memory->debug_keyboard)
+    {
+        keyboard_input *k = input->keyboard_inputs;
+        for (uint32_t idx = 0;
+                idx < harray_count(input->keyboard_inputs);
+                ++idx)
+        {
+            keyboard_input *ki = k + idx;
+            if (ki->type == keyboard_input_type::ASCII)
+            {
+                if (ki->ascii == 8)
+                {
+                     io.KeysDown[ki->ascii] = true;
+                }
+                else
+                {
+                    io.AddInputCharacter((ImWchar)ki->ascii);
+                }
+            }
+        }
+    }
+
     ImGui::NewFrame();
+
+    if (io.WantCaptureKeyboard)
+    {
+        memory->debug_keyboard = true;
+    } else
+    {
+        memory->debug_keyboard = false;
+    }
 
     return true;
 }
