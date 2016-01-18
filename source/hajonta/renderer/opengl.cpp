@@ -100,17 +100,23 @@ struct ui2d_state
     uint32_t mouse_texture;
 };
 
-struct asset_to_texture
+struct asset_file_to_texture
 {
-    uint32_t asset_id;
+    int32_t asset_file_id;
     int32_t texture_offset;
+};
+
+struct
+asset_file
+{
+    char asset_file_path[1024];
 };
 
 struct asset
 {
     uint32_t asset_id;
     char asset_name[100];
-    char asset_path[1024];
+    int32_t asset_file_id;
     v2 st0;
     v2 st1;
 };
@@ -134,21 +140,23 @@ struct renderer_state
 
     uint32_t textures[16];
     uint32_t texture_count;
-    asset_to_texture texture_lookup[16];
+    asset_file_to_texture texture_lookup[16];
     uint32_t texture_lookup_count;
 
+    asset_file asset_files[16];
+    uint32_t asset_file_count;
     asset assets[16];
     uint32_t asset_count;
 };
 
 int32_t
-lookup_asset_to_texture(renderer_state *state, uint32_t asset_id)
+lookup_asset_file_to_texture(renderer_state *state, int32_t asset_file_id)
 {
     int32_t result = -1;
     for (uint32_t i = 0; i < state->texture_lookup_count; ++i)
     {
-        asset_to_texture *lookup = state->texture_lookup + i;
-        if (lookup->asset_id == asset_id)
+        asset_file_to_texture *lookup = state->texture_lookup + i;
+        if (lookup->asset_file_id == asset_file_id)
         {
             result = lookup->texture_offset;
             break;
@@ -158,12 +166,12 @@ lookup_asset_to_texture(renderer_state *state, uint32_t asset_id)
 }
 
 void
-add_asset_texture_lookup(renderer_state *state, uint32_t asset_id, int32_t texture_offset)
+add_asset_file_texture_lookup(renderer_state *state, int32_t asset_file_id, int32_t texture_offset)
 {
     hassert(state->texture_lookup_count < harray_count(state->texture_lookup));
-    asset_to_texture *lookup = state->texture_lookup + state->texture_lookup_count;
+    asset_file_to_texture *lookup = state->texture_lookup + state->texture_lookup_count;
     ++state->texture_lookup_count;
-    lookup->asset_id = asset_id;
+    lookup->asset_file_id = asset_file_id;
     lookup->texture_offset = texture_offset;
 }
 
@@ -355,6 +363,20 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     return true;
 }
 
+int32_t
+add_asset_file(renderer_state *state, char *asset_file_path)
+{
+    int32_t result = -1;
+    if (state->asset_file_count < harray_count(state->asset_files))
+    {
+        asset_file *f = state->asset_files + state->asset_file_count;
+        result = (int32_t)state->asset_file_count;
+        ++state->asset_file_count;
+        strcpy(f->asset_file_path, asset_file_path);
+    }
+    return result;
+}
+
 RENDERER_SETUP(renderer_setup)
 {
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
@@ -372,23 +394,25 @@ RENDERER_SETUP(renderer_setup)
         program_init(ctx, memory, &_GlobalRendererState);
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
+        int32_t mouse_cursor_file_id = add_asset_file(state, "ui/slick_arrows/slick_arrow-delta.png");
+        asset_file *asset_file0 = state->asset_files + mouse_cursor_file_id;
         asset *asset0 = state->assets;
         asset0->asset_id = 0;
         strcpy(asset0->asset_name, "mouse_cursor");
-        strcpy(asset0->asset_path, "ui/slick_arrows/slick_arrow-delta.png");
+        asset0->asset_file_id = mouse_cursor_file_id;
         asset0->st0 = {0.0f, 0.0f};
         asset0->st1 = {1.0f, 1.0f};
 
         uint8_t image[256];
         int32_t x, y;
-        bool loaded = load_texture_asset(ctx, memory, state, asset0->asset_path, image, sizeof(image), &x, &y, state->textures + 0, GL_TEXTURE_2D);
+        bool loaded = load_texture_asset(ctx, memory, state, asset_file0->asset_file_path, image, sizeof(image), &x, &y, state->textures + 0, GL_TEXTURE_2D);
         if (!loaded)
         {
-            load_texture_asset_failed(ctx, memory, asset0->asset_path);
+            load_texture_asset_failed(ctx, memory, asset_file0->asset_file_path);
             return false;
         }
         ++state->texture_count;
-        add_asset_texture_lookup(state, asset0->asset_id, (int32_t)state->textures[0]);
+        add_asset_file_texture_lookup(state, mouse_cursor_file_id, (int32_t)state->textures[0]);
     }
 
     _GlobalRendererState.input = input;
@@ -525,7 +549,7 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     if (quad->asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + quad->asset_descriptor_id;
-        int32_t texture_lookup = lookup_asset_to_texture(state, descriptor->asset_id);
+        int32_t texture_lookup = lookup_asset_file_to_texture(state, state->assets[descriptor->asset_id].asset_file_id);
         if (texture_lookup >= 0)
         {
             texture = (uint32_t)texture_lookup;
