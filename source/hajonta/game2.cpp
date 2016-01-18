@@ -19,7 +19,7 @@ struct game_state
 
     uint8_t render_buffer[4 * 1024 * 1024];
     render_entry_list render_list;
-    m4 matrices[1];
+    m4 matrices[2];
     ui2d_vertex_format vertices[6000];
     uint32_t elements[6000 / 4 * 6];
     uint32_t textures[10];
@@ -46,6 +46,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     float ratio = (float)input->window.width / (float)input->window.height;
     state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {-ratio * 10, -10.0f}, {ratio * 10, 10.0f});
+    state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
 
     RenderListReset(state->render_list);
 
@@ -94,6 +95,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMatrices(&state->render_list, harray_count(state->matrices), state->matrices);
     PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color, -1);
     PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color_2, 0);
+
+    v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
+    v3 mouse_size = {16.0f, -16.0f, 0.0f};
+    PushQuad(&state->render_list, mouse_bl, mouse_size, quad_color_2, 1);
 
     AddRenderList(memory, &state->render_list);
 }
