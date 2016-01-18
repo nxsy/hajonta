@@ -100,6 +100,21 @@ struct ui2d_state
     uint32_t mouse_texture;
 };
 
+struct asset_to_texture
+{
+    uint32_t asset_id;
+    int32_t texture_offset;
+};
+
+struct asset
+{
+    uint32_t asset_id;
+    char asset_name[100];
+    char asset_path[1024];
+    v2 st0;
+    v2 st1;
+};
+
 struct renderer_state
 {
     bool initialized;
@@ -116,7 +131,41 @@ struct renderer_state
 
     char bitmap_scratch[4096 * 4096 * 4];
     game_input *input;
+
+    uint32_t textures[16];
+    uint32_t texture_count;
+    asset_to_texture texture_lookup[16];
+    uint32_t texture_lookup_count;
+
+    asset assets[16];
+    uint32_t asset_count;
 };
+
+int32_t
+lookup_asset_to_texture(renderer_state *state, uint32_t asset_id)
+{
+    int32_t result = -1;
+    for (uint32_t i = 0; i < state->texture_lookup_count; ++i)
+    {
+        asset_to_texture *lookup = state->texture_lookup + i;
+        if (lookup->asset_id == asset_id)
+        {
+            result = lookup->texture_offset;
+            break;
+        }
+    }
+    return result;
+}
+
+void
+add_asset_texture_lookup(renderer_state *state, uint32_t asset_id, int32_t texture_offset)
+{
+    hassert(state->texture_lookup_count < harray_count(state->texture_lookup));
+    asset_to_texture *lookup = state->texture_lookup + state->texture_lookup_count;
+    ++state->texture_lookup_count;
+    lookup->asset_id = asset_id;
+    lookup->texture_offset = texture_offset;
+}
 
 static renderer_state _GlobalRendererState;
 
@@ -315,6 +364,7 @@ RENDERER_SETUP(renderer_setup)
     }
 #endif
     memory->render_lists_count = 0;
+    renderer_state *state = &_GlobalRendererState;
 
     memory->imgui_state = ImGui::GetInternalState();
     if (!_GlobalRendererState.initialized)
@@ -322,6 +372,23 @@ RENDERER_SETUP(renderer_setup)
         program_init(ctx, memory, &_GlobalRendererState);
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
+        asset *asset0 = state->assets;
+        asset0->asset_id = 0;
+        strcpy(asset0->asset_name, "mouse_cursor");
+        strcpy(asset0->asset_path, "ui/slick_arrows/slick_arrow-delta.png");
+        asset0->st0 = {0.0f, 0.0f};
+        asset0->st1 = {1.0f, 1.0f};
+
+        uint8_t image[256];
+        int32_t x, y;
+        bool loaded = load_texture_asset(ctx, memory, state, asset0->asset_path, image, sizeof(image), &x, &y, state->textures + 0, GL_TEXTURE_2D);
+        if (!loaded)
+        {
+            load_texture_asset_failed(ctx, memory, asset0->asset_path);
+            return false;
+        }
+        ++state->texture_count;
+        add_asset_texture_lookup(state, asset0->asset_id, (int32_t)state->textures[0]);
     }
 
     _GlobalRendererState.input = input;
@@ -438,7 +505,7 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 }
 
 void
-draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, render_entry_type_quad *quad)
+draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
 {
 
     window_data *window = &state->input->window;
@@ -452,6 +519,17 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     else
     {
         projection = matrices[quad->matrix_id];
+    }
+
+    uint32_t texture = state->white_texture;
+    if (quad->asset_descriptor_id != -1)
+    {
+        asset_descriptor *descriptor = descriptors + quad->asset_descriptor_id;
+        int32_t texture_lookup = lookup_asset_to_texture(state, descriptor->asset_id);
+        if (texture_lookup >= 0)
+        {
+            texture = (uint32_t)texture_lookup;
+        }
     }
 
     glUseProgram(state->imgui_program.program);
@@ -501,7 +579,7 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
 
-    glBindTexture(GL_TEXTURE_2D, state->white_texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
     glScissor(0, 0, window->width, window->height);
     glDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, 0);
 
@@ -519,7 +597,9 @@ RENDERER_RENDER(renderer_render)
         hassert(render_list->element_count > 0);
 
         m4 *matrices = {};
+        asset_descriptor *asset_descriptors = {};
         uint32_t matrix_count = 0;
+        uint32_t asset_descriptor_count = 0;
 
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
         {
@@ -545,7 +625,8 @@ RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(quad, item, header, element_size);
                     hassert(matrix_count > 0 || item->matrix_id == -1);
-                    draw_quad(ctx, memory, state, matrices, item);
+                    hassert(asset_descriptor_count > 0 || item->asset_descriptor_id == -1);
+                    draw_quad(ctx, memory, state, matrices, asset_descriptors, item);
                 } break;
                 default:
                 {
@@ -556,6 +637,12 @@ RENDERER_RENDER(renderer_render)
                     ExtractRenderElementWithSize(matrices, item, header, element_size);
                     matrices = item->matrices;
                     matrix_count = item->count;
+                } break;
+                case render_entry_type::asset_descriptors:
+                {
+                    ExtractRenderElementWithSize(asset_descriptors, item, header, element_size);
+                    asset_descriptors = item->descriptors;
+                    asset_descriptor_count = item->count;
                 } break;
             }
             hassert(element_size > 0);

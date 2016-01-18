@@ -297,6 +297,7 @@ render_entry_type
     ui2d,
     quad,
     matrices,
+    asset_descriptors,
 };
 
 struct
@@ -328,6 +329,7 @@ render_entry_type_quad
     v3 size;
     v4 color;
     int32_t matrix_id;
+    int32_t asset_descriptor_id;
 };
 
 struct
@@ -336,6 +338,21 @@ render_entry_type_matrices
     render_entry_header header;
     uint32_t count;
     m4 *matrices;
+};
+
+struct
+asset_descriptor
+{
+    const char *asset_name;
+    uint32_t asset_id;
+};
+
+struct
+render_entry_type_asset_descriptors
+{
+    render_entry_header header;
+    uint32_t count;
+    asset_descriptor *descriptors;
 };
 
 struct
@@ -395,7 +412,7 @@ PushUi2d(render_entry_list *list, ui2d_push_context *pushctx)
 }
 
 inline void
-PushQuad(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id)
+PushQuad(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id, int32_t asset_descriptor_id)
 {
      render_entry_type_quad *entry = PushRenderElement(list, quad);
      if (entry)
@@ -404,6 +421,7 @@ PushQuad(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix
          entry->size = size;
          entry->color = color;
          entry->matrix_id = matrix_id;
+         entry->asset_descriptor_id = asset_descriptor_id;
      }
 }
 
@@ -415,6 +433,17 @@ PushMatrices(render_entry_list *list, uint32_t count, m4 *matrices)
      {
          entry->count = count;
          entry->matrices = matrices;
+     }
+}
+
+inline void
+PushAssetDescriptors(render_entry_list *list, uint32_t count, asset_descriptor *descriptors)
+{
+     render_entry_type_asset_descriptors *entry = PushRenderElement(list, asset_descriptors);
+     if (entry)
+     {
+         entry->count = count;
+         entry->descriptors = descriptors;
      }
 }
 

@@ -20,6 +20,7 @@ struct game_state
     uint8_t render_buffer[4 * 1024 * 1024];
     render_entry_list render_list;
     m4 matrices[2];
+    asset_descriptor assets[1];
     ui2d_vertex_format vertices[6000];
     uint32_t elements[6000 / 4 * 6];
     uint32_t textures[10];
@@ -38,6 +39,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if (!memory->initialized)
     {
         memory->initialized = 1;
+        state->assets[0].asset_name = "mouse_cursor";
         RenderListBuffer(state->render_list, state->render_buffer);
     }
     if (memory->imgui_state)
@@ -93,12 +95,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     };
     v4 quad_color_2 = v4sub({1,1,1,2}, quad_color);
     PushMatrices(&state->render_list, harray_count(state->matrices), state->matrices);
-    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color, -1);
-    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color_2, 0);
+    PushAssetDescriptors(&state->render_list, harray_count(state->assets), state->assets);
+
+    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color, -1, -1);
+    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color_2, 0, -1);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->render_list, mouse_bl, mouse_size, quad_color_2, 1);
+    PushQuad(&state->render_list, mouse_bl, mouse_size, quad_color_2, 1, 0);
 
     AddRenderList(memory, &state->render_list);
 }
