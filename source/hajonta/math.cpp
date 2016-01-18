@@ -723,6 +723,9 @@ m4orthographicprojection(float near_, float far_, v2 bottom_left, v2 top_right)
     result.cols[0].E[0] = 2.0f / (r - l);
     result.cols[1].E[1] = 2.0f / (t - b);
     result.cols[2].E[2] = -2.0f / (far_ - near_);
+    result.cols[3].E[0] = -(r + l) / (r - l);
+    result.cols[3].E[1] = -(t + b) / (t - b);
+    result.cols[3].E[2] = -(far_ + near_) / (far_ - near_);
     result.cols[3].E[3] = 1.0f;
     return result;
 }
