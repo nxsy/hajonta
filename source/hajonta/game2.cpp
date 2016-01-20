@@ -6,11 +6,30 @@
 #endif
 #include "imgui.cpp"
 #include "imgui_draw.cpp"
+#include "imgui_demo.cpp"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
 
 #include "hajonta/math.cpp"
+
+struct demo_context
+{
+    bool switched;
+};
+
+#define DEMO(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output, demo_context *context)
+typedef DEMO(demo_func);
+
+struct demo_data {
+    const char *name;
+    demo_func *func;
+};
+
+struct demo_b_state
+{
+    bool show_window;
+};
 
 struct game_state
 {
@@ -18,7 +37,7 @@ struct game_state
 
     uint8_t render_buffer[4 * 1024 * 1024];
     render_entry_list render_list;
-    m4 matrices[2];
+    m4 matrices[1];
     asset_descriptor assets[1];
     uint32_t elements[6000 / 4 * 6];
     uint32_t textures[10];
@@ -26,8 +45,19 @@ struct game_state
     float clear_color[3];
     float quad_color[3];
 
+    int32_t active_demo;
+
+    demo_b_state b;
+
     uint32_t mouse_texture;
 };
+
+DEMO(demo_b)
+{
+    game_state *state = (game_state *)memory->memory;
+    ImGui::ShowTestWindow(&state->b.show_window);
+
+}
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
@@ -43,15 +73,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
-    float ratio = (float)input->window.width / (float)input->window.height;
-    state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {-ratio * 10, -10.0f}, {ratio * 10, 10.0f});
-    state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
+    state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
 
     RenderListReset(state->render_list);
 
-    ImGui::Text("Hello, world!");
     ImGui::ColorEdit3("Clear colour", state->clear_color);
-    ImGui::ColorEdit3("Quad colour", state->quad_color);
+    demo_data demoes[] = {
+        {
+            "none",
+            0,
+        },
+        {
+            "b",
+            &demo_b,
+        },
+    };
+    int32_t previous_demo = state->active_demo;
+    for (int32_t i = 0; i < harray_count(demoes); ++i)
+    {
+        ImGui::RadioButton(demoes[i].name, &state->active_demo, i);
+    }
+
+    if (state->active_demo)
+    {
+        demo_context demo_ctx = {};
+        demo_ctx.switched = previous_demo != state->active_demo;
+         demoes[state->active_demo].func(ctx, memory, input, sound_output, &demo_ctx);
+    }
 
     v4 colorv4 = {
         state->clear_color[0],
@@ -62,22 +110,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     PushClear(&state->render_list, colorv4);
 
-    v4 quad_color = {
-        state->quad_color[0],
-        state->quad_color[1],
-        state->quad_color[2],
-        1.0f,
-    };
-    v4 quad_color_2 = v4sub({1,1,1,2}, quad_color);
     PushMatrices(&state->render_list, harray_count(state->matrices), state->matrices);
     PushAssetDescriptors(&state->render_list, harray_count(state->assets), state->assets);
 
-    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color, -1, -1);
-    PushQuad(&state->render_list, {-0.5, -0.5, -0.5 }, {1.0f, 1.0f, 1.0f}, quad_color_2, 0, -1);
-
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->render_list, mouse_bl, mouse_size, quad_color_2, 1, 0);
+    PushQuad(&state->render_list, mouse_bl, mouse_size, {1,1,1,1}, 0, 0);
 
     AddRenderList(memory, &state->render_list);
 }
