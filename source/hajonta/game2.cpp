@@ -10,7 +10,6 @@
 #pragma warning(pop)
 #endif
 
-#include "hajonta/ui/ui2d.cpp"
 #include "hajonta/math.cpp"
 
 struct game_state
@@ -21,10 +20,8 @@ struct game_state
     render_entry_list render_list;
     m4 matrices[2];
     asset_descriptor assets[1];
-    ui2d_vertex_format vertices[6000];
     uint32_t elements[6000 / 4 * 6];
     uint32_t textures[10];
-    ui2d_push_context pushctx;
 
     float clear_color[3];
     float quad_color[3];
@@ -52,15 +49,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     RenderListReset(state->render_list);
 
-    ui2d_push_context *pushctx = &state->pushctx;
-    state->pushctx = {};
-    pushctx->vertices = state->vertices;
-    pushctx->max_vertices = harray_count(state->vertices);
-    pushctx->elements = state->elements;
-    pushctx->max_elements = harray_count(state->elements);
-    pushctx->textures = state->textures;
-    pushctx->max_textures = harray_count(state->textures);
-
     ImGui::Text("Hello, world!");
     ImGui::ColorEdit3("Clear colour", state->clear_color);
     ImGui::ColorEdit3("Quad colour", state->quad_color);
@@ -73,19 +61,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     };
 
     PushClear(&state->render_list, colorv4);
-
-    stbtt_aligned_quad q = {};
-    q.x0 = (float)input->mouse.x;
-    q.x1 = (float)input->mouse.x + 16;
-
-    q.y0 = (float)(input->window.height - input->mouse.y);
-    q.y1 = (float)(input->window.height - input->mouse.y) - 16;
-    q.s0 = 0;
-    q.s1 = 1;
-    q.t0 = 0;
-    q.t1 = 1;
-    push_quad(pushctx, q, state->mouse_texture, 0);
-    PushUi2d(&state->render_list, &state->pushctx);
 
     v4 quad_color = {
         state->quad_color[0],
