@@ -1,3 +1,5 @@
+#include "hajonta/math.h"
+
 struct ui2d_vertex_format
 {
     float position[2];

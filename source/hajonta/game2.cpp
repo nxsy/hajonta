@@ -1,4 +1,5 @@
 #include "hajonta/platform/common.h"
+#include "hajonta/renderer/common.h"
 
 #if defined(_MSC_VER)
 #pragma warning(push, 4)

@@ -5,6 +5,8 @@
 #include <stdio.h>
 
 #include "hajonta/platform/common.h"
+#include "hajonta/renderer/common.h"
+
 #include "hajonta/thirdparty/glext.h"
 #define HGLD(b,a) extern PFNGL##a##PROC gl##b;
 extern "C" {
