@@ -36,6 +36,7 @@ struct win32_state
 
     char binary_path[MAX_PATH];
     char asset_path[MAX_PATH];
+    char arg_asset_path[MAX_PATH];
 
     game_input *new_input;
     game_input *old_input;
@@ -597,10 +598,24 @@ PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 PLATFORM_LOAD_ASSET(win32_load_asset)
 {
     win32_state *state = (win32_state *)ctx;
-    char full_pathname[MAX_PATH];
-    _snprintf(full_pathname, sizeof(full_pathname), "%s\\%s", state->asset_path, asset_path);
 
-    HANDLE handle = CreateFile(full_pathname, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    char *asset_folder_paths[] = {
+        state->asset_path,
+        state->arg_asset_path,
+    };
+
+    HANDLE handle = INVALID_HANDLE_VALUE;
+    for (uint32_t i = 0; i < harray_count(asset_folder_paths); ++i)
+    {
+        char *asset_folder_path = asset_folder_paths[i];
+        char full_pathname[MAX_PATH];
+        _snprintf(full_pathname, sizeof(full_pathname), "%s\\%s", asset_folder_path, asset_path);
+        handle = CreateFile(full_pathname, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+        if (handle != INVALID_HANDLE_VALUE)
+        {
+            break;
+        }
+    }
     if (handle == INVALID_HANDLE_VALUE)
     {
         MessageBoxA(0, "Failed", 0, MB_OK | MB_ICONSTOP);
@@ -608,23 +623,16 @@ PLATFORM_LOAD_ASSET(win32_load_asset)
     }
     LARGE_INTEGER _size;
     GetFileSizeEx(handle, &_size);
-    if (_size.QuadPart != size)
+    if (_size.QuadPart > size)
     {
         char msg[1024];
-        sprintf(msg, "File size mismatch: Got %lld, expected %d", _size.QuadPart, size);
+        sprintf(msg, "File size mismatch: Got %lld, max %d", _size.QuadPart, size);
         MessageBoxA(0, msg, 0, MB_OK | MB_ICONSTOP);
         return false;
     }
     DWORD bytes_read;
     if (!ReadFile(handle, dest, size, &bytes_read, 0))
     {
-        return false;
-    }
-    if (bytes_read != size)
-    {
-        char msg[1024];
-        sprintf(msg, "File read mismatch: Got %ld, expected %d", bytes_read, size);
-        MessageBoxA(0, msg, 0, MB_OK | MB_ICONSTOP);
         return false;
     }
     return true;
@@ -930,6 +938,9 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 #else
     strcat(renderer_library_path, "renderer.dll");
 #endif
+
+    GetEnvironmentVariable("HAJONTA_ASSET_PATH", state.arg_asset_path, sizeof(state.arg_asset_path));
+
     if (!find_asset_path(&state))
     {
         MessageBoxA(0, "Failed to locate asset path", 0, MB_OK | MB_ICONSTOP);
