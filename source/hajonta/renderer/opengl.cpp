@@ -285,6 +285,9 @@ load_texture_asset(
         *x, *y, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     return true;
 }
 void
@@ -440,14 +443,7 @@ add_asset(renderer_state *state, char *asset_name, char *asset_file_name, v2 st0
     int32_t asset_file_id = add_asset_file(state, asset_file_name);
     if (asset_file_id >= 0)
     {
-        asset *asset0 = state->assets + state->asset_count;
-        asset0->asset_id = 0;
-        strcpy(asset0->asset_name, asset_name);
-        asset0->asset_file_id = asset_file_id;
-        asset0->st0 = st0;
-        asset0->st1 = st1;
-        result = (int32_t)state->asset_count;
-        ++state->asset_count;
+        result = add_asset(state, asset_name, asset_file_id, st0, st1);
     }
     return result;
 }
@@ -472,6 +468,7 @@ RENDERER_SETUP(renderer_setup)
         state->generation_id = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
+        add_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", {0.0f / 967.0f, 15.0f / 525.0f}, {15.0f / 967.0f, 0.0f / 525.0f});
     }
 
     _GlobalRendererState.input = input;
@@ -624,13 +621,18 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     }
 
     uint32_t texture = state->white_texture;
+    v2 st0 = {0, 0};
+    v2 st1 = {1, 1};
     if (quad->asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + quad->asset_descriptor_id;
         update_asset_descriptor_asset_id(state, descriptor);
         if (descriptor->asset_id >= 0)
         {
-            int32_t asset_file_id = state->assets[descriptor->asset_id].asset_file_id;
+            asset *descriptor_asset = state->assets + descriptor->asset_id;
+            st0 = descriptor_asset->st0;
+            st1 = descriptor_asset->st1;
+            int32_t asset_file_id = descriptor_asset->asset_file_id;
             int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
             if (texture_lookup >= 0)
             {
@@ -666,22 +668,22 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     } vertices[] = {
         {
             { quad->position.x, quad->position.y, },
-            { 0.0, 0.0 },
+            { st0.x, st0.y },
             col,
         },
         {
             { quad->position.x + quad->size.x, quad->position.y, },
-            { 1.0, 0.0 },
+            { st1.x, st0.y },
             col,
         },
         {
             { quad->position.x + quad->size.x, quad->position.y + quad->size.y, },
-            { 1.0, 1.0 },
+            { st1.x, st1.y },
             col,
         },
         {
             { quad->position.x, quad->position.y + quad->size.y, },
-            { 0.0, 1.0 },
+            { st0.x, st1.y },
             col,
         },
     };
