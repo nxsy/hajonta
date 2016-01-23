@@ -448,6 +448,24 @@ add_asset(renderer_state *state, char *asset_name, char *asset_file_name, v2 st0
     return result;
 }
 
+int32_t
+add_tilemap_asset(renderer_state *state, char *asset_name, char *asset_file_name, uint32_t width, uint32_t height, uint32_t tile_width, uint32_t tile_height, uint32_t spacing, uint32_t tile_id)
+{
+    uint32_t tiles_wide = (width + spacing) / (tile_width + spacing);
+    uint32_t tile_x_position = tile_id % tiles_wide;
+    uint32_t tile_y_position = tile_id / tiles_wide;
+    float tile_x_base = tile_x_position * (tile_width + spacing) / (float)width;
+    float tile_y_base = tile_y_position * (tile_height + spacing) / (float)height;
+    float tile_x_offset = (float)(tile_width - 1) / width;
+    float tile_y_offset = (float)(tile_height - 1) / height;
+    v2 st0 = { tile_x_base, tile_y_base + tile_y_offset };
+    v2 st1 = { tile_x_base + tile_x_offset, tile_y_base };
+
+    //add_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", {0.0f / 967.0f, 15.0f / 525.0f}, {15.0f / 967.0f, 0.0f / 525.0f});
+
+    return add_asset(state, asset_name, asset_file_name, st0, st1);
+}
+
 RENDERER_SETUP(renderer_setup)
 {
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
@@ -468,7 +486,8 @@ RENDERER_SETUP(renderer_setup)
         state->generation_id = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
-        add_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", {0.0f / 967.0f, 15.0f / 525.0f}, {15.0f / 967.0f, 0.0f / 525.0f});
+        //add_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", {0.0f / 967.0f, 15.0f / 525.0f}, {15.0f / 967.0f, 0.0f / 525.0f});
+        add_tilemap_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 578);
     }
 
     _GlobalRendererState.input = input;
