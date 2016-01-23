@@ -57,7 +57,8 @@ struct
 asset_descriptor
 {
     const char *asset_name;
-    uint32_t asset_id;
+    int32_t asset_id;
+    uint32_t generation_id;
 };
 
 struct

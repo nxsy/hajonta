@@ -138,6 +138,7 @@ struct renderer_state
     ui2d_state ui_state;
 
     char bitmap_scratch[4096 * 4096 * 4];
+    uint8_t asset_scratch[4096 * 4096 * 4];
     game_input *input;
 
     uint32_t textures[16];
@@ -149,6 +150,8 @@ struct renderer_state
     uint32_t asset_file_count;
     asset assets[16];
     uint32_t asset_count;
+
+    uint32_t generation_id;
 };
 
 int32_t
@@ -310,10 +313,9 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
     glGenVertexArrays(1, &ui_state->vao);
     glBindVertexArray(ui_state->vao);
 
-    uint8_t image[256];
     int32_t x, y;
     char filename[] = "ui/slick_arrows/slick_arrow-delta.png";
-    bool loaded = load_texture_asset(ctx, memory, state, filename, image, sizeof(image), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
+    bool loaded = load_texture_asset(ctx, memory, state, filename, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
     if (!loaded)
     {
         load_texture_asset_failed(ctx, memory, filename);
@@ -366,15 +368,86 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 }
 
 int32_t
-add_asset_file(renderer_state *state, char *asset_file_path)
+lookup_asset_file(renderer_state *state, char *asset_file_path)
 {
     int32_t result = -1;
-    if (state->asset_file_count < harray_count(state->asset_files))
+    for (uint32_t i = 0; i < state->asset_file_count; ++i)
+    {
+        if (strcmp(asset_file_path, state->asset_files[i].asset_file_path) == 0)
+        {
+            result = (int32_t)i;
+            break;
+        }
+    }
+    return result;
+}
+
+int32_t
+add_asset_file(renderer_state *state, char *asset_file_path)
+{
+    int32_t result = lookup_asset_file(state, asset_file_path);
+    if (result < 0 && state->asset_file_count < harray_count(state->asset_files))
     {
         asset_file *f = state->asset_files + state->asset_file_count;
         result = (int32_t)state->asset_file_count;
         ++state->asset_file_count;
         strcpy(f->asset_file_path, asset_file_path);
+    }
+    return result;
+}
+
+int32_t
+add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
+{
+    int32_t result = lookup_asset_file_to_texture(state, asset_file_id);
+    if (result < 0)
+    {
+        int32_t x, y;
+        asset_file *asset_file0 = state->asset_files + asset_file_id;
+        bool loaded = load_texture_asset(ctx, memory, state, asset_file0->asset_file_path, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, state->textures + state->texture_count, GL_TEXTURE_2D);
+        if (!loaded)
+        {
+            load_texture_asset_failed(ctx, memory, asset_file0->asset_file_path);
+            return false;
+        }
+        result = (int32_t)state->texture_count;
+        ++state->texture_count;
+        add_asset_file_texture_lookup(state, asset_file_id, (int32_t)state->textures[result]);
+    }
+    return result;
+}
+
+int32_t
+add_asset(renderer_state *state, char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
+{
+    int32_t result = -1;
+    asset *asset0 = state->assets + state->asset_count;
+    asset0->asset_id = 0;
+    strcpy(asset0->asset_name, asset_name);
+    asset0->asset_file_id = asset_file_id;
+    asset0->st0 = st0;
+    asset0->st1 = st1;
+    result = (int32_t)state->asset_count;
+    ++state->asset_count;
+    return result;
+}
+
+int32_t
+add_asset(renderer_state *state, char *asset_name, char *asset_file_name, v2 st0, v2 st1)
+{
+    int32_t result = -1;
+
+    int32_t asset_file_id = add_asset_file(state, asset_file_name);
+    if (asset_file_id >= 0)
+    {
+        asset *asset0 = state->assets + state->asset_count;
+        asset0->asset_id = 0;
+        strcpy(asset0->asset_name, asset_name);
+        asset0->asset_file_id = asset_file_id;
+        asset0->st0 = st0;
+        asset0->st1 = st1;
+        result = (int32_t)state->asset_count;
+        ++state->asset_count;
     }
     return result;
 }
@@ -396,25 +469,9 @@ RENDERER_SETUP(renderer_setup)
         program_init(ctx, memory, &_GlobalRendererState);
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
-        int32_t mouse_cursor_file_id = add_asset_file(state, "ui/slick_arrows/slick_arrow-delta.png");
-        asset_file *asset_file0 = state->asset_files + mouse_cursor_file_id;
-        asset *asset0 = state->assets;
-        asset0->asset_id = 0;
-        strcpy(asset0->asset_name, "mouse_cursor");
-        asset0->asset_file_id = mouse_cursor_file_id;
-        asset0->st0 = {0.0f, 0.0f};
-        asset0->st1 = {1.0f, 1.0f};
-
-        uint8_t image[256];
-        int32_t x, y;
-        bool loaded = load_texture_asset(ctx, memory, state, asset_file0->asset_file_path, image, sizeof(image), &x, &y, state->textures + 0, GL_TEXTURE_2D);
-        if (!loaded)
-        {
-            load_texture_asset_failed(ctx, memory, asset_file0->asset_file_path);
-            return false;
-        }
-        ++state->texture_count;
-        add_asset_file_texture_lookup(state, mouse_cursor_file_id, (int32_t)state->textures[0]);
+        state->generation_id = 1;
+        add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
+        add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
     }
 
     _GlobalRendererState.input = input;
@@ -531,6 +588,25 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 }
 
 void
+update_asset_descriptor_asset_id(renderer_state *state, asset_descriptor *descriptor)
+{
+    if (descriptor->generation_id != state->generation_id)
+    {
+        int32_t result = -1;
+        for (uint32_t i = 0; i < state->asset_count; ++i)
+        {
+            if (strcmp(descriptor->asset_name, state->assets[i].asset_name) == 0)
+            {
+                result = (int32_t)i;
+                break;
+            }
+        }
+        descriptor->asset_id = result;
+        descriptor->generation_id = state->generation_id;
+    }
+}
+
+void
 draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
 {
 
@@ -551,10 +627,23 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     if (quad->asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + quad->asset_descriptor_id;
-        int32_t texture_lookup = lookup_asset_file_to_texture(state, state->assets[descriptor->asset_id].asset_file_id);
-        if (texture_lookup >= 0)
+        update_asset_descriptor_asset_id(state, descriptor);
+        if (descriptor->asset_id >= 0)
         {
-            texture = (uint32_t)texture_lookup;
+            int32_t asset_file_id = state->assets[descriptor->asset_id].asset_file_id;
+            int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
+            if (texture_lookup >= 0)
+            {
+                texture = (uint32_t)texture_lookup;
+            }
+            else
+            {
+                int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
+                if (texture_id >= 0)
+                {
+                    texture = (uint32_t)texture_id;
+                }
+            }
         }
     }
 
