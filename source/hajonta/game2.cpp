@@ -38,8 +38,8 @@ struct game_state
 
     uint8_t render_buffer[4 * 1024 * 1024];
     render_entry_list render_list;
-    m4 matrices[1];
-    asset_descriptor assets[1];
+    m4 matrices[2];
+    asset_descriptor assets[2];
     uint32_t elements[6000 / 4 * 6];
     uint32_t textures[10];
 
@@ -68,13 +68,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         memory->initialized = 1;
         state->assets[0].asset_name = "mouse_cursor";
+        state->assets[1].asset_name = "sea_0";
         RenderListBuffer(state->render_list, state->render_buffer);
     }
     if (memory->imgui_state)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
+    float max_x = (float)input->window.width / 16.0f / 2.0f;
+    float max_y = (float)input->window.height / 16.0f / 2.0f;
     state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
+    state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x, -max_y}, {max_x, max_y});
 
     RenderListReset(state->render_list);
 
@@ -113,6 +117,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     PushMatrices(&state->render_list, harray_count(state->matrices), state->matrices);
     PushAssetDescriptors(&state->render_list, harray_count(state->assets), state->assets);
+
+    for (uint32_t y = 0; y < 100; ++y)
+    {
+        for (uint32_t x = 0; x < 100; ++x)
+        {
+            v3 q = {(float)x - 50, (float)y - 50, 0};
+            v3 q_size = {1, 1, 0};
+            PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, 1);
+        }
+    }
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
