@@ -494,6 +494,10 @@ RENDERER_SETUP(renderer_setup)
         add_tilemap_asset(state, "sea_ground_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 59);
         add_tilemap_asset(state, "sea_ground_t", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 3);
         add_tilemap_asset(state, "sea_ground_b", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 117);
+        add_tilemap_asset(state, "sea_ground_t_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 2);
+        add_tilemap_asset(state, "sea_ground_t_r", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 4);
+        add_tilemap_asset(state, "sea_ground_b_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 116);
+        add_tilemap_asset(state, "sea_ground_b_r", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 118);
     }
 
     _GlobalRendererState.input = input;

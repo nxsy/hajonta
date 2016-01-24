@@ -46,6 +46,17 @@ _asset_ids
     int32_t sea_ground_l;
     int32_t sea_ground_t;
     int32_t sea_ground_b;
+    int32_t sea_ground_t_l;
+    int32_t sea_ground_t_r;
+    int32_t sea_ground_b_l;
+    int32_t sea_ground_b_r;
+};
+
+enum struct
+terrain
+{
+    water,
+    land,
 };
 
 struct game_state
@@ -73,7 +84,8 @@ struct game_state
 
 #define MAP_HEIGHT 32
 #define MAP_WIDTH 32
-    int32_t tiles[MAP_HEIGHT * MAP_WIDTH];
+    terrain terrain_tiles[MAP_HEIGHT * MAP_WIDTH];
+    int32_t texture_tiles[MAP_HEIGHT * MAP_WIDTH];
 };
 
 DEMO(demo_b)
@@ -84,9 +96,15 @@ DEMO(demo_b)
 }
 
 void
-set_tile(game_state *state, uint32_t x, uint32_t y, int32_t value)
+set_tile(game_state *state, uint32_t x, uint32_t y, terrain value)
 {
-    state->tiles[y * MAP_WIDTH + x] = value;
+    state->terrain_tiles[y * MAP_WIDTH + x] = value;
+}
+
+void
+set_terrain_texture(game_state *state, uint32_t x, uint32_t y, int32_t value)
+{
+    state->texture_tiles[y * MAP_WIDTH + x] = value;
 }
 
 void
@@ -96,7 +114,130 @@ build_lake(game_state *state, v2 bl, v2 tr)
     {
         for (uint32_t x = (uint32_t)bl.x; x <= (uint32_t)tr.x; ++x)
         {
-            set_tile(state, x, y, state->asset_ids.sea_0);
+            set_tile(state, x, y, terrain::water);
+        }
+    }
+}
+
+void
+build_terrain_tiles(game_state *state)
+{
+    for (uint32_t y = 0; y < MAP_HEIGHT; ++y)
+    {
+        for (uint32_t x = 0; x < MAP_WIDTH; ++x)
+        {
+            terrain result = terrain::land;
+            if ((x == 0) || (x == MAP_WIDTH - 1) || (y == 0) || (y == MAP_HEIGHT - 1))
+            {
+                result = terrain::water;
+            }
+            state->terrain_tiles[y * MAP_WIDTH + x] = result;
+        }
+    }
+    build_lake(state, {16, 16}, {20, 22});
+    build_lake(state, {12, 13}, {17, 20});
+    build_lake(state, {11, 13}, {12, 17});
+    build_lake(state, {14, 11}, {16, 12});
+    build_lake(state, {13, 12}, {13, 12});
+}
+
+terrain
+get_terrain_for_tile(game_state *state, int32_t x, int32_t y)
+{
+    terrain result = terrain::water;
+    if ((x >= 0) && (x < MAP_WIDTH) && (y >= 0) && (y < MAP_HEIGHT))
+    {
+        result = state->terrain_tiles[y * MAP_WIDTH + x];
+    }
+    return result;
+}
+
+int32_t
+resolve_terrain_tile_to_texture(game_state *state, int32_t x, int32_t y)
+{
+    terrain tl = get_terrain_for_tile(state, x - 1, y + 1);
+    terrain t = get_terrain_for_tile(state, x, y + 1);
+    terrain tr = get_terrain_for_tile(state, x + 1, y + 1);
+
+    terrain l = get_terrain_for_tile(state, x - 1, y);
+    terrain me = get_terrain_for_tile(state, x, y);
+    terrain r = get_terrain_for_tile(state, x + 1, y);
+
+    terrain bl = get_terrain_for_tile(state, x - 1, y - 1);
+    terrain b = get_terrain_for_tile(state, x, y - 1);
+    terrain br = get_terrain_for_tile(state, x + 1, y - 1);
+
+    int32_t result = state->asset_ids.mouse_cursor;
+
+    if (me == terrain::land)
+    {
+        result = state->asset_ids.ground_0;
+    }
+    else if ((me == t) && (t == b) && (b == l) && (l == r))
+    {
+        result = state->asset_ids.sea_0;
+        if (br == terrain::land)
+        {
+            result = state->asset_ids.sea_ground_br;
+        }
+        else if (bl == terrain::land)
+        {
+            result = state->asset_ids.sea_ground_bl;
+        }
+        else if (tr == terrain::land)
+        {
+            result = state->asset_ids.sea_ground_tr;
+        }
+        else if (tl == terrain::land)
+        {
+            result = state->asset_ids.sea_ground_tl;
+        }
+    }
+    else if ((me == t) && (me == l) && (me == r))
+    {
+        result = state->asset_ids.sea_ground_b;
+    }
+    else if ((me == b) && (me == l) && (me == r))
+    {
+        result = state->asset_ids.sea_ground_t;
+    }
+    else if ((me == l) && (me == b) && (me == t))
+    {
+        result = state->asset_ids.sea_ground_r;
+    }
+    else if ((me == r) && (me == b) && (me == t))
+    {
+        result = state->asset_ids.sea_ground_l;
+    }
+    else if ((l == terrain::land) && (t == l))
+    {
+        result = state->asset_ids.sea_ground_t_l;
+    }
+    else if ((r == terrain::land) && (t == r))
+    {
+        result = state->asset_ids.sea_ground_t_r;
+    }
+    else if ((l == terrain::land) && (b == l))
+    {
+        result = state->asset_ids.sea_ground_b_l;
+    }
+    else if ((r == terrain::land) && (b == r))
+    {
+        result = state->asset_ids.sea_ground_b_r;
+    }
+
+    return result;
+}
+
+void
+terrain_tiles_to_texture(game_state *state)
+{
+    for (uint32_t y = 0; y < MAP_HEIGHT; ++y)
+    {
+        for (uint32_t x = 0; x < MAP_WIDTH; ++x)
+        {
+            int32_t texture = resolve_terrain_tile_to_texture(state, (int32_t)x, (int32_t)y);
+            set_terrain_texture(state, x, y, texture);
         }
     }
 }
@@ -104,63 +245,8 @@ build_lake(game_state *state, v2 bl, v2 tr)
 void
 build_map(game_state *state)
 {
-    for (uint32_t y = 0; y < MAP_HEIGHT; ++y)
-    {
-        for (uint32_t x = 0; x < MAP_WIDTH; ++x)
-        {
-            int32_t result = state->asset_ids.ground_0;
-            switch(x)
-            {
-                case 0:
-                {
-                    if (y == 0)
-                    {
-                        result = state->asset_ids.sea_ground_tr;
-                    }
-                    else if (y == (MAP_HEIGHT - 1))
-                    {
-                        result = state->asset_ids.sea_ground_br;
-                    }
-                    else
-                    {
-                        result = state->asset_ids.sea_ground_r;
-                    }
-                } break;
-                case (MAP_WIDTH - 1):
-                {
-                    if (y == 0)
-                    {
-                        result = state->asset_ids.sea_ground_tl;
-                    }
-                    else if (y == (MAP_HEIGHT - 1))
-                    {
-                        result = state->asset_ids.sea_ground_bl;
-                    }
-                    else
-                    {
-                        result = state->asset_ids.sea_ground_l;
-                    }
-                } break;
-                default:
-                {
-                    if (y == 0)
-                    {
-                        result = state->asset_ids.sea_ground_t;
-                    }
-                    else if (y == (MAP_HEIGHT - 1))
-                    {
-                        result = state->asset_ids.sea_ground_b;
-                    }
-                    else
-                    {
-                        result = state->asset_ids.ground_0;
-                    }
-                } break;
-            }
-            state->tiles[y * MAP_WIDTH + x] = result;
-        }
-    }
-    build_lake(state, {16, 16}, {20, 20});
+    build_terrain_tiles(state);
+    terrain_tiles_to_texture(state);
 }
 
 int32_t
@@ -195,7 +281,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.sea_ground_l = add_asset(state, "sea_ground_l");
         state->asset_ids.sea_ground_t = add_asset(state, "sea_ground_t");
         state->asset_ids.sea_ground_b = add_asset(state, "sea_ground_b");
-        hassert(state->asset_ids.sea_ground_b > 0);
+        state->asset_ids.sea_ground_t_l = add_asset(state, "sea_ground_t_l");
+        state->asset_ids.sea_ground_t_r = add_asset(state, "sea_ground_t_r");
+        state->asset_ids.sea_ground_b_l = add_asset(state, "sea_ground_b_l");
+        state->asset_ids.sea_ground_b_r = add_asset(state, "sea_ground_b_r");
+        hassert(state->asset_ids.sea_ground_b_r > 0);
         build_map(state);
         RenderListBuffer(state->render_list, state->render_buffer);
     }
@@ -257,7 +347,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             uint32_t y_end = 50 + (MAP_HEIGHT / 2);
             if ((x >= x_start && x < x_end) && (y >= y_start && y < y_end))
             {
-                texture_id = state->tiles[(y - y_start) * MAP_WIDTH + x - x_start];
+                texture_id = state->texture_tiles[(y - y_start) * MAP_WIDTH + x - x_start];
             }
             v3 q = {(float)x - 50, (float)y - 50, 0};
             v3 q_size = {1, 1, 0};
