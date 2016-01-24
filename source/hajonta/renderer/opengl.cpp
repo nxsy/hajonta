@@ -461,8 +461,6 @@ add_tilemap_asset(renderer_state *state, char *asset_name, char *asset_file_name
     v2 st0 = { tile_x_base, tile_y_base + tile_y_offset };
     v2 st1 = { tile_x_base + tile_x_offset, tile_y_base };
 
-    //add_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", {0.0f / 967.0f, 15.0f / 525.0f}, {15.0f / 967.0f, 0.0f / 525.0f});
-
     return add_asset(state, asset_name, asset_file_name, st0, st1);
 }
 
@@ -486,8 +484,16 @@ RENDERER_SETUP(renderer_setup)
         state->generation_id = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
-        //add_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", {0.0f / 967.0f, 15.0f / 525.0f}, {15.0f / 967.0f, 0.0f / 525.0f});
-        add_tilemap_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 578);
+        add_tilemap_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 0);
+        add_tilemap_asset(state, "ground_0", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 5);
+        add_tilemap_asset(state, "sea_ground_br", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 57);
+        add_tilemap_asset(state, "sea_ground_bl", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 58);
+        add_tilemap_asset(state, "sea_ground_tr", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 114);
+        add_tilemap_asset(state, "sea_ground_tl", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 115);
+        add_tilemap_asset(state, "sea_ground_r", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 61);
+        add_tilemap_asset(state, "sea_ground_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 59);
+        add_tilemap_asset(state, "sea_ground_t", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 3);
+        add_tilemap_asset(state, "sea_ground_b", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 117);
     }
 
     _GlobalRendererState.input = input;
