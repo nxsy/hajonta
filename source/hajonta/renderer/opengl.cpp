@@ -458,8 +458,8 @@ add_tilemap_asset(renderer_state *state, char *asset_name, char *asset_file_name
     float tile_y_base = tile_y_position * (tile_height + spacing) / (float)height;
     float tile_x_offset = (float)(tile_width - 1) / width;
     float tile_y_offset = (float)(tile_height - 1) / height;
-    v2 st0 = { tile_x_base, tile_y_base + tile_y_offset };
-    v2 st1 = { tile_x_base + tile_x_offset, tile_y_base };
+    v2 st0 = { tile_x_base + 0.001f, tile_y_base + tile_y_offset };
+    v2 st1 = { tile_x_base + tile_x_offset, tile_y_base + 0.001f};
 
     return add_asset(state, asset_name, asset_file_name, st0, st1);
 }

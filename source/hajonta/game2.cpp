@@ -82,6 +82,7 @@ struct game_state
 
     uint32_t mouse_texture;
 
+    int32_t pixel_size;
 #define MAP_HEIGHT 32
 #define MAP_WIDTH 32
     terrain terrain_tiles[MAP_HEIGHT * MAP_WIDTH];
@@ -288,13 +289,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         hassert(state->asset_ids.sea_ground_b_r > 0);
         build_map(state);
         RenderListBuffer(state->render_list, state->render_buffer);
+        state->pixel_size = 16;
     }
     if (memory->imgui_state)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
-    float max_x = (float)input->window.width / 16.0f / 2.0f;
-    float max_y = (float)input->window.height / 16.0f / 2.0f;
+    ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 128);
+    float max_x = (float)input->window.width / state->pixel_size / 2.0f;
+    float max_y = (float)input->window.height / state->pixel_size / 2.0f;
     state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
     state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x, -max_y}, {max_x, max_y});
 
