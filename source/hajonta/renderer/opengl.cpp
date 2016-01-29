@@ -484,20 +484,20 @@ RENDERER_SETUP(renderer_setup)
         state->generation_id = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
-        add_tilemap_asset(state, "sea_0", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 0);
-        add_tilemap_asset(state, "ground_0", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 5);
-        add_tilemap_asset(state, "sea_ground_br", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 57);
-        add_tilemap_asset(state, "sea_ground_bl", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 58);
-        add_tilemap_asset(state, "sea_ground_tr", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 114);
-        add_tilemap_asset(state, "sea_ground_tl", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 115);
-        add_tilemap_asset(state, "sea_ground_r", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 61);
-        add_tilemap_asset(state, "sea_ground_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 59);
-        add_tilemap_asset(state, "sea_ground_t", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 3);
-        add_tilemap_asset(state, "sea_ground_b", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 117);
-        add_tilemap_asset(state, "sea_ground_t_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 2);
-        add_tilemap_asset(state, "sea_ground_t_r", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 4);
-        add_tilemap_asset(state, "sea_ground_b_l", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 116);
-        add_tilemap_asset(state, "sea_ground_b_r", "testing/kenney/roguelikeSheet_transparent.png", 968, 526, 16, 16, 1, 118);
+        add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
+        add_tilemap_asset(state, "ground_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 21);
+        add_tilemap_asset(state, "sea_ground_br", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 13);
+        add_tilemap_asset(state, "sea_ground_bl", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 14);
+        add_tilemap_asset(state, "sea_ground_tr", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 33);
+        add_tilemap_asset(state, "sea_ground_tl", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 34);
+        add_tilemap_asset(state, "sea_ground_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 32);
+        add_tilemap_asset(state, "sea_ground_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 30);
+        add_tilemap_asset(state, "sea_ground_t", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 11);
+        add_tilemap_asset(state, "sea_ground_b", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 51);
+        add_tilemap_asset(state, "sea_ground_t_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 10);
+        add_tilemap_asset(state, "sea_ground_t_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 12);
+        add_tilemap_asset(state, "sea_ground_b_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 50);
+        add_tilemap_asset(state, "sea_ground_b_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 52);
     }
 
     _GlobalRendererState.input = input;
