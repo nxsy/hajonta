@@ -50,6 +50,7 @@ _asset_ids
     int32_t sea_ground_t_r;
     int32_t sea_ground_b_l;
     int32_t sea_ground_b_r;
+    int32_t player;
 };
 
 enum struct
@@ -286,7 +287,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.sea_ground_t_r = add_asset(state, "sea_ground_t_r");
         state->asset_ids.sea_ground_b_l = add_asset(state, "sea_ground_b_l");
         state->asset_ids.sea_ground_b_r = add_asset(state, "sea_ground_b_r");
-        hassert(state->asset_ids.sea_ground_b_r > 0);
+        state->asset_ids.player = add_asset(state, "player");
+
+        hassert(state->asset_ids.player > 0);
         build_map(state);
         RenderListBuffer(state->render_list, state->render_buffer);
         state->pixel_size = 16;
@@ -357,6 +360,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
         }
     }
+
+    v3 player_position = { -0.5f, -1.0f, 0 };
+    v3 player_size = { 1.0f, 2.0f, 0 };
+    PushQuad(&state->render_list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

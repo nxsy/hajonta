@@ -148,7 +148,7 @@ struct renderer_state
 
     asset_file asset_files[16];
     uint32_t asset_file_count;
-    asset assets[16];
+    asset assets[32];
     uint32_t asset_count;
 
     uint32_t generation_id;
@@ -389,6 +389,7 @@ int32_t
 add_asset_file(renderer_state *state, char *asset_file_path)
 {
     int32_t result = lookup_asset_file(state, asset_file_path);
+    hassert(state->asset_file_count < harray_count(state->asset_files));
     if (result < 0 && state->asset_file_count < harray_count(state->asset_files))
     {
         asset_file *f = state->asset_files + state->asset_file_count;
@@ -403,6 +404,7 @@ int32_t
 add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
 {
     int32_t result = lookup_asset_file_to_texture(state, asset_file_id);
+    hassert(state->texture_count < harray_count(state->textures));
     if (result < 0)
     {
         int32_t x, y;
@@ -424,6 +426,7 @@ int32_t
 add_asset(renderer_state *state, char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
 {
     int32_t result = -1;
+    hassert(state->asset_count < harray_count(state->assets));
     asset *asset0 = state->assets + state->asset_count;
     asset0->asset_id = 0;
     strcpy(asset0->asset_name, asset_name);
@@ -498,6 +501,7 @@ RENDERER_SETUP(renderer_setup)
         add_tilemap_asset(state, "sea_ground_t_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 12);
         add_tilemap_asset(state, "sea_ground_b_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 50);
         add_tilemap_asset(state, "sea_ground_b_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 52);
+        add_asset(state, "player", "testing/kenney/alienPink_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
     }
 
     _GlobalRendererState.input = input;
