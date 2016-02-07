@@ -88,6 +88,8 @@ struct game_state
 #define MAP_WIDTH 32
     terrain terrain_tiles[MAP_HEIGHT * MAP_WIDTH];
     int32_t texture_tiles[MAP_HEIGHT * MAP_WIDTH];
+    bool passable_x[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
+    bool passable_y[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
 
     v2 camera_offset;
 
@@ -124,10 +126,46 @@ set_tile(game_state *state, uint32_t x, uint32_t y, terrain value)
     state->terrain_tiles[y * MAP_WIDTH + x] = value;
 }
 
+terrain
+get_tile(game_state *state, uint32_t x, uint32_t y)
+{
+    return state->terrain_tiles[y * MAP_WIDTH + x];
+}
+
+void
+set_passable_x(game_state *state, uint32_t x, uint32_t y, bool value)
+{
+    state->passable_x[y * (MAP_WIDTH + 1) + x] = value;
+}
+
+void
+set_passable_y(game_state *state, uint32_t x, uint32_t y, bool value)
+{
+    state->passable_y[y * (MAP_WIDTH + 1) + x] = value;
+}
+
+bool
+get_passable_x(game_state *state, uint32_t x, uint32_t y)
+{
+    return state->passable_x[y * (MAP_WIDTH + 1) + x];
+}
+
+bool
+get_passable_y(game_state *state, uint32_t x, uint32_t y)
+{
+    return state->passable_y[y * (MAP_WIDTH + 1) + x];
+}
+
 void
 set_terrain_texture(game_state *state, uint32_t x, uint32_t y, int32_t value)
 {
     state->texture_tiles[y * MAP_WIDTH + x] = value;
+}
+
+int32_t
+get_terrain_texture(game_state *state, uint32_t x, uint32_t y)
+{
+    return state->texture_tiles[y * MAP_WIDTH + x];
 }
 
 void
@@ -266,10 +304,49 @@ terrain_tiles_to_texture(game_state *state)
 }
 
 void
+build_passable(game_state *state)
+{
+    for (uint32_t y = 0; y < MAP_HEIGHT; ++y)
+    {
+        for (uint32_t x = 0; x < MAP_WIDTH; ++x)
+        {
+            if (x == 0)
+            {
+                set_passable_x(state, x, y, false);
+            }
+
+            if (x == MAP_WIDTH - 1)
+            {
+                set_passable_x(state, x + 1, y, false);
+            }
+            else
+            {
+                set_passable_x(state, x + 1, y, get_tile(state, x, y) == get_tile(state, x + 1, y));
+            }
+
+            if (y == 0)
+            {
+                set_passable_y(state, x, y, false);
+            }
+
+            if (y == MAP_HEIGHT - 1)
+            {
+                set_passable_y(state, x, y + 1, false);
+            }
+            else
+            {
+                set_passable_y(state, x, y + 1, get_tile(state, x, y) == get_tile(state, x, y + 1));
+            }
+        }
+    }
+}
+
+void
 build_map(game_state *state)
 {
     build_terrain_tiles(state);
     terrain_tiles_to_texture(state);
+    build_passable(state);
 }
 
 int32_t
@@ -403,18 +480,65 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         for (uint32_t x = 0; x < 100; ++x)
         {
-            int32_t texture_id = 1;
             uint32_t x_start = 50 - (MAP_WIDTH / 2);
             uint32_t x_end = 50 + (MAP_WIDTH / 2);
             uint32_t y_start = 50 - (MAP_HEIGHT / 2);
             uint32_t y_end = 50 + (MAP_HEIGHT / 2);
-            if ((x >= x_start && x < x_end) && (y >= y_start && y < y_end))
-            {
-                texture_id = state->texture_tiles[(y - y_start) * MAP_WIDTH + x - x_start];
-            }
+
             v3 q = {(float)x - 50, (float)y - 50, 0};
             v3 q_size = {1, 1, 0};
-            PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
+
+            if ((x >= x_start && x < x_end) && (y >= y_start && y < y_end))
+            {
+                uint32_t x_ = x - x_start;
+                uint32_t y_ = y - y_start;
+                int32_t texture_id = get_terrain_texture(state, x_, y_);
+                PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
+
+                if (x_ == 0)
+                {
+                    bool passable = get_passable_x(state, x_, y_);
+                    if (!passable)
+                    {
+                        v3 pq = v3sub(q, {0.05f, 0, 0});
+                        v3 pq_size = {0.1f, 1.0f, 0};
+                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
+                    }
+                }
+                {
+                    bool passable = get_passable_x(state, x_ + 1, y_);
+                    if (!passable)
+                    {
+                        v3 pq = v3add(q, {0.95f, 0, 0});
+                        v3 pq_size = {0.1f, 1.0f, 0};
+                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
+                    }
+                }
+                if (y_ == 0)
+                {
+                    bool passable = get_passable_y(state, x_, y_);
+                    if (!passable)
+                    {
+                        v3 pq = v3sub(q, {0, 0.05f, 0});
+                        v3 pq_size = {1.0f, 0.1f, 0};
+                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
+                    }
+                }
+                {
+                    bool passable = get_passable_y(state, x_, y_ + 1);
+                    if (!passable)
+                    {
+                        v3 pq = v3add(q, {0, 0.95f, 0});
+                        v3 pq_size = {1.0f, 0.1f, 0};
+                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
+                    }
+                }
+            }
+            else
+            {
+                int32_t texture_id = 1;
+                PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
+            }
         }
     }
 
