@@ -88,7 +88,28 @@ struct game_state
 #define MAP_WIDTH 32
     terrain terrain_tiles[MAP_HEIGHT * MAP_WIDTH];
     int32_t texture_tiles[MAP_HEIGHT * MAP_WIDTH];
+
+    v2 camera_offset;
+
+    v2 player_position;
+    v2 player_velocity;
+    float acceleration_multiplier;
 };
+
+void
+integrate_movement(v2 *position, v2 *velocity, v2 acceleration, float delta_t)
+{
+    acceleration = v2sub(acceleration, v2mul(*velocity, 5.0f));
+    v2 movement = v2add(
+        v2mul(acceleration, 0.5f * (delta_t * delta_t)),
+        v2mul(*velocity, delta_t)
+    );
+    *position = v2add(*position, movement);
+    *velocity = v2add(
+        v2mul(acceleration, delta_t),
+        *velocity
+    );
+}
 
 DEMO(demo_b)
 {
@@ -292,17 +313,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         hassert(state->asset_ids.player > 0);
         build_map(state);
         RenderListBuffer(state->render_list, state->render_buffer);
-        state->pixel_size = 16;
+        state->pixel_size = 64;
+
+        state->acceleration_multiplier = 5.0f;
     }
     if (memory->imgui_state)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
     ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 128);
+    ImGui::SliderFloat2("Camera Offset", (float *)&state->camera_offset, -0.5f, 0.5f);
     float max_x = (float)input->window.width / state->pixel_size / 2.0f;
     float max_y = (float)input->window.height / state->pixel_size / 2.0f;
     state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
-    state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x, -max_y}, {max_x, max_y});
+    state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x + state->camera_offset.x, -max_y + state->camera_offset.y}, {max_x + state->camera_offset.x, max_y + state->camera_offset.y});
 
     RenderListReset(state->render_list);
 
@@ -329,6 +353,39 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         demo_ctx.switched = previous_demo != state->active_demo;
          demoes[state->active_demo].func(ctx, memory, input, sound_output, &demo_ctx);
     }
+
+    v2 acceleration = {};
+
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
+    {
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+
+        game_controller_state *controller = &input->controllers[i];
+        if (controller->buttons.move_up.ended_down)
+        {
+            acceleration.y += 1.0f;
+        }
+        if (controller->buttons.move_down.ended_down)
+        {
+            acceleration.y -= 1.0f;
+        }
+        if (controller->buttons.move_left.ended_down)
+        {
+            acceleration.x -= 1.0f;
+        }
+        if (controller->buttons.move_right.ended_down)
+        {
+            acceleration.x += 1.0f;
+        }
+    }
+    ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
+    acceleration = v2mul(acceleration, state->acceleration_multiplier);
+    integrate_movement(&state->player_position, &state->player_velocity, acceleration, input->delta_t);
 
     v4 colorv4 = {
         state->clear_color[0],
@@ -361,8 +418,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    v3 player_position = { -0.5f, -1.0f, 0 };
     v3 player_size = { 1.0f, 2.0f, 0 };
+    v3 player_position = {state->player_position.x, state->player_position.y, 0};
     PushQuad(&state->render_list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
