@@ -98,19 +98,19 @@ struct game_state
     float acceleration_multiplier;
 };
 
-void
-integrate_movement(v2 *position, v2 *velocity, v2 acceleration, float delta_t)
+v2
+integrate_acceleration(v2 *velocity, v2 acceleration, float delta_t)
 {
     acceleration = v2sub(acceleration, v2mul(*velocity, 5.0f));
     v2 movement = v2add(
         v2mul(acceleration, 0.5f * (delta_t * delta_t)),
         v2mul(*velocity, delta_t)
     );
-    *position = v2add(*position, movement);
     *velocity = v2add(
         v2mul(acceleration, delta_t),
         *velocity
     );
+    return movement;
 }
 
 DEMO(demo_b)
@@ -462,7 +462,113 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
     acceleration = v2mul(acceleration, state->acceleration_multiplier);
-    integrate_movement(&state->player_position, &state->player_velocity, acceleration, input->delta_t);
+    v2 movement = integrate_acceleration(&state->player_velocity, acceleration, input->delta_t);
+
+    {
+        line2 potential_lines[2];
+        uint32_t num_potential_lines = 0;
+
+        uint32_t x_start = 50 - (MAP_WIDTH / 2);
+        uint32_t y_start = 50 - (MAP_HEIGHT / 2);
+
+        uint32_t player_tile_x = 50 + (int32_t)floorf(state->player_position.x) - x_start;
+        uint32_t player_tile_y = 50 + (int32_t)floorf(state->player_position.y) - y_start;
+
+        ImGui::Text("Player is at %f,%f moving %f,%f", state->player_position.x, state->player_position.y, movement.x, movement.y);
+        ImGui::Text("Player is at tile %dx%d", player_tile_x, player_tile_y);
+
+        if (movement.x > 0)
+        {
+            if (!get_passable_x(state, player_tile_x + 1, player_tile_y))
+            {
+                v2 q = {(float)player_tile_x - 50 + x_start + 1, (float)player_tile_y - 50 + y_start};
+                v2 direction = {0, 1};
+                potential_lines[num_potential_lines++] = {q, direction};
+                ImGui::Text("Path to right tile is blocked by %f,%f direction %f,%f",
+                        q.x, q.y, direction.x, direction.y);
+            };
+        }
+        else if (movement.x < 0)
+        {
+            if (!get_passable_x(state, player_tile_x, player_tile_y))
+            {
+                v2 q = {(float)player_tile_x - 50 + x_start, (float)player_tile_y - 50 + y_start};
+                v2 direction = {0, 1};
+                potential_lines[num_potential_lines++] = {q, direction};
+                ImGui::Text("Path to left tile is blocked by %f,%f direction %f,%f",
+                        q.x, q.y, direction.x, direction.y);
+            }
+        }
+        if (movement.y > 0)
+        {
+            if (!get_passable_y(state, player_tile_x, player_tile_y + 1))
+            {
+                v2 q = {(float)player_tile_x - 50 + x_start, (float)player_tile_y - 50 + 1 + y_start};
+                v2 direction = {1, 0};
+                potential_lines[num_potential_lines++] = {q, direction};
+                ImGui::Text("Path to up tile is blocked by %f,%f direction %f,%f",
+                        q.x, q.y, direction.x, direction.y);
+            };
+        }
+        else if (movement.y < 0)
+        {
+            if (!get_passable_y(state, player_tile_x, player_tile_y))
+            {
+                v2 q = {(float)player_tile_x - 50 + x_start, (float)player_tile_y - 50 + y_start};
+                v2 direction = {1, 0};
+                potential_lines[num_potential_lines++] = {q, direction};
+                ImGui::Text("Path to down tile is blocked by %f,%f direction %f,%f",
+                        q.x, q.y, direction.x, direction.y);
+            };
+        }
+
+        ImGui::Text("%d potential colliding lines", num_potential_lines);
+
+        int num_intersects = 0;
+        while (v2length(movement) > 0)
+        {
+            if (num_intersects++ > 8)
+            {
+                break;
+            }
+
+            line2 *intersecting_line = {};
+            line2 movement_line = {state->player_position, movement};
+            v2 closest_intersect_point = {};
+            float closest_length = -1;
+            for (uint32_t i = 0; i < num_potential_lines; ++i)
+            {
+                v2 intersect_point;
+                if (line_intersect(movement_line, potential_lines[i], &intersect_point)) {
+                    ImGui::Text("Player at %f,%f movement %f,%f intersects with line %f,%f direction %f,%f at %f,%f",
+                            state->player_position.x,
+                            state->player_position.y,
+                            movement.x,
+                            movement.y,
+                            potential_lines[i].position.x,
+                            potential_lines[i].position.y,
+                            potential_lines[i].direction.x,
+                            potential_lines[i].direction.y,
+                            intersect_point.x,
+                            intersect_point.y
+                            );
+                    float distance_to = v2length(v2sub(intersect_point, state->player_position));
+                    if ((closest_length < 0) || (closest_length > distance_to))
+                    {
+                        closest_intersect_point = intersect_point;
+                        closest_length = distance_to;
+                        intersecting_line = potential_lines + i;
+                    }
+                }
+            }
+            if (!intersecting_line)
+            {
+                state->player_position = v2add(state->player_position, movement);
+                movement = {0,0};
+                break;
+            }
+        }
+    }
 
     v4 colorv4 = {
         state->clear_color[0],
@@ -543,8 +649,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     v3 player_size = { 1.0f, 2.0f, 0 };
-    v3 player_position = {state->player_position.x, state->player_position.y, 0};
+    v3 player_position = {state->player_position.x - 0.5f, state->player_position.y, 0};
     PushQuad(&state->render_list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
+
+    v3 player_position2 = {state->player_position.x - 0.2f, state->player_position.y, 0};
+    v3 player_size2 = {0.4f, 0.1f, 0};
+    PushQuad(&state->render_list, player_position2, player_size2, {1,1,1,1}, 1, -1);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
