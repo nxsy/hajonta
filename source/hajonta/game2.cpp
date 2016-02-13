@@ -567,6 +567,27 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 movement = {0,0};
                 break;
             }
+            else
+            {
+                v2 used_movement = v2mul(v2sub(closest_intersect_point, state->player_position), 0.9f);
+                if (fabs(used_movement.x) < 0.01)
+                {
+                    used_movement.x = 0;
+                }
+                if (fabs(used_movement.y) < 0.01)
+                {
+                    used_movement.y = 0;
+                }
+                state->player_position = v2add(state->player_position, used_movement);
+                movement = v2sub(movement, used_movement);
+
+                v2 intersecting_direction = intersecting_line->direction;
+                movement = v2projection(intersecting_direction, movement);
+
+                v2 rhn = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
+                v2 velocity_projection = v2projection(rhn, state->player_velocity);
+                state->player_velocity = v2sub(state->player_velocity, velocity_projection);
+            }
         }
     }
 
