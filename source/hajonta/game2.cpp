@@ -60,6 +60,38 @@ terrain
     land,
 };
 
+struct
+movement_data
+{
+    v2 player_position;
+    v2 player_velocity;
+    v2 acceleration;
+    float acceleration_multiplier;
+    float delta_t;
+};
+
+struct
+movement_slice
+{
+    uint32_t num_data;
+    movement_data data[60];
+};
+
+struct
+movement_history
+{
+    uint32_t start_slice;
+    uint32_t current_slice;
+    movement_slice slices[3];
+};
+
+struct
+movement_history_playback
+{
+     uint32_t slice;
+     uint32_t frame;
+};
+
 struct game_state
 {
     bool initialized;
@@ -98,6 +130,12 @@ struct game_state
     v2 player_position;
     v2 player_velocity;
     float acceleration_multiplier;
+    bool paused;
+
+    movement_history history;
+    movement_history_playback history_playback;
+
+    uint32_t repeat_count;
 };
 
 v2
@@ -364,6 +402,291 @@ add_asset(game_state *state, char *name)
     return result;
 }
 
+void
+save_movement_history(game_state *state, movement_data data_in)
+{
+    movement_history *history = &state->history;
+    movement_slice *current_slice = history->slices + history->current_slice;
+    if (current_slice->num_data >= harray_count(current_slice->data))
+    {
+        ++history->current_slice;
+        history->current_slice %= harray_count(history->slices);
+        current_slice = history->slices + history->current_slice;
+        current_slice->num_data = 0;
+
+        if (history->start_slice == history->current_slice)
+        {
+            ++history->start_slice;
+            history->start_slice %= harray_count(history->slices);
+        }
+    }
+    ImGui::Text("Movement history: Start slice %d, current slice %d, current slice count %d", history->start_slice, history->current_slice, current_slice->num_data);
+
+    current_slice->data[current_slice->num_data++] = data_in;
+}
+
+movement_data
+load_movement_history(game_state *state)
+{
+    return state->history.slices[state->history_playback.slice].data[state->history_playback.frame];
+}
+
+movement_data
+apply_movement(game_state *state, movement_data data_in)
+{
+    movement_data data = data_in;
+    data.acceleration = v2mul(data.acceleration, data.acceleration_multiplier);
+    v2 movement = integrate_acceleration(&data.player_velocity, data.acceleration, data.delta_t);
+
+    {
+        line2 potential_lines[12];
+        uint32_t num_potential_lines = 0;
+
+        uint32_t x_start = 50 - (MAP_WIDTH / 2);
+        uint32_t y_start = 50 - (MAP_HEIGHT / 2);
+
+        uint32_t player_tile_x = 50 + (int32_t)floorf(data.player_position.x) - x_start;
+        uint32_t player_tile_y = 50 + (int32_t)floorf(data.player_position.y) - y_start;
+
+        ImGui::Text("Player is at %f,%f moving %f,%f", data.player_position.x, data.player_position.y, movement.x, movement.y);
+        ImGui::Text("Player is at tile %dx%d", player_tile_x, player_tile_y);
+
+        if (movement.x > 0)
+        {
+            for (int32_t i = -1; i <= 1; ++i)
+            {
+                if (!get_passable_x(state, player_tile_x + 1, player_tile_y + i))
+                {
+                    v2 q = {(float)player_tile_x - 50 + x_start + 1, (float)player_tile_y + i - 50 + y_start};
+                    v2 direction = {0, 1};
+                    potential_lines[num_potential_lines++] = {q, direction};
+                    ImGui::Text("Path to right tile is blocked by %f,%f direction %f,%f",
+                            q.x, q.y, direction.x, direction.y);
+                };
+            }
+        }
+
+        if (movement.x < 0)
+        {
+            for (int32_t i = -1; i <= 1; ++i)
+            {
+                if (!get_passable_x(state, player_tile_x, player_tile_y + i))
+                {
+                    v2 q = {(float)player_tile_x - 50 + x_start, (float)player_tile_y + i - 50 + y_start};
+                    v2 direction = {0, 1};
+                    potential_lines[num_potential_lines++] = {q, direction};
+                    ImGui::Text("Path to left tile is blocked by %f,%f direction %f,%f",
+                            q.x, q.y, direction.x, direction.y);
+                }
+            }
+        }
+
+        if (movement.y > 0)
+        {
+            for (int32_t i = -1; i <= 1; ++i)
+            {
+                if (!get_passable_y(state, player_tile_x + i, player_tile_y + 1))
+                {
+                    v2 q = {(float)player_tile_x + i - 50 + x_start, (float)player_tile_y - 50 + 1 + y_start};
+                    v2 direction = {1, 0};
+                    potential_lines[num_potential_lines++] = {q, direction};
+                    ImGui::Text("Path to up tile is blocked by %f,%f direction %f,%f",
+                            q.x, q.y, direction.x, direction.y);
+                };
+            }
+        }
+
+        if (movement.y < 0)
+        {
+            for (int32_t i = -1; i <= 1; ++i)
+            {
+                if (!get_passable_y(state, player_tile_x + i, player_tile_y))
+                {
+                    v2 q = {(float)player_tile_x + i - 50 + x_start, (float)player_tile_y - 50 + y_start};
+                    v2 direction = {1, 0};
+                    potential_lines[num_potential_lines++] = {q, direction};
+                    ImGui::Text("Path to down tile is blocked by %f,%f direction %f,%f",
+                            q.x, q.y, direction.x, direction.y);
+                };
+            }
+        }
+
+        for (uint32_t i = 0; i < num_potential_lines; ++i)
+        {
+            line2 *l = potential_lines + i;
+            v3 q = {l->position.x, l->position.y};
+
+            v3 pq = v3sub(q, {0.05f, 0.05f, 0});
+            v3 pq_size = {l->direction.x, l->direction.y, 0};
+            pq_size = v3add(pq_size, {0.05f, 0.05f, 0});
+
+            PushQuad(&state->render_list2, pq, pq_size, {1,0,1,0.5f}, 1, -1);
+
+            v2 n = v2normalize({-l->direction.y,  l->direction.x});
+            if (v2dot(movement, n) > 0)
+            {
+                n = v2normalize({ l->direction.y, -l->direction.x});
+            }
+            v3 nq = v3add(q, v3mul({l->direction.x, l->direction.y, 0}, 0.5f));
+
+            v3 npq = v3sub(nq, {0.05f, 0.05f, 0});
+            v3 npq_size = {n.x, n.y, 0};
+            npq_size = v3add(npq_size, {0.05f, 0.05f, 0});
+
+            PushQuad(&state->render_list2, npq, npq_size, {1,1,0,0.5f}, 1, -1);
+
+        }
+
+        ImGui::Text("%d potential colliding lines", num_potential_lines);
+
+        int num_intersects = 0;
+        while (v2length(movement) > 0)
+        {
+            ImGui::Text("Resolving remaining movement %f,%f from position %f, %f",
+                    movement.x, movement.y, data.player_position.x, data.player_position.y);
+            if (num_intersects++ > 8)
+            {
+                break;
+            }
+
+            line2 *intersecting_line = {};
+            v2 closest_intersect_point = {};
+            float closest_length = -1;
+            line2 movement_lines[] =
+            {
+                //{data.player_position, movement},
+                {v2add(data.player_position, {-0.2f, 0} ), movement},
+                {v2add(data.player_position, {0.2f, 0} ), movement},
+                {v2add(data.player_position, {-0.2f, 0.1f} ), movement},
+                {v2add(data.player_position, {0.2f, 0.1f} ), movement},
+            };
+            v2 used_movement = {};
+
+            for (uint32_t m = 0; m < harray_count(movement_lines); ++m)
+            {
+                line2 movement_line = movement_lines[m];
+                for (uint32_t i = 0; i < num_potential_lines; ++i)
+                {
+                    v2 intersect_point;
+                    if (line_intersect(movement_line, potential_lines[i], &intersect_point)) {
+                        ImGui::Text("Player at %f,%f movement %f,%f intersects with line %f,%f direction %f,%f at %f,%f",
+                                data.player_position.x,
+                                data.player_position.y,
+                                movement.x,
+                                movement.y,
+                                potential_lines[i].position.x,
+                                potential_lines[i].position.y,
+                                potential_lines[i].direction.x,
+                                potential_lines[i].direction.y,
+                                intersect_point.x,
+                                intersect_point.y
+                                );
+                        float distance_to = v2length(v2sub(intersect_point, movement_line.position));
+                        if ((closest_length < 0) || (closest_length > distance_to))
+                        {
+                            closest_intersect_point = intersect_point;
+                            closest_length = distance_to;
+                            intersecting_line = potential_lines + i;
+                            used_movement = v2sub(closest_intersect_point, movement_line.position);
+                        }
+                    }
+                }
+
+            }
+            if (!intersecting_line)
+            {
+                v2 new_player_position = v2add(data.player_position, movement);
+                ImGui::Text("No intersections, player moves from %f,%f to %f,%f", data.player_position.x, data.player_position.y,
+                        new_player_position.x, new_player_position.y);
+                data.player_position = new_player_position;
+                movement = {0,0};
+            }
+            else
+            {
+                used_movement = v2mul(used_movement, 0.999f);
+                v2 new_player_position = v2add(data.player_position, used_movement);
+                movement = v2sub(movement, used_movement);
+                ImGui::Text("Player moves from %f,%f to %f,%f using %f,%f of movement", data.player_position.x, data.player_position.y,
+                        new_player_position.x, new_player_position.y, used_movement.x, used_movement.y);
+                data.player_position = new_player_position;
+
+                v2 intersecting_direction = intersecting_line->direction;
+                v2 new_movement = v2projection(intersecting_direction, movement);
+                ImGui::Text("Remaining movement of %f,%f projected along wall becoming %f,%f", movement.x, movement.y, new_movement.x, new_movement.y);
+                movement = new_movement;
+
+                v2 rhn = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
+                v2 velocity_projection = v2projection(rhn, data.player_velocity);
+                v2 new_player_velocity = v2sub(data.player_velocity, velocity_projection);
+                ImGui::Text("Velocity of %f,%f projected along wall becoming %f,%f", data.player_velocity.x, data.player_velocity.y, new_player_velocity.x, new_player_velocity.y);
+                data.player_velocity = new_player_velocity;
+
+                v2 n = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
+                if (v2dot(used_movement, n) > 0)
+                {
+                    n = v2normalize({ intersecting_direction.y, -intersecting_direction.x});
+                }
+                n = v2mul(n, 0.002f);
+
+                new_player_position = v2add(data.player_position, n);
+                ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", n.x, n.y,
+                        data.player_position.x, data.player_position.y,
+                        new_player_position.x, new_player_position.y);
+                data.player_position = new_player_position;
+            }
+
+            for (uint32_t i = 0; i < num_potential_lines; ++i)
+            {
+                line2 *l = potential_lines + i;
+                float distance = FLT_MAX;
+                v2 closest_point_on_line = {};
+                v2 closest_point_on_player = {};
+                v2 line_to_player = {};
+
+                for (uint32_t m = 0; m < harray_count(movement_lines); ++m)
+                {
+                    v2 position = movement_lines[m].position;
+                    v2 player_relative_position = v2sub(position, l->position);
+                    v2 m_closest_point_on_line = v2projection(l->direction, player_relative_position);
+                    v2 m_line_to_player = v2sub(player_relative_position, m_closest_point_on_line);
+                    float m_distance = v2length(m_line_to_player);
+                    if (m_distance < distance)
+                    {
+                        distance = m_distance;
+                        closest_point_on_line = m_closest_point_on_line;
+                        closest_point_on_player = player_relative_position;
+                        line_to_player = m_line_to_player;
+                    }
+                }
+
+                ImGui::Text("%0.4f distance from line to player", distance);
+                /*
+                if (distance <= 0.25)
+                {
+                    v3 q = {l->position.x + closest_point_on_line.x - 0.05f, l->position.y + closest_point_on_line.y - 0.05f, 0};
+                    v3 q_size = {0.1f, 0.1f, 0};
+                    PushQuad(&state->render_list2, q, q_size, {0,1,0,0.5f}, 1, -1);
+
+                    if (distance < 0.002f)
+                    {
+                        //float corrective_distance = 0.002f - distance;
+                        float corrective_distance = 0.002f;
+                        v2 corrective_movement = v2mul(v2normalize(line_to_player), corrective_distance);
+                        v2 new_player_position = v2add(data.player_position, corrective_movement);
+
+                        ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", corrective_movement.x, corrective_movement.y,
+                                data.player_position.x, data.player_position.y,
+                                new_player_position.x, new_player_position.y);
+                        data.player_position = new_player_position;
+                    }
+                }
+                */
+            }
+        }
+    }
+    return data;
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -401,7 +724,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
-    ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 128);
+    ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 256);
     ImGui::SliderFloat2("Camera Offset", (float *)&state->camera_offset, -0.5f, 0.5f);
     float max_x = (float)input->window.width / state->pixel_size / 2.0f;
     float max_y = (float)input->window.height / state->pixel_size / 2.0f;
@@ -462,244 +785,129 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         game_controller_state *controller = &input->controllers[i];
-        if (controller->buttons.move_up.ended_down)
+        if (state->paused)
         {
-            acceleration.y += 1.0f;
-        }
-        if (controller->buttons.move_down.ended_down)
-        {
-            acceleration.y -= 1.0f;
-        }
-        if (controller->buttons.move_left.ended_down)
-        {
-            acceleration.x -= 1.0f;
-        }
-        if (controller->buttons.move_right.ended_down)
-        {
-            acceleration.x += 1.0f;
-        }
-    }
-    ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
-    acceleration = v2mul(acceleration, state->acceleration_multiplier);
-    v2 movement = integrate_acceleration(&state->player_velocity, acceleration, input->delta_t);
-
-    {
-        line2 potential_lines[12];
-        uint32_t num_potential_lines = 0;
-
-        uint32_t x_start = 50 - (MAP_WIDTH / 2);
-        uint32_t y_start = 50 - (MAP_HEIGHT / 2);
-
-        uint32_t player_tile_x = 50 + (int32_t)floorf(state->player_position.x) - x_start;
-        uint32_t player_tile_y = 50 + (int32_t)floorf(state->player_position.y) - y_start;
-
-        ImGui::Text("Player is at %f,%f moving %f,%f", state->player_position.x, state->player_position.y, movement.x, movement.y);
-        ImGui::Text("Player is at tile %dx%d", player_tile_x, player_tile_y);
-
-            for (int32_t i = -1; i <= 1; ++i)
+            if (controller->buttons.move_left.ended_down)
             {
-                if (!get_passable_x(state, player_tile_x + 1, player_tile_y + i))
+                if (!controller->buttons.move_left.repeat || --state->repeat_count == 0)
                 {
-                    v2 q = {(float)player_tile_x - 50 + x_start + 1, (float)player_tile_y + i - 50 + y_start};
-                    v2 direction = {0, 1};
-                    potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to right tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
-                };
-            }
-
-            for (int32_t i = -1; i <= 1; ++i)
-            {
-                if (!get_passable_x(state, player_tile_x, player_tile_y + i))
-                {
-                    v2 q = {(float)player_tile_x - 50 + x_start, (float)player_tile_y + i - 50 + y_start};
-                    v2 direction = {0, 1};
-                    potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to left tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
-                }
-            }
-
-            for (int32_t i = -1; i <= 1; ++i)
-            {
-                if (!get_passable_y(state, player_tile_x + i, player_tile_y + 1))
-                {
-                    v2 q = {(float)player_tile_x + i - 50 + x_start, (float)player_tile_y - 50 + 1 + y_start};
-                    v2 direction = {1, 0};
-                    potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to up tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
-                };
-            }
-            for (int32_t i = -1; i <= 1; ++i)
-            {
-                if (!get_passable_y(state, player_tile_x + i, player_tile_y))
-                {
-                    v2 q = {(float)player_tile_x + i - 50 + x_start, (float)player_tile_y - 50 + y_start};
-                    v2 direction = {1, 0};
-                    potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to down tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
-                };
-            }
-
-        for (uint32_t i = 0; i < num_potential_lines; ++i)
-        {
-            line2 *l = potential_lines + i;
-            v3 q = {l->position.x, l->position.y};
-
-            v3 pq = v3sub(q, {0.05f, 0.05f, 0});
-            v3 pq_size = {l->direction.x, l->direction.y, 0};
-            pq_size = v3add(pq_size, {0.05f, 0.05f, 0});
-
-            PushQuad(&state->render_list2, pq, pq_size, {1,0,1,0.5f}, 1, -1);
-
-            v2 n = v2normalize({-l->direction.y,  l->direction.x});
-            if (v2dot(movement, n) > 0)
-            {
-                n = v2normalize({ l->direction.y, -l->direction.x});
-            }
-            v3 nq = v3add(q, v3mul({l->direction.x, l->direction.y, 0}, 0.5f));
-
-            v3 npq = v3sub(nq, {0.05f, 0.05f, 0});
-            v3 npq_size = {n.x, n.y, 0};
-            npq_size = v3add(npq_size, {0.05f, 0.05f, 0});
-
-            PushQuad(&state->render_list2, npq, npq_size, {1,1,0,0.5f}, 1, -1);
-
-        }
-
-        ImGui::Text("%d potential colliding lines", num_potential_lines);
-
-        int num_intersects = 0;
-        while (v2length(movement) > 0)
-        {
-            if (num_intersects++ > 8)
-            {
-                break;
-            }
-
-            line2 *intersecting_line = {};
-            v2 closest_intersect_point = {};
-            float closest_length = -1;
-            line2 movement_lines[] =
-            {
-                //{state->player_position, movement},
-                {v2add(state->player_position, {-0.2f, 0} ), movement},
-                {v2add(state->player_position, {0.2f, 0} ), movement},
-                {v2add(state->player_position, {-0.2f, 0.1f} ), movement},
-                {v2add(state->player_position, {0.2f, 0.1f} ), movement},
-            };
-            v2 used_movement = {};
-
-            for (uint32_t m = 0; m < harray_count(movement_lines); ++m)
-            {
-                line2 movement_line = movement_lines[m];
-                for (uint32_t i = 0; i < num_potential_lines; ++i)
-                {
-                    v2 intersect_point;
-                    if (line_intersect(movement_line, potential_lines[i], &intersect_point)) {
-                        ImGui::Text("Player at %f,%f movement %f,%f intersects with line %f,%f direction %f,%f at %f,%f",
-                                state->player_position.x,
-                                state->player_position.y,
-                                movement.x,
-                                movement.y,
-                                potential_lines[i].position.x,
-                                potential_lines[i].position.y,
-                                potential_lines[i].direction.x,
-                                potential_lines[i].direction.y,
-                                intersect_point.x,
-                                intersect_point.y
-                                );
-                        float distance_to = v2length(v2sub(intersect_point, movement_line.position));
-                        if ((closest_length < 0) || (closest_length > distance_to))
+                    if (state->history_playback.frame != 0)
+                    {
+                        --state->history_playback.frame;
+                    }
+                    else
+                    {
+                        if (state->history_playback.slice != state->history.start_slice)
                         {
-                            closest_intersect_point = intersect_point;
-                            closest_length = distance_to;
-                            intersecting_line = potential_lines + i;
-                            used_movement = v2sub(closest_intersect_point, movement_line.position);
+                            if (state->history_playback.slice == 0)
+                            {
+                                state->history_playback.slice = harray_count(state->history.slices) - 1;
+                            }
+                            else
+                            {
+                                --state->history_playback.slice;
+                            }
+                            state->history_playback.frame = harray_count(state->history.slices[0].data) - 1;
+                            hassert(harray_count(state->history.slices[0].data) == state->history.slices[state->history_playback.slice].num_data);
                         }
                     }
+                    state->repeat_count = 10;
                 }
-
-            }
-            if (!intersecting_line)
-            {
-                state->player_position = v2add(state->player_position, movement);
-                movement = {0,0};
-            }
-            else
-            {
-                if (fabs(used_movement.x) < 0.01)
-                {
-                    used_movement.x = 0;
-                }
-                if (fabs(used_movement.y) < 0.01)
-                {
-                    used_movement.y = 0;
-                }
-
-                state->player_position = v2add(state->player_position, used_movement);
-                movement = v2sub(movement, used_movement);
-
-                v2 intersecting_direction = intersecting_line->direction;
-                movement = v2projection(intersecting_direction, movement);
-
-                v2 rhn = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
-                v2 velocity_projection = v2projection(rhn, state->player_velocity);
-                state->player_velocity = v2sub(state->player_velocity, velocity_projection);
-
-                v2 n = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
-                if (v2dot(movement, n) > 0)
-                {
-                    n = v2normalize({ intersecting_direction.y, -intersecting_direction.x});
-                }
-                n = v2mul(n, 0.002f);
-                state->player_position = v2add(state->player_position, n);
             }
 
-            for (uint32_t i = 0; i < num_potential_lines; ++i)
+            if (controller->buttons.move_right.ended_down)
             {
-                line2 *l = potential_lines + i;
-                float distance = FLT_MAX;
-                v2 closest_point_on_line = {};
-                v2 closest_point_on_player = {};
-                v2 line_to_player = {};
-
-                for (uint32_t m = 0; m < harray_count(movement_lines); ++m)
+                if (!controller->buttons.move_right.repeat || --state->repeat_count == 0)
                 {
-                    v2 position = movement_lines[m].position;
-                    v2 player_relative_position = v2sub(position, l->position);
-                    v2 m_closest_point_on_line = v2projection(l->direction, player_relative_position);
-                    v2 m_line_to_player = v2sub(player_relative_position, m_closest_point_on_line);
-                    float m_distance = v2length(m_line_to_player);
-                    if (m_distance < distance)
+                    if (state->history_playback.frame != harray_count(state->history.slices[0].data) - 1)
                     {
-                        distance = m_distance;
-                        closest_point_on_line = m_closest_point_on_line;
-                        closest_point_on_player = player_relative_position;
-                        line_to_player = m_line_to_player;
+                        if (state->history_playback.slice != state->history.current_slice)
+                        {
+                            ++state->history_playback.frame;
+                        }
+                        else if (state->history_playback.frame != state->history.slices[state->history.current_slice].num_data - 1)
+                        {
+                            ++state->history_playback.frame;
+                        }
                     }
-                }
-
-                ImGui::Text("%0.2f distance from line to player", distance);
-                if (distance <= 0.25)
-                {
-                    v3 q = {l->position.x + closest_point_on_line.x - 0.05f, l->position.y + closest_point_on_line.y - 0.05f, 0};
-                    v3 q_size = {0.1f, 0.1f, 0};
-                    PushQuad(&state->render_list2, q, q_size, {0,1,0,0.5f}, 1, -1);
-
-                    if (distance < 0.002f)
+                    else
                     {
-                        float corrective_distance = 0.002f - distance;
-                        v2 corrective_movement = v2mul(v2normalize(line_to_player), corrective_distance);
-                        state->player_position = v2add(state->player_position, corrective_movement);
+                        if (state->history_playback.slice != state->history.current_slice)
+                        {
+                            ++state->history_playback.slice;
+                            state->history_playback.slice %= harray_count(state->history.slices);
+                            state->history_playback.frame = 0;
+                        }
                     }
+                    state->repeat_count = 10;
                 }
             }
         }
+        else
+        {
+            if (controller->buttons.move_up.ended_down)
+            {
+                acceleration.y += 1.0f;
+            }
+            if (controller->buttons.move_down.ended_down)
+            {
+                acceleration.y -= 1.0f;
+            }
+            if (controller->buttons.move_left.ended_down)
+            {
+                acceleration.x -= 1.0f;
+            }
+            if (controller->buttons.move_right.ended_down)
+            {
+                acceleration.x += 1.0f;
+            }
+        }
+        if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+        {
+            state->paused = !state->paused;
+            if (state->paused)
+            {
+                 state->history_playback.slice = state->history.current_slice;
+                 state->history_playback.frame = state->history.slices[state->history.current_slice].num_data - 1;
+            }
+        }
+
+        if (controller->buttons.back.ended_down && !controller->buttons.back.repeat)
+        {
+            if (state->player_position.x == 0 && state->player_position.y == 0)
+            {
+                memory->quit = true;
+            }
+            state->player_position = {0,0};
+            state->player_velocity = {0,0};
+            state->paused = false;
+        }
     }
 
+    ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
+
+    movement_data data_out;
+    {
+        movement_data data;
+        data.player_position = state->player_position;
+        data.player_velocity = state->player_velocity;
+        data.acceleration = acceleration;
+        data.acceleration_multiplier = state->acceleration_multiplier;
+        data.delta_t = input->delta_t;
+
+        if (state->paused)
+        {
+            ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
+            data = load_movement_history(state);
+        }
+        else
+        {
+            save_movement_history(state, data);
+        }
+        data_out = apply_movement(state, data);
+    }
+    state->player_position = data_out.player_position;
+    state->player_velocity = data_out.player_velocity;
     for (uint32_t y = 0; y < 100; ++y)
     {
         for (uint32_t x = 0; x < 100; ++x)
