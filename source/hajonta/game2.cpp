@@ -597,8 +597,8 @@ apply_movement(game_state *state, movement_data data_in)
                         }
                     }
                 }
-
             }
+
             if (!intersecting_line)
             {
                 v2 new_position = v2add(data.position, movement);
@@ -700,7 +700,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if (!memory->initialized)
     {
         memory->initialized = 1;
-        //state->assets[0].asset_name = "mouse_cursor";
         state->asset_ids.mouse_cursor = add_asset(state, "mouse_cursor");
         state->asset_ids.sea_0 = add_asset(state, "sea_0");
         state->asset_ids.ground_0 = add_asset(state, "ground_0");
@@ -898,14 +897,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     struct {
         entity_movement *entity_movement;
         movement_history *entity_history;
+        const char *name;
     } movements[] = {
         {
             &state->player_movement,
             &state->player_history,
+            "player",
         },
         {
             &state->familiar_movement,
             &state->familiar_history,
+            "familiar",
         },
     };
 
@@ -926,7 +928,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             save_movement_history(state, m.entity_history, data);
         }
+        char window_name[100];
+        sprintf(window_name, "Movement of %s", m.name);
+        ImGui::Begin(window_name);
         movement_data data_out = apply_movement(state, data);
+        ImGui::End();
         m.entity_movement->position = data_out.position;
         m.entity_movement->velocity = data_out.velocity;
     }
