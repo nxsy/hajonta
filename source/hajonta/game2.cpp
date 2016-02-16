@@ -51,6 +51,7 @@ _asset_ids
     int32_t sea_ground_b_l;
     int32_t sea_ground_b_r;
     int32_t player;
+    int32_t familiar;
 };
 
 enum struct
@@ -63,10 +64,9 @@ terrain
 struct
 movement_data
 {
-    v2 player_position;
-    v2 player_velocity;
+    v2 position;
+    v2 velocity;
     v2 acceleration;
-    float acceleration_multiplier;
     float delta_t;
 };
 
@@ -92,6 +92,13 @@ movement_history_playback
      uint32_t frame;
 };
 
+struct
+entity_movement
+{
+    v2 position;
+    v2 velocity;
+};
+
 struct game_state
 {
     bool initialized;
@@ -104,7 +111,7 @@ struct game_state
 
     _asset_ids asset_ids;
     uint32_t asset_count;
-    asset_descriptor assets[16];
+    asset_descriptor assets[32];
 
     uint32_t elements[6000 / 4 * 6];
 
@@ -127,12 +134,13 @@ struct game_state
 
     v2 camera_offset;
 
-    v2 player_position;
-    v2 player_velocity;
+    entity_movement player_movement;
+    entity_movement familiar_movement;
     float acceleration_multiplier;
     bool paused;
 
-    movement_history history;
+    movement_history player_history;
+    movement_history familiar_history;
     movement_history_playback history_playback;
 
     uint32_t repeat_count;
@@ -403,9 +411,8 @@ add_asset(game_state *state, char *name)
 }
 
 void
-save_movement_history(game_state *state, movement_data data_in)
+save_movement_history(game_state *state, movement_history *history, movement_data data_in)
 {
-    movement_history *history = &state->history;
     movement_slice *current_slice = history->slices + history->current_slice;
     if (current_slice->num_data >= harray_count(current_slice->data))
     {
@@ -426,17 +433,16 @@ save_movement_history(game_state *state, movement_data data_in)
 }
 
 movement_data
-load_movement_history(game_state *state)
+load_movement_history(game_state *state, movement_history *history)
 {
-    return state->history.slices[state->history_playback.slice].data[state->history_playback.frame];
+    return history->slices[state->history_playback.slice].data[state->history_playback.frame];
 }
 
 movement_data
 apply_movement(game_state *state, movement_data data_in)
 {
     movement_data data = data_in;
-    data.acceleration = v2mul(data.acceleration, data.acceleration_multiplier);
-    v2 movement = integrate_acceleration(&data.player_velocity, data.acceleration, data.delta_t);
+    v2 movement = integrate_acceleration(&data.velocity, data.acceleration, data.delta_t);
 
     {
         line2 potential_lines[12];
@@ -445,10 +451,10 @@ apply_movement(game_state *state, movement_data data_in)
         uint32_t x_start = 50 - (MAP_WIDTH / 2);
         uint32_t y_start = 50 - (MAP_HEIGHT / 2);
 
-        uint32_t player_tile_x = 50 + (int32_t)floorf(data.player_position.x) - x_start;
-        uint32_t player_tile_y = 50 + (int32_t)floorf(data.player_position.y) - y_start;
+        uint32_t player_tile_x = 50 + (int32_t)floorf(data.position.x) - x_start;
+        uint32_t player_tile_y = 50 + (int32_t)floorf(data.position.y) - y_start;
 
-        ImGui::Text("Player is at %f,%f moving %f,%f", data.player_position.x, data.player_position.y, movement.x, movement.y);
+        ImGui::Text("Player is at %f,%f moving %f,%f", data.position.x, data.position.y, movement.x, movement.y);
         ImGui::Text("Player is at tile %dx%d", player_tile_x, player_tile_y);
 
         if (movement.x > 0)
@@ -543,7 +549,7 @@ apply_movement(game_state *state, movement_data data_in)
         while (v2length(movement) > 0)
         {
             ImGui::Text("Resolving remaining movement %f,%f from position %f, %f",
-                    movement.x, movement.y, data.player_position.x, data.player_position.y);
+                    movement.x, movement.y, data.position.x, data.position.y);
             if (num_intersects++ > 8)
             {
                 break;
@@ -554,11 +560,11 @@ apply_movement(game_state *state, movement_data data_in)
             float closest_length = -1;
             line2 movement_lines[] =
             {
-                //{data.player_position, movement},
-                {v2add(data.player_position, {-0.2f, 0} ), movement},
-                {v2add(data.player_position, {0.2f, 0} ), movement},
-                {v2add(data.player_position, {-0.2f, 0.1f} ), movement},
-                {v2add(data.player_position, {0.2f, 0.1f} ), movement},
+                //{data.position, movement},
+                {v2add(data.position, {-0.2f, 0} ), movement},
+                {v2add(data.position, {0.2f, 0} ), movement},
+                {v2add(data.position, {-0.2f, 0.1f} ), movement},
+                {v2add(data.position, {0.2f, 0.1f} ), movement},
             };
             v2 used_movement = {};
 
@@ -570,8 +576,8 @@ apply_movement(game_state *state, movement_data data_in)
                     v2 intersect_point;
                     if (line_intersect(movement_line, potential_lines[i], &intersect_point)) {
                         ImGui::Text("Player at %f,%f movement %f,%f intersects with line %f,%f direction %f,%f at %f,%f",
-                                data.player_position.x,
-                                data.player_position.y,
+                                data.position.x,
+                                data.position.y,
                                 movement.x,
                                 movement.y,
                                 potential_lines[i].position.x,
@@ -595,20 +601,20 @@ apply_movement(game_state *state, movement_data data_in)
             }
             if (!intersecting_line)
             {
-                v2 new_player_position = v2add(data.player_position, movement);
-                ImGui::Text("No intersections, player moves from %f,%f to %f,%f", data.player_position.x, data.player_position.y,
-                        new_player_position.x, new_player_position.y);
-                data.player_position = new_player_position;
+                v2 new_position = v2add(data.position, movement);
+                ImGui::Text("No intersections, player moves from %f,%f to %f,%f", data.position.x, data.position.y,
+                        new_position.x, new_position.y);
+                data.position = new_position;
                 movement = {0,0};
             }
             else
             {
                 used_movement = v2mul(used_movement, 0.999f);
-                v2 new_player_position = v2add(data.player_position, used_movement);
+                v2 new_position = v2add(data.position, used_movement);
                 movement = v2sub(movement, used_movement);
-                ImGui::Text("Player moves from %f,%f to %f,%f using %f,%f of movement", data.player_position.x, data.player_position.y,
-                        new_player_position.x, new_player_position.y, used_movement.x, used_movement.y);
-                data.player_position = new_player_position;
+                ImGui::Text("Player moves from %f,%f to %f,%f using %f,%f of movement", data.position.x, data.position.y,
+                        new_position.x, new_position.y, used_movement.x, used_movement.y);
+                data.position = new_position;
 
                 v2 intersecting_direction = intersecting_line->direction;
                 v2 new_movement = v2projection(intersecting_direction, movement);
@@ -616,10 +622,10 @@ apply_movement(game_state *state, movement_data data_in)
                 movement = new_movement;
 
                 v2 rhn = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
-                v2 velocity_projection = v2projection(rhn, data.player_velocity);
-                v2 new_player_velocity = v2sub(data.player_velocity, velocity_projection);
-                ImGui::Text("Velocity of %f,%f projected along wall becoming %f,%f", data.player_velocity.x, data.player_velocity.y, new_player_velocity.x, new_player_velocity.y);
-                data.player_velocity = new_player_velocity;
+                v2 velocity_projection = v2projection(rhn, data.velocity);
+                v2 new_velocity = v2sub(data.velocity, velocity_projection);
+                ImGui::Text("Velocity of %f,%f projected along wall becoming %f,%f", data.velocity.x, data.velocity.y, new_velocity.x, new_velocity.y);
+                data.velocity = new_velocity;
 
                 v2 n = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
                 if (v2dot(used_movement, n) > 0)
@@ -628,11 +634,11 @@ apply_movement(game_state *state, movement_data data_in)
                 }
                 n = v2mul(n, 0.002f);
 
-                new_player_position = v2add(data.player_position, n);
+                new_position = v2add(data.position, n);
                 ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", n.x, n.y,
-                        data.player_position.x, data.player_position.y,
-                        new_player_position.x, new_player_position.y);
-                data.player_position = new_player_position;
+                        data.position.x, data.position.y,
+                        new_position.x, new_position.y);
+                data.position = new_position;
             }
 
             for (uint32_t i = 0; i < num_potential_lines; ++i)
@@ -672,12 +678,12 @@ apply_movement(game_state *state, movement_data data_in)
                         //float corrective_distance = 0.002f - distance;
                         float corrective_distance = 0.002f;
                         v2 corrective_movement = v2mul(v2normalize(line_to_player), corrective_distance);
-                        v2 new_player_position = v2add(data.player_position, corrective_movement);
+                        v2 new_position = v2add(data.position, corrective_movement);
 
                         ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", corrective_movement.x, corrective_movement.y,
-                                data.player_position.x, data.player_position.y,
-                                new_player_position.x, new_player_position.y);
-                        data.player_position = new_player_position;
+                                data.position.x, data.position.y,
+                                new_position.x, new_position.y);
+                        data.position = new_position;
                     }
                 }
                 */
@@ -711,12 +717,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.sea_ground_b_l = add_asset(state, "sea_ground_b_l");
         state->asset_ids.sea_ground_b_r = add_asset(state, "sea_ground_b_r");
         state->asset_ids.player = add_asset(state, "player");
+        state->asset_ids.familiar = add_asset(state, "familiar");
 
-        hassert(state->asset_ids.player > 0);
+        hassert(state->asset_ids.familiar > 0);
         build_map(state);
         RenderListBuffer(state->render_list, state->render_buffer);
         RenderListBuffer(state->render_list2, state->render_buffer2);
         state->pixel_size = 64;
+        state->familiar_movement.position = {2, 2};
 
         state->acceleration_multiplier = 50.0f;
     }
@@ -797,18 +805,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     }
                     else
                     {
-                        if (state->history_playback.slice != state->history.start_slice)
+                        if (state->history_playback.slice != state->player_history.start_slice)
                         {
                             if (state->history_playback.slice == 0)
                             {
-                                state->history_playback.slice = harray_count(state->history.slices) - 1;
+                                state->history_playback.slice = harray_count(state->player_history.slices) - 1;
                             }
                             else
                             {
                                 --state->history_playback.slice;
                             }
-                            state->history_playback.frame = harray_count(state->history.slices[0].data) - 1;
-                            hassert(harray_count(state->history.slices[0].data) == state->history.slices[state->history_playback.slice].num_data);
+                            state->history_playback.frame = harray_count(state->player_history.slices[0].data) - 1;
+                            hassert(harray_count(state->player_history.slices[0].data) == state->player_history.slices[state->history_playback.slice].num_data);
                         }
                     }
                     state->repeat_count = 10;
@@ -819,23 +827,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 if (!controller->buttons.move_right.repeat || --state->repeat_count == 0)
                 {
-                    if (state->history_playback.frame != harray_count(state->history.slices[0].data) - 1)
+                    if (state->history_playback.frame != harray_count(state->player_history.slices[0].data) - 1)
                     {
-                        if (state->history_playback.slice != state->history.current_slice)
+                        if (state->history_playback.slice != state->player_history.current_slice)
                         {
                             ++state->history_playback.frame;
                         }
-                        else if (state->history_playback.frame != state->history.slices[state->history.current_slice].num_data - 1)
+                        else if (state->history_playback.frame != state->player_history.slices[state->player_history.current_slice].num_data - 1)
                         {
                             ++state->history_playback.frame;
                         }
                     }
                     else
                     {
-                        if (state->history_playback.slice != state->history.current_slice)
+                        if (state->history_playback.slice != state->player_history.current_slice)
                         {
                             ++state->history_playback.slice;
-                            state->history_playback.slice %= harray_count(state->history.slices);
+                            state->history_playback.slice %= harray_count(state->player_history.slices);
                             state->history_playback.frame = 0;
                         }
                     }
@@ -867,47 +875,62 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->paused = !state->paused;
             if (state->paused)
             {
-                 state->history_playback.slice = state->history.current_slice;
-                 state->history_playback.frame = state->history.slices[state->history.current_slice].num_data - 1;
+                 state->history_playback.slice = state->player_history.current_slice;
+                 state->history_playback.frame = state->player_history.slices[state->player_history.current_slice].num_data - 1;
             }
         }
 
         if (controller->buttons.back.ended_down && !controller->buttons.back.repeat)
         {
-            if (state->player_position.x == 0 && state->player_position.y == 0)
+            if (state->player_movement.position.x == 0 && state->player_movement.position.y == 0)
             {
                 memory->quit = true;
             }
-            state->player_position = {0,0};
-            state->player_velocity = {0,0};
+            state->player_movement.position = {0,0};
+            state->player_movement.velocity = {0,0};
             state->paused = false;
         }
     }
 
     ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
+    acceleration = v2mul(acceleration, state->acceleration_multiplier);
 
-    movement_data data_out;
+    struct {
+        entity_movement *entity_movement;
+        movement_history *entity_history;
+    } movements[] = {
+        {
+            &state->player_movement,
+            &state->player_history,
+        },
+        {
+            &state->familiar_movement,
+            &state->familiar_history,
+        },
+    };
+
+    for (auto &&m : movements)
     {
         movement_data data;
-        data.player_position = state->player_position;
-        data.player_velocity = state->player_velocity;
+        data.position = m.entity_movement->position;
+        data.velocity = m.entity_movement->velocity;
         data.acceleration = acceleration;
-        data.acceleration_multiplier = state->acceleration_multiplier;
         data.delta_t = input->delta_t;
 
         if (state->paused)
         {
             ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
-            data = load_movement_history(state);
+            data = load_movement_history(state, m.entity_history);
         }
         else
         {
-            save_movement_history(state, data);
+            save_movement_history(state, m.entity_history, data);
         }
-        data_out = apply_movement(state, data);
+        movement_data data_out = apply_movement(state, data);
+        m.entity_movement->position = data_out.position;
+        m.entity_movement->velocity = data_out.velocity;
     }
-    state->player_position = data_out.player_position;
-    state->player_velocity = data_out.player_velocity;
+
     for (uint32_t y = 0; y < 100; ++y)
     {
         for (uint32_t x = 0; x < 100; ++x)
@@ -975,12 +998,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     v3 player_size = { 1.0f, 2.0f, 0 };
-    v3 player_position = {state->player_position.x - 0.5f, state->player_position.y, 0};
+    v3 player_position = {state->player_movement.position.x - 0.5f, state->player_movement.position.y, 0};
     PushQuad(&state->render_list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
 
-    v3 player_position2 = {state->player_position.x - 0.2f, state->player_position.y, 0};
+    v3 player_position2 = {state->player_movement.position.x - 0.2f, state->player_movement.position.y, 0};
     v3 player_size2 = {0.4f, 0.1f, 0};
     PushQuad(&state->render_list, player_position2, player_size2, {1,1,1,1}, 1, -1);
+
+    v3 familiar_size = { 1.0f, 2.0f, 0 };
+    v3 familiar_position = {state->familiar_movement.position.x - 0.5f, state->familiar_movement.position.y, 0};
+    PushQuad(&state->render_list, familiar_position, familiar_size, {1,1,1,1}, 1, state->asset_ids.familiar);
+
+    v3 familiar_position2 = {state->familiar_movement.position.x - 0.2f, state->familiar_movement.position.y, 0};
+    v3 familiar_size2 = {0.4f, 0.1f, 0};
+    PushQuad(&state->render_list, familiar_position2, familiar_size2, {1,1,1,1}, 1, -1);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
