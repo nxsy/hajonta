@@ -152,6 +152,8 @@ struct renderer_state
     uint32_t asset_count;
 
     uint32_t generation_id;
+
+    mouse_input original_mouse_input;
 };
 
 int32_t
@@ -545,6 +547,9 @@ RENDERER_SETUP(renderer_setup)
         }
     }
 
+    state->original_mouse_input = input->mouse;
+    bool wanted_capture_mouse = io.WantCaptureMouse;
+
     ImGui::NewFrame();
 
     if (io.WantCaptureKeyboard)
@@ -553,6 +558,22 @@ RENDERER_SETUP(renderer_setup)
     } else
     {
         memory->debug_keyboard = false;
+    }
+
+    if (!io.WantCaptureMouse && wanted_capture_mouse)
+    {
+        input->mouse.buttons.left.repeat = true;
+        state->original_mouse_input.buttons.left.repeat = true;
+    }
+
+    if (io.WantCaptureMouse)
+    {
+        input->mouse.buttons.left.repeat = !BUTTON_WENT_UP(input->mouse.buttons.left) || wanted_capture_mouse;
+        input->mouse.buttons.left.ended_down = false;
+        input->mouse.buttons.right.repeat = !BUTTON_WENT_UP(input->mouse.buttons.right) || wanted_capture_mouse;
+        input->mouse.buttons.right.ended_down = false;
+        input->mouse.buttons.middle.repeat = !BUTTON_WENT_UP(input->mouse.buttons.middle) || wanted_capture_mouse;
+        input->mouse.buttons.middle.ended_down = false;
     }
 
     io.MouseDrawCursor = io.WantCaptureMouse;
@@ -809,6 +830,8 @@ RENDERER_RENDER(renderer_render)
     render_draw_lists(draw_data, state);
 
     glErrorAssert();
+
+    input->mouse = state->original_mouse_input;
 
     return true;
 };

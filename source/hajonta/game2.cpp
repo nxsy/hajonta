@@ -879,27 +879,28 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         game_controller_state *controller = &input->controllers[i];
+        game_buttons *buttons = &controller->buttons;
         switch (state->mode)
         {
             case game_mode::normal:
             {
-                if (controller->buttons.move_up.ended_down)
+                if (BUTTON_ENDED_DOWN(buttons->move_up))
                 {
                     acceleration.y += 1.0f;
                 }
-                if (controller->buttons.move_down.ended_down)
+                if (BUTTON_ENDED_DOWN(buttons->move_down))
                 {
                     acceleration.y -= 1.0f;
                 }
-                if (controller->buttons.move_left.ended_down)
+                if (BUTTON_ENDED_DOWN(buttons->move_left))
                 {
                     acceleration.x -= 1.0f;
                 }
-                if (controller->buttons.move_right.ended_down)
+                if (BUTTON_ENDED_DOWN(buttons->move_right))
                 {
                     acceleration.x += 1.0f;
                 }
-                if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+                if (BUTTON_WENT_DOWN(buttons->start))
                 {
                     state->mode = game_mode::movement_history;
                     state->history_playback.slice = state->player_history.current_slice;
@@ -909,62 +910,54 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
             case game_mode::movement_history:
             {
-                if (controller->buttons.move_left.ended_down)
+                if (BUTTON_DOWN_REPETITIVELY(buttons->move_left, &state->repeat_count, 10))
                 {
-                    if (!controller->buttons.move_left.repeat || --state->repeat_count == 0)
+                    if (state->history_playback.frame != 0)
                     {
-                        if (state->history_playback.frame != 0)
+                        --state->history_playback.frame;
+                    }
+                    else
+                    {
+                        if (state->history_playback.slice != state->player_history.start_slice)
                         {
-                            --state->history_playback.frame;
-                        }
-                        else
-                        {
-                            if (state->history_playback.slice != state->player_history.start_slice)
+                            if (state->history_playback.slice == 0)
                             {
-                                if (state->history_playback.slice == 0)
-                                {
-                                    state->history_playback.slice = harray_count(state->player_history.slices) - 1;
-                                }
-                                else
-                                {
-                                    --state->history_playback.slice;
-                                }
-                                state->history_playback.frame = harray_count(state->player_history.slices[0].data) - 1;
-                                hassert(harray_count(state->player_history.slices[0].data) == state->player_history.slices[state->history_playback.slice].num_data);
+                                state->history_playback.slice = harray_count(state->player_history.slices) - 1;
                             }
+                            else
+                            {
+                                --state->history_playback.slice;
+                            }
+                            state->history_playback.frame = harray_count(state->player_history.slices[0].data) - 1;
+                            hassert(harray_count(state->player_history.slices[0].data) == state->player_history.slices[state->history_playback.slice].num_data);
                         }
-                        state->repeat_count = 10;
                     }
                 }
 
-                if (controller->buttons.move_right.ended_down)
+                if (BUTTON_DOWN_REPETITIVELY(buttons->move_right, &state->repeat_count, 10))
                 {
-                    if (!controller->buttons.move_right.repeat || --state->repeat_count == 0)
+                    if (state->history_playback.frame != harray_count(state->player_history.slices[0].data) - 1)
                     {
-                        if (state->history_playback.frame != harray_count(state->player_history.slices[0].data) - 1)
+                        if (state->history_playback.slice != state->player_history.current_slice)
                         {
-                            if (state->history_playback.slice != state->player_history.current_slice)
-                            {
-                                ++state->history_playback.frame;
-                            }
-                            else if (state->history_playback.frame != state->player_history.slices[state->player_history.current_slice].num_data - 1)
-                            {
-                                ++state->history_playback.frame;
-                            }
+                            ++state->history_playback.frame;
                         }
-                        else
+                        else if (state->history_playback.frame != state->player_history.slices[state->player_history.current_slice].num_data - 1)
                         {
-                            if (state->history_playback.slice != state->player_history.current_slice)
-                            {
-                                ++state->history_playback.slice;
-                                state->history_playback.slice %= harray_count(state->player_history.slices);
-                                state->history_playback.frame = 0;
-                            }
+                            ++state->history_playback.frame;
                         }
-                        state->repeat_count = 10;
+                    }
+                    else
+                    {
+                        if (state->history_playback.slice != state->player_history.current_slice)
+                        {
+                            ++state->history_playback.slice;
+                            state->history_playback.slice %= harray_count(state->player_history.slices);
+                            state->history_playback.frame = 0;
+                        }
                     }
                 }
-                if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+                if (BUTTON_WENT_DOWN(buttons->start))
                 {
                     state->mode = game_mode::normal;
                 }
@@ -976,7 +969,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             } break;
         }
 
-        if (controller->buttons.back.ended_down && !controller->buttons.back.repeat)
+        if (BUTTON_WENT_DOWN(buttons->back))
         {
             if (state->player_movement.position.x == 0 && state->player_movement.position.y == 0)
             {
@@ -986,6 +979,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->player_movement.velocity = {0,0};
             state->mode = game_mode::normal;
         }
+    }
+
+    ImGui::Checkbox("LMB down", &input->mouse.buttons.left.ended_down);
+    ImGui::SameLine();
+    ImGui::Checkbox("LMB repeat", &input->mouse.buttons.left.repeat);
+
+    if (BUTTON_WENT_DOWN(input->mouse.buttons.left))
+    {
+        ImGui::Text("Left mouse button down");
+    }
+    if (BUTTON_WENT_UP(input->mouse.buttons.left))
+    {
+        ImGui::Text("Left mouse button up");
     }
 
     ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);

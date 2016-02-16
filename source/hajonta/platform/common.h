@@ -96,11 +96,38 @@ struct platform_memory
     platform_editor_load_nearby_file_func *platform_editor_load_nearby_file;
 };
 
+#define BUTTON_ENDED_DOWN(x) (x.ended_down)
+#define BUTTON_ENDED_UP(x) (!x.ended_down)
+#define BUTTON_WENT_DOWN(x) (x.ended_down && !x.repeat)
+#define BUTTON_WENT_UP(x) (!x.ended_down && !x.repeat)
+#define BUTTON_STAYED_DOWN(x) (x.ended_down && x.repeat)
+#define BUTTON_STAYED_UP(x) (!x.ended_down && x.repeat)
+
 struct game_button_state
 {
     bool ended_down;
     bool repeat;
 };
+
+inline bool
+BUTTON_DOWN_REPETITIVELY(game_button_state button, uint32_t *repetition_var, uint32_t repetition_max)
+{
+    bool result = false;
+    if (button.ended_down)
+    {
+        if (!button.repeat)
+        {
+            result = true;
+            *repetition_var = repetition_max;
+        }
+        else if (--*repetition_var == 0)
+        {
+            result = true;
+            *repetition_var = repetition_max;
+        }
+    }
+    return result;
+}
 
 struct game_buttons
 {
@@ -215,7 +242,7 @@ typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 #define RENDERER_SETUP(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 typedef RENDERER_SETUP(renderer_setup_func);
 
-#define RENDERER_RENDER(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory)
+#define RENDERER_RENDER(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 typedef RENDERER_RENDER(renderer_render_func);
 
 

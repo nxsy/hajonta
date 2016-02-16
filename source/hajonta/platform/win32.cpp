@@ -1172,7 +1172,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 
         source_voice->SubmitSourceBuffer(&audio_buffer);
 
-        renderercode.renderer_render((hajonta_thread_context *)&state, &memory);
+        renderercode.renderer_render((hajonta_thread_context *)&state, &memory, state.new_input);
         SwapBuffers(state.device_context);
 
         game_input *temp_input = state.new_input;
