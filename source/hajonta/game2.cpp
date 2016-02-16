@@ -106,6 +106,14 @@ debug_state
     bool familiar_movement;
 };
 
+enum struct
+game_mode
+{
+    normal,
+    movement_history,
+    pathfinding,
+};
+
 struct game_state
 {
     bool initialized;
@@ -144,7 +152,8 @@ struct game_state
     entity_movement player_movement;
     entity_movement familiar_movement;
     float acceleration_multiplier;
-    bool paused;
+
+    game_mode mode;
 
     movement_history player_history;
     movement_history familiar_history;
@@ -870,91 +879,101 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         game_controller_state *controller = &input->controllers[i];
-        if (state->paused)
+        switch (state->mode)
         {
-            if (controller->buttons.move_left.ended_down)
+            case game_mode::normal:
             {
-                if (!controller->buttons.move_left.repeat || --state->repeat_count == 0)
+                if (controller->buttons.move_up.ended_down)
                 {
-                    if (state->history_playback.frame != 0)
-                    {
-                        --state->history_playback.frame;
-                    }
-                    else
-                    {
-                        if (state->history_playback.slice != state->player_history.start_slice)
-                        {
-                            if (state->history_playback.slice == 0)
-                            {
-                                state->history_playback.slice = harray_count(state->player_history.slices) - 1;
-                            }
-                            else
-                            {
-                                --state->history_playback.slice;
-                            }
-                            state->history_playback.frame = harray_count(state->player_history.slices[0].data) - 1;
-                            hassert(harray_count(state->player_history.slices[0].data) == state->player_history.slices[state->history_playback.slice].num_data);
-                        }
-                    }
-                    state->repeat_count = 10;
+                    acceleration.y += 1.0f;
                 }
-            }
+                if (controller->buttons.move_down.ended_down)
+                {
+                    acceleration.y -= 1.0f;
+                }
+                if (controller->buttons.move_left.ended_down)
+                {
+                    acceleration.x -= 1.0f;
+                }
+                if (controller->buttons.move_right.ended_down)
+                {
+                    acceleration.x += 1.0f;
+                }
+                if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+                {
+                    state->mode = game_mode::movement_history;
+                    state->history_playback.slice = state->player_history.current_slice;
+                    state->history_playback.frame = state->player_history.slices[state->player_history.current_slice].num_data - 1;
+                }
+            } break;
 
-            if (controller->buttons.move_right.ended_down)
+            case game_mode::movement_history:
             {
-                if (!controller->buttons.move_right.repeat || --state->repeat_count == 0)
+                if (controller->buttons.move_left.ended_down)
                 {
-                    if (state->history_playback.frame != harray_count(state->player_history.slices[0].data) - 1)
+                    if (!controller->buttons.move_left.repeat || --state->repeat_count == 0)
                     {
-                        if (state->history_playback.slice != state->player_history.current_slice)
+                        if (state->history_playback.frame != 0)
                         {
-                            ++state->history_playback.frame;
+                            --state->history_playback.frame;
                         }
-                        else if (state->history_playback.frame != state->player_history.slices[state->player_history.current_slice].num_data - 1)
+                        else
                         {
-                            ++state->history_playback.frame;
+                            if (state->history_playback.slice != state->player_history.start_slice)
+                            {
+                                if (state->history_playback.slice == 0)
+                                {
+                                    state->history_playback.slice = harray_count(state->player_history.slices) - 1;
+                                }
+                                else
+                                {
+                                    --state->history_playback.slice;
+                                }
+                                state->history_playback.frame = harray_count(state->player_history.slices[0].data) - 1;
+                                hassert(harray_count(state->player_history.slices[0].data) == state->player_history.slices[state->history_playback.slice].num_data);
+                            }
                         }
+                        state->repeat_count = 10;
                     }
-                    else
-                    {
-                        if (state->history_playback.slice != state->player_history.current_slice)
-                        {
-                            ++state->history_playback.slice;
-                            state->history_playback.slice %= harray_count(state->player_history.slices);
-                            state->history_playback.frame = 0;
-                        }
-                    }
-                    state->repeat_count = 10;
                 }
-            }
-        }
-        else
-        {
-            if (controller->buttons.move_up.ended_down)
+
+                if (controller->buttons.move_right.ended_down)
+                {
+                    if (!controller->buttons.move_right.repeat || --state->repeat_count == 0)
+                    {
+                        if (state->history_playback.frame != harray_count(state->player_history.slices[0].data) - 1)
+                        {
+                            if (state->history_playback.slice != state->player_history.current_slice)
+                            {
+                                ++state->history_playback.frame;
+                            }
+                            else if (state->history_playback.frame != state->player_history.slices[state->player_history.current_slice].num_data - 1)
+                            {
+                                ++state->history_playback.frame;
+                            }
+                        }
+                        else
+                        {
+                            if (state->history_playback.slice != state->player_history.current_slice)
+                            {
+                                ++state->history_playback.slice;
+                                state->history_playback.slice %= harray_count(state->player_history.slices);
+                                state->history_playback.frame = 0;
+                            }
+                        }
+                        state->repeat_count = 10;
+                    }
+                }
+                if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
+                {
+                    state->mode = game_mode::normal;
+                }
+            } break;
+
+            case game_mode::pathfinding:
             {
-                acceleration.y += 1.0f;
-            }
-            if (controller->buttons.move_down.ended_down)
-            {
-                acceleration.y -= 1.0f;
-            }
-            if (controller->buttons.move_left.ended_down)
-            {
-                acceleration.x -= 1.0f;
-            }
-            if (controller->buttons.move_right.ended_down)
-            {
-                acceleration.x += 1.0f;
-            }
-        }
-        if (controller->buttons.start.ended_down && !controller->buttons.start.repeat)
-        {
-            state->paused = !state->paused;
-            if (state->paused)
-            {
-                 state->history_playback.slice = state->player_history.current_slice;
-                 state->history_playback.frame = state->player_history.slices[state->player_history.current_slice].num_data - 1;
-            }
+
+            } break;
         }
 
         if (controller->buttons.back.ended_down && !controller->buttons.back.repeat)
@@ -965,69 +984,83 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
             state->player_movement.position = {0,0};
             state->player_movement.velocity = {0,0};
-            state->paused = false;
+            state->mode = game_mode::normal;
         }
     }
 
     ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
     acceleration = v2mul(acceleration, state->acceleration_multiplier);
 
-    struct {
-        entity_movement *entity_movement;
-        movement_history *entity_history;
-        bool *show_window;
-        const char *name;
-    } movements[] = {
-        {
-            &state->player_movement,
-            &state->player_history,
-            &state->debug.player_movement,
-            "player",
-        },
-        {
-            &state->familiar_movement,
-            &state->familiar_history,
-            &state->debug.familiar_movement,
-            "familiar",
-        },
-    };
-
-    for (auto &&m : movements)
+    switch (state->mode)
     {
-        movement_data data;
-        data.position = m.entity_movement->position;
-        data.velocity = m.entity_movement->velocity;
-        data.acceleration = acceleration;
-        data.delta_t = input->delta_t;
+        case game_mode::normal:
+        case game_mode::movement_history:
+        {
 
-        char window_name[100];
-        sprintf(window_name, "Movement of %s", m.name);
-        bool opened_window = false;
-        if (*m.show_window)
-        {
-            ImGui::Begin(window_name, m.show_window);
-            opened_window = true;
-        }
-        if (state->paused)
-        {
-            if (*m.show_window)
+            struct {
+                entity_movement *entity_movement;
+                movement_history *entity_history;
+                bool *show_window;
+                const char *name;
+            } movements[] = {
+                {
+                    &state->player_movement,
+                    &state->player_history,
+                    &state->debug.player_movement,
+                    "player",
+                },
+                {
+                    &state->familiar_movement,
+                    &state->familiar_history,
+                    &state->debug.familiar_movement,
+                    "familiar",
+                },
+            };
+
+            for (auto &&m : movements)
             {
-                ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
+                movement_data data;
+                data.position = m.entity_movement->position;
+                data.velocity = m.entity_movement->velocity;
+                data.acceleration = acceleration;
+                data.delta_t = input->delta_t;
+
+                char window_name[100];
+                sprintf(window_name, "Movement of %s", m.name);
+                bool opened_window = false;
+                if (*m.show_window)
+                {
+                    ImGui::Begin(window_name, m.show_window);
+                    opened_window = true;
+                }
+
+                switch (state->mode)
+                {
+                    case game_mode::movement_history:
+                    {
+                        if (*m.show_window)
+                        {
+                            ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
+                        }
+                        data = load_movement_history(state, m.entity_history);
+                    } break;
+                    case game_mode::normal:
+                    {
+                        save_movement_history(state, m.entity_history, data, *m.show_window);
+                    } break;
+                    case game_mode::pathfinding: break;
+                }
+                movement_data data_out = apply_movement(state, data, *m.show_window);
+                if (opened_window)
+                {
+                    ImGui::End();
+                }
+                m.entity_movement->position = data_out.position;
+                m.entity_movement->velocity = data_out.velocity;
             }
-            data = load_movement_history(state, m.entity_history);
-        }
-        else
-        {
-            save_movement_history(state, m.entity_history, data, *m.show_window);
-        }
-        movement_data data_out = apply_movement(state, data, *m.show_window);
-        if (opened_window)
-        {
-            ImGui::End();
-        }
-        m.entity_movement->position = data_out.position;
-        m.entity_movement->velocity = data_out.velocity;
-    }
+        } break;
+        case game_mode::pathfinding: break;
+    };
 
     for (uint32_t y = 0; y < 100; ++y)
     {
@@ -1119,7 +1152,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->render_list, mouse_bl, mouse_size, {1,1,1,1}, 0, 0);
+    PushQuad(&state->render_list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
     AddRenderList(memory, &state->render_list);
     AddRenderList(memory, &state->render_list2);
