@@ -689,7 +689,8 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     glBindVertexArray(state->vao);
 
-    uint32_t col = 0xff000000;
+    uint32_t col = 0x00000000;
+    col |= (uint32_t)(quad->color.w * 255.0f) << 24;
     col |= (uint32_t)(quad->color.z * 255.0f) << 16;
     col |= (uint32_t)(quad->color.y * 255.0f) << 8;
     col |= (uint32_t)(quad->color.x * 255.0f) << 0;
