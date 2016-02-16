@@ -555,6 +555,8 @@ RENDERER_SETUP(renderer_setup)
         memory->debug_keyboard = false;
     }
 
+    io.MouseDrawCursor = io.WantCaptureMouse;
+
     return true;
 }
 
