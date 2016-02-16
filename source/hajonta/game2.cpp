@@ -99,6 +99,13 @@ entity_movement
     v2 velocity;
 };
 
+struct
+debug_state
+{
+    bool player_movement;
+    bool familiar_movement;
+};
+
 struct game_state
 {
     bool initialized;
@@ -144,6 +151,8 @@ struct game_state
     movement_history_playback history_playback;
 
     uint32_t repeat_count;
+
+    debug_state debug;
 };
 
 v2
@@ -411,7 +420,7 @@ add_asset(game_state *state, char *name)
 }
 
 void
-save_movement_history(game_state *state, movement_history *history, movement_data data_in)
+save_movement_history(game_state *state, movement_history *history, movement_data data_in, bool debug)
 {
     movement_slice *current_slice = history->slices + history->current_slice;
     if (current_slice->num_data >= harray_count(current_slice->data))
@@ -427,7 +436,10 @@ save_movement_history(game_state *state, movement_history *history, movement_dat
             history->start_slice %= harray_count(history->slices);
         }
     }
-    ImGui::Text("Movement history: Start slice %d, current slice %d, current slice count %d", history->start_slice, history->current_slice, current_slice->num_data);
+    if (debug)
+    {
+        ImGui::Text("Movement history: Start slice %d, current slice %d, current slice count %d", history->start_slice, history->current_slice, current_slice->num_data);
+    }
 
     current_slice->data[current_slice->num_data++] = data_in;
 }
@@ -439,7 +451,7 @@ load_movement_history(game_state *state, movement_history *history)
 }
 
 movement_data
-apply_movement(game_state *state, movement_data data_in)
+apply_movement(game_state *state, movement_data data_in, bool debug)
 {
     movement_data data = data_in;
     v2 movement = integrate_acceleration(&data.velocity, data.acceleration, data.delta_t);
@@ -454,8 +466,11 @@ apply_movement(game_state *state, movement_data data_in)
         uint32_t player_tile_x = 50 + (int32_t)floorf(data.position.x) - x_start;
         uint32_t player_tile_y = 50 + (int32_t)floorf(data.position.y) - y_start;
 
-        ImGui::Text("Player is at %f,%f moving %f,%f", data.position.x, data.position.y, movement.x, movement.y);
-        ImGui::Text("Player is at tile %dx%d", player_tile_x, player_tile_y);
+        if (debug)
+        {
+            ImGui::Text("Player is at %f,%f moving %f,%f", data.position.x, data.position.y, movement.x, movement.y);
+            ImGui::Text("Player is at tile %dx%d", player_tile_x, player_tile_y);
+        }
 
         if (movement.x > 0)
         {
@@ -466,8 +481,11 @@ apply_movement(game_state *state, movement_data data_in)
                     v2 q = {(float)player_tile_x - 50 + x_start + 1, (float)player_tile_y + i - 50 + y_start};
                     v2 direction = {0, 1};
                     potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to right tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
+                    if (debug)
+                    {
+                        ImGui::Text("Path to right tile is blocked by %f,%f direction %f,%f",
+                                q.x, q.y, direction.x, direction.y);
+                    }
                 };
             }
         }
@@ -481,8 +499,11 @@ apply_movement(game_state *state, movement_data data_in)
                     v2 q = {(float)player_tile_x - 50 + x_start, (float)player_tile_y + i - 50 + y_start};
                     v2 direction = {0, 1};
                     potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to left tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
+                    if (debug)
+                    {
+                        ImGui::Text("Path to left tile is blocked by %f,%f direction %f,%f",
+                                q.x, q.y, direction.x, direction.y);
+                    }
                 }
             }
         }
@@ -496,8 +517,11 @@ apply_movement(game_state *state, movement_data data_in)
                     v2 q = {(float)player_tile_x + i - 50 + x_start, (float)player_tile_y - 50 + 1 + y_start};
                     v2 direction = {1, 0};
                     potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to up tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
+                    if (debug)
+                    {
+                        ImGui::Text("Path to up tile is blocked by %f,%f direction %f,%f",
+                                q.x, q.y, direction.x, direction.y);
+                    }
                 };
             }
         }
@@ -511,8 +535,11 @@ apply_movement(game_state *state, movement_data data_in)
                     v2 q = {(float)player_tile_x + i - 50 + x_start, (float)player_tile_y - 50 + y_start};
                     v2 direction = {1, 0};
                     potential_lines[num_potential_lines++] = {q, direction};
-                    ImGui::Text("Path to down tile is blocked by %f,%f direction %f,%f",
-                            q.x, q.y, direction.x, direction.y);
+                    if (debug)
+                    {
+                        ImGui::Text("Path to down tile is blocked by %f,%f direction %f,%f",
+                                q.x, q.y, direction.x, direction.y);
+                    }
                 };
             }
         }
@@ -543,13 +570,19 @@ apply_movement(game_state *state, movement_data data_in)
 
         }
 
-        ImGui::Text("%d potential colliding lines", num_potential_lines);
+        if (debug)
+        {
+            ImGui::Text("%d potential colliding lines", num_potential_lines);
+        }
 
         int num_intersects = 0;
         while (v2length(movement) > 0)
         {
-            ImGui::Text("Resolving remaining movement %f,%f from position %f, %f",
-                    movement.x, movement.y, data.position.x, data.position.y);
+            if (debug)
+            {
+                ImGui::Text("Resolving remaining movement %f,%f from position %f, %f",
+                        movement.x, movement.y, data.position.x, data.position.y);
+            }
             if (num_intersects++ > 8)
             {
                 break;
@@ -575,18 +608,21 @@ apply_movement(game_state *state, movement_data data_in)
                 {
                     v2 intersect_point;
                     if (line_intersect(movement_line, potential_lines[i], &intersect_point)) {
-                        ImGui::Text("Player at %f,%f movement %f,%f intersects with line %f,%f direction %f,%f at %f,%f",
-                                data.position.x,
-                                data.position.y,
-                                movement.x,
-                                movement.y,
-                                potential_lines[i].position.x,
-                                potential_lines[i].position.y,
-                                potential_lines[i].direction.x,
-                                potential_lines[i].direction.y,
-                                intersect_point.x,
-                                intersect_point.y
-                                );
+                        if (debug)
+                        {
+                            ImGui::Text("Player at %f,%f movement %f,%f intersects with line %f,%f direction %f,%f at %f,%f",
+                                    data.position.x,
+                                    data.position.y,
+                                    movement.x,
+                                    movement.y,
+                                    potential_lines[i].position.x,
+                                    potential_lines[i].position.y,
+                                    potential_lines[i].direction.x,
+                                    potential_lines[i].direction.y,
+                                    intersect_point.x,
+                                    intersect_point.y
+                                    );
+                        }
                         float distance_to = v2length(v2sub(intersect_point, movement_line.position));
                         if ((closest_length < 0) || (closest_length > distance_to))
                         {
@@ -602,8 +638,11 @@ apply_movement(game_state *state, movement_data data_in)
             if (!intersecting_line)
             {
                 v2 new_position = v2add(data.position, movement);
-                ImGui::Text("No intersections, player moves from %f,%f to %f,%f", data.position.x, data.position.y,
-                        new_position.x, new_position.y);
+                if (debug)
+                {
+                    ImGui::Text("No intersections, player moves from %f,%f to %f,%f", data.position.x, data.position.y,
+                            new_position.x, new_position.y);
+                }
                 data.position = new_position;
                 movement = {0,0};
             }
@@ -612,19 +651,28 @@ apply_movement(game_state *state, movement_data data_in)
                 used_movement = v2mul(used_movement, 0.999f);
                 v2 new_position = v2add(data.position, used_movement);
                 movement = v2sub(movement, used_movement);
-                ImGui::Text("Player moves from %f,%f to %f,%f using %f,%f of movement", data.position.x, data.position.y,
-                        new_position.x, new_position.y, used_movement.x, used_movement.y);
+                if (debug)
+                {
+                    ImGui::Text("Player moves from %f,%f to %f,%f using %f,%f of movement", data.position.x, data.position.y,
+                            new_position.x, new_position.y, used_movement.x, used_movement.y);
+                }
                 data.position = new_position;
 
                 v2 intersecting_direction = intersecting_line->direction;
                 v2 new_movement = v2projection(intersecting_direction, movement);
-                ImGui::Text("Remaining movement of %f,%f projected along wall becoming %f,%f", movement.x, movement.y, new_movement.x, new_movement.y);
+                if (debug)
+                {
+                    ImGui::Text("Remaining movement of %f,%f projected along wall becoming %f,%f", movement.x, movement.y, new_movement.x, new_movement.y);
+                }
                 movement = new_movement;
 
                 v2 rhn = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
                 v2 velocity_projection = v2projection(rhn, data.velocity);
                 v2 new_velocity = v2sub(data.velocity, velocity_projection);
-                ImGui::Text("Velocity of %f,%f projected along wall becoming %f,%f", data.velocity.x, data.velocity.y, new_velocity.x, new_velocity.y);
+                if (debug)
+                {
+                    ImGui::Text("Velocity of %f,%f projected along wall becoming %f,%f", data.velocity.x, data.velocity.y, new_velocity.x, new_velocity.y);
+                }
                 data.velocity = new_velocity;
 
                 v2 n = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
@@ -635,9 +683,12 @@ apply_movement(game_state *state, movement_data data_in)
                 n = v2mul(n, 0.002f);
 
                 new_position = v2add(data.position, n);
-                ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", n.x, n.y,
-                        data.position.x, data.position.y,
-                        new_position.x, new_position.y);
+                if (debug)
+                {
+                    ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", n.x, n.y,
+                            data.position.x, data.position.y,
+                            new_position.x, new_position.y);
+                }
                 data.position = new_position;
             }
 
@@ -665,7 +716,10 @@ apply_movement(game_state *state, movement_data data_in)
                     }
                 }
 
-                ImGui::Text("%0.4f distance from line to player", distance);
+                if (debug)
+                {
+                    ImGui::Text("%0.4f distance from line to player", distance);
+                }
                 /*
                 if (distance <= 0.25)
                 {
@@ -680,9 +734,12 @@ apply_movement(game_state *state, movement_data data_in)
                         v2 corrective_movement = v2mul(v2normalize(line_to_player), corrective_distance);
                         v2 new_position = v2add(data.position, corrective_movement);
 
-                        ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", corrective_movement.x, corrective_movement.y,
-                                data.position.x, data.position.y,
-                                new_position.x, new_position.y);
+                        if (debug)
+                        {
+                            ImGui::Text("Player moves %f,%f away from wall from %f,%f to %f,%f", corrective_movement.x, corrective_movement.y,
+                                    data.position.x, data.position.y,
+                                    new_position.x, new_position.y);
+                        }
                         data.position = new_position;
                     }
                 }
@@ -691,6 +748,25 @@ apply_movement(game_state *state, movement_data data_in)
         }
     }
     return data;
+}
+
+void
+show_debug_main_menu(game_state *state)
+{
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("Debug"))
+        {
+            if (ImGui::BeginMenu("Movement"))
+            {
+                ImGui::MenuItem("Player", "", &state->debug.player_movement);
+                ImGui::MenuItem("Familiar", "", &state->debug.familiar_movement);
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -731,6 +807,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
+    show_debug_main_menu(state);
+
     ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 256);
     ImGui::SliderFloat2("Camera Offset", (float *)&state->camera_offset, -0.5f, 0.5f);
     float max_x = (float)input->window.width / state->pixel_size / 2.0f;
@@ -897,16 +975,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     struct {
         entity_movement *entity_movement;
         movement_history *entity_history;
+        bool *show_window;
         const char *name;
     } movements[] = {
         {
             &state->player_movement,
             &state->player_history,
+            &state->debug.player_movement,
             "player",
         },
         {
             &state->familiar_movement,
             &state->familiar_history,
+            &state->debug.familiar_movement,
             "familiar",
         },
     };
@@ -919,20 +1000,31 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         data.acceleration = acceleration;
         data.delta_t = input->delta_t;
 
+        char window_name[100];
+        sprintf(window_name, "Movement of %s", m.name);
+        bool opened_window = false;
+        if (*m.show_window)
+        {
+            ImGui::Begin(window_name, m.show_window);
+            opened_window = true;
+        }
         if (state->paused)
         {
-            ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
+            if (*m.show_window)
+            {
+                ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
+            }
             data = load_movement_history(state, m.entity_history);
         }
         else
         {
-            save_movement_history(state, m.entity_history, data);
+            save_movement_history(state, m.entity_history, data, *m.show_window);
         }
-        char window_name[100];
-        sprintf(window_name, "Movement of %s", m.name);
-        ImGui::Begin(window_name);
-        movement_data data_out = apply_movement(state, data);
-        ImGui::End();
+        movement_data data_out = apply_movement(state, data, *m.show_window);
+        if (opened_window)
+        {
+            ImGui::End();
+        }
         m.entity_movement->position = data_out.position;
         m.entity_movement->velocity = data_out.velocity;
     }
@@ -955,6 +1047,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 uint32_t y_ = y - y_start;
                 int32_t texture_id = get_terrain_texture(state, x_, y_);
                 PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
+
+                {
+                    v3 pq = v3add(q, {0.4f, 0.4f, 0.0f});
+                    v3 pq_size = {0.2f, 0.2f, 0.0f};
+                    PushQuad(&state->render_list2, pq, pq_size, {0,0,0.5f,0.5f}, 1, -1);
+                }
 
                 if (x_ == 0)
                 {
