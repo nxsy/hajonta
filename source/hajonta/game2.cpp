@@ -104,6 +104,7 @@ debug_state
 {
     bool player_movement;
     bool familiar_movement;
+    v2i selected_tile;
 };
 
 enum struct
@@ -261,11 +262,11 @@ build_terrain_tiles(game_state *state)
             state->terrain_tiles[y * MAP_WIDTH + x] = result;
         }
     }
-    build_lake(state, {16, 16}, {20, 22});
-    build_lake(state, {12, 13}, {17, 20});
-    build_lake(state, {11, 13}, {12, 17});
-    build_lake(state, {14, 11}, {16, 12});
-    build_lake(state, {13, 12}, {13, 12});
+    build_lake(state, {16+6, 16}, {20+6, 22});
+    build_lake(state, {12+6, 13}, {17+6, 20});
+    build_lake(state, {11+6, 13}, {12+6, 17});
+    build_lake(state, {14+6, 11}, {16+6, 12});
+    build_lake(state, {13+6, 12}, {13+6, 12});
 }
 
 terrain
@@ -807,10 +808,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         build_map(state);
         RenderListBuffer(state->render_list, state->render_buffer);
         RenderListBuffer(state->render_list2, state->render_buffer2);
-        state->pixel_size = 64;
-        state->familiar_movement.position = {2, 2};
+        state->pixel_size = 32;
+        state->familiar_movement.position = {-2, 2};
 
         state->acceleration_multiplier = 50.0f;
+
+        state->debug.selected_tile = {MAP_WIDTH / 2, MAP_HEIGHT / 2};
     }
     if (memory->imgui_state)
     {
@@ -985,13 +988,29 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     ImGui::SameLine();
     ImGui::Checkbox("LMB repeat", &input->mouse.buttons.left.repeat);
 
-    if (BUTTON_WENT_DOWN(input->mouse.buttons.left))
-    {
-        ImGui::Text("Left mouse button down");
-    }
     if (BUTTON_WENT_UP(input->mouse.buttons.left))
     {
-        ImGui::Text("Left mouse button up");
+        int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
+        int32_t t_y = (int32_t)floorf((input->window.height  / 2.0f - input->mouse.y) / state->pixel_size);
+        state->debug.selected_tile = {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y};
+    }
+    ImGui::Text("Selected_tile is %d, %d", state->debug.selected_tile.x, state->debug.selected_tile.y);
+
+    v2i familiar_tile = { MAP_WIDTH / 2 + (int32_t)floorf(state->familiar_movement.position.x), MAP_HEIGHT / 2 + (int32_t)floorf(state->familiar_movement.position.y) };
+    ImGui::Text("Familiar is at tile %d, %d", familiar_tile.x, familiar_tile.y);
+    v2 familiar_acceleration = {};
+    if (!v2iequal(state->debug.selected_tile, familiar_tile))
+    {
+        familiar_acceleration = {
+            (float)(state->debug.selected_tile.x - MAP_WIDTH / 2) + 0.5f - state->familiar_movement.position.x,
+            (float)(state->debug.selected_tile.y - MAP_HEIGHT / 2) + 0.5f - state->familiar_movement.position.y,
+        };
+        if (v2length(familiar_acceleration) > 1.0f)
+        {
+            familiar_acceleration = v2normalize(familiar_acceleration);
+        }
+        familiar_acceleration = v2mul(familiar_acceleration, 20.0f);
+        ImGui::Text("Familiar should accelerate %0.3f, %0.3f", familiar_acceleration.x, familiar_acceleration.y);
     }
 
     ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
@@ -1008,18 +1027,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 movement_history *entity_history;
                 bool *show_window;
                 const char *name;
+                v2 acceleration;
             } movements[] = {
                 {
                     &state->player_movement,
                     &state->player_history,
                     &state->debug.player_movement,
                     "player",
+                    acceleration,
                 },
                 {
                     &state->familiar_movement,
                     &state->familiar_history,
                     &state->debug.familiar_movement,
                     "familiar",
+                    familiar_acceleration,
                 },
             };
 
@@ -1028,7 +1050,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 movement_data data;
                 data.position = m.entity_movement->position;
                 data.velocity = m.entity_movement->velocity;
-                data.acceleration = acceleration;
+                data.acceleration = m.acceleration;
                 data.delta_t = input->delta_t;
 
                 char window_name[100];
@@ -1084,13 +1106,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 uint32_t x_ = x - x_start;
                 uint32_t y_ = y - y_start;
+                v2i tile = {(int32_t)x_, (int32_t)y_};
                 int32_t texture_id = get_terrain_texture(state, x_, y_);
                 PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
 
                 {
+                    v4 color = {0.0f, 0.0f, 0.5f, 0.5f};
+                    if (v2iequal(tile, state->debug.selected_tile))
+                    {
+                         color = {0.75f, 0.25f, 0.5f, 0.75f};
+                    }
                     v3 pq = v3add(q, {0.4f, 0.4f, 0.0f});
                     v3 pq_size = {0.2f, 0.2f, 0.0f};
-                    PushQuad(&state->render_list2, pq, pq_size, {0,0,0.5f,0.5f}, 1, -1);
+                    PushQuad(&state->render_list2, pq, pq_size, color, 1, -1);
                 }
 
                 if (x_ == 0)
