@@ -78,6 +78,12 @@ v2projection(v2 q, v2 p)
     return v2mul(q, v2dot(p, q) / v2dot(q, q));
 }
 
+bool
+v2iequal(v2i left, v2i right)
+{
+    return left.x == right.x && left.y == right.y;
+};
+
 v3
 v3add(v3 left, v3 right)
 {

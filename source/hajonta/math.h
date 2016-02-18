@@ -6,6 +6,12 @@ struct v2
     float y;
 };
 
+struct v2i
+{
+    int x;
+    int y;
+};
+
 struct v3
 {
     float x;
