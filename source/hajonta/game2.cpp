@@ -100,10 +100,36 @@ entity_movement
 };
 
 struct
+tile_priority_queue_entry
+{
+    float score;
+    v2i tile_position;
+};
+
+struct
+tile_priority_queue
+{
+    uint32_t max_entries;
+    uint32_t num_entries;
+    tile_priority_queue_entry *entries;
+};
+
+
+struct
 debug_state
 {
     bool player_movement;
     bool familiar_movement;
+    struct {
+        bool show;
+        float value;
+        tile_priority_queue_entry entries[20];
+        tile_priority_queue queue;
+        uint32_t selected;
+
+        uint32_t num_sorted;
+        float sorted[20];
+    } priority_queue;
     v2i selected_tile;
 };
 
@@ -773,10 +799,109 @@ show_debug_main_menu(game_state *state)
                 ImGui::MenuItem("Familiar", "", &state->debug.familiar_movement);
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Pathfinding"))
+            {
+                ImGui::MenuItem("Priority Queue", "", &state->debug.priority_queue.show);
+                ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
     }
+}
+
+void
+queue_add(tile_priority_queue *queue, tile_priority_queue_entry entry)
+{
+    uint32_t entry_position = queue->num_entries++;
+    queue->entries[entry_position] = entry;
+    while (entry_position != 0)
+    {
+        uint32_t parent_position = (entry_position - 1) / 2;
+        auto parent = queue->entries[parent_position];
+        if (entry.score >= parent.score)
+        {
+            break;
+        }
+
+        queue->entries[entry_position] = queue->entries[parent_position];
+        uint32_t sibling_position = 2 * parent_position + 1;
+        if (sibling_position == entry_position)
+        {
+            ++sibling_position;
+        }
+        if (sibling_position < queue->num_entries)
+        {
+            auto sibling = queue->entries[sibling_position];
+
+            if (entry.score >= sibling.score)
+            {
+                queue->entries[parent_position] = queue->entries[sibling_position];
+                queue->entries[sibling_position] = entry;
+                break;
+            }
+        }
+        queue->entries[parent_position] = entry;
+        entry_position = parent_position;
+    }
+}
+
+tile_priority_queue_entry
+queue_pop(tile_priority_queue *queue)
+{
+    auto entry = queue->entries[0];
+    queue->entries[0] = queue->entries[queue->num_entries - 1];
+    --queue->num_entries;
+
+    uint32_t parent_position = 0;
+    while (true)
+    {
+        auto parent = queue->entries[parent_position];
+        uint32_t left_child_position = 2 * parent_position + 1;
+        uint32_t right_child_position = 2 * parent_position + 2;
+
+        if (left_child_position >= queue->num_entries)
+        {
+            break;
+        }
+        auto left_child = queue->entries[left_child_position];
+        if (right_child_position >= queue->num_entries)
+        {
+            if (left_child.score < parent.score)
+            {
+                 queue->entries[parent_position] = left_child;
+                 queue->entries[left_child_position] = parent;
+            }
+            break;
+        }
+        auto right_child = queue->entries[right_child_position];
+        if (left_child.score < parent.score)
+        {
+            if (right_child.score < left_child.score)
+            {
+                queue->entries[parent_position] = right_child;
+                queue->entries[right_child_position] = parent;
+                parent_position = right_child_position;
+                continue;
+            }
+            else
+            {
+                queue->entries[parent_position] = left_child;
+                queue->entries[left_child_position] = parent;
+                parent_position = left_child_position;
+                continue;
+            }
+        }
+        else if (right_child.score < parent.score)
+        {
+            queue->entries[parent_position] = right_child;
+            queue->entries[right_child_position] = parent;
+            parent_position = right_child_position;
+            continue;
+        }
+        break;
+    }
+    return entry;
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -814,12 +939,81 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->acceleration_multiplier = 50.0f;
 
         state->debug.selected_tile = {MAP_WIDTH / 2, MAP_HEIGHT / 2};
+
+        state->debug.priority_queue.queue = {
+            harray_count(state->debug.priority_queue.entries),
+            0,
+            state->debug.priority_queue.entries,
+        };
     }
     if (memory->imgui_state)
     {
         ImGui::SetInternalState(memory->imgui_state);
     }
     show_debug_main_menu(state);
+
+    {
+        auto *pq = &state->debug.priority_queue;
+        if (pq->show)
+        {
+            ImGui::Begin("Priority Queue", &pq->show);
+            if (pq->show)
+            {
+                ImGui::DragFloat("Next value", &pq->value, 0.5f, 1.0f, 100.0f);
+                if (ImGui::Button("Add"))
+                {
+                    queue_add(&pq->queue, { pq->value, {0,0} });
+                }
+
+                if (ImGui::Button("Test Values"))
+                {
+                    pq->queue.num_entries = 0;
+                    queue_add(&pq->queue, { 0.5f, {0,0} });
+                    queue_add(&pq->queue, { 1.5f, {0,0} });
+                    queue_add(&pq->queue, { 2.5f, {0,0} });
+                    queue_add(&pq->queue, { 0.25f, {0,0} });
+                    queue_add(&pq->queue, { 0.75f, {0,0} });
+                    queue_add(&pq->queue, { 0.1f, {0,0} });
+                }
+
+                if (ImGui::Button("Extract"))
+                {
+                    pq->num_sorted = pq->queue.num_entries;
+                    for (uint32_t i = 0; i < pq->num_sorted; ++i)
+                    {
+                        pq->sorted[i] = queue_pop(&pq->queue).score;
+                    }
+                }
+
+                if (pq->queue.num_entries)
+                {
+                    pq->selected = pq->selected < pq->queue.num_entries ? pq->selected : 0;
+                    ImGui::Text("Queue has %d of %d entries", pq->queue.num_entries, pq->queue.max_entries);
+                    for (uint32_t i = 0; i < pq->queue.num_entries; ++i)
+                    {
+                        ImGui::PushID((int32_t)i);
+                        char label[20];
+                        sprintf(label, "%d: %f", i, pq->entries[i].score);
+                        if (ImGui::Selectable(label, pq->selected == i))
+                        {
+                             pq->selected = i;
+                        }
+                        ImGui::PopID();
+                    }
+                }
+
+                if (pq->num_sorted)
+                {
+                    ImGui::Text("Sorted list has %d entries", pq->num_sorted);
+                    for (uint32_t i = 0; i < pq->num_sorted; ++i)
+                    {
+                        ImGui::Text("%d: %f", i, pq->sorted[i]);
+                    }
+                }
+            }
+            ImGui::End();
+        }
+    }
 
     ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 256);
     ImGui::SliderFloat2("Camera Offset", (float *)&state->camera_offset, -0.5f, 0.5f);
