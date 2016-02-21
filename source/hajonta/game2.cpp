@@ -96,8 +96,8 @@ movement_history
 struct
 movement_history_playback
 {
-     uint32_t slice;
-     uint32_t frame;
+    uint32_t slice;
+    uint32_t frame;
 };
 
 struct
@@ -209,7 +209,6 @@ struct game_state
     uint32_t elements[6000 / 4 * 6];
 
     float clear_color[3];
-    float quad_color[3];
 
     int32_t active_demo;
 
@@ -520,7 +519,7 @@ add_asset(game_state *state, char *name)
 }
 
 void
-save_movement_history(game_state *state, movement_history *history, movement_data data_in, bool debug)
+save_movement_history(movement_history *history, movement_data data_in, bool debug)
 {
     movement_slice *current_slice = history->slices + history->current_slice;
     if (current_slice->num_data >= harray_count(current_slice->data))
@@ -545,9 +544,9 @@ save_movement_history(game_state *state, movement_history *history, movement_dat
 }
 
 movement_data
-load_movement_history(game_state *state, movement_history *history)
+load_movement_history(movement_history *history, movement_history_playback *playback)
 {
-    return history->slices[state->history_playback.slice].data[state->history_playback.frame];
+    return history->slices[playback->slice].data[playback->frame];
 }
 
 movement_data
@@ -1113,6 +1112,87 @@ calculate_acceleration(entity_movement entity, v2i next_tile, float acceleration
     return result;
 }
 
+void
+draw_map(map_data *map, render_entry_list *render_list, render_entry_list *render_list2, v2i selected_tile)
+{
+    for (uint32_t y = 0; y < 100; ++y)
+    {
+        for (uint32_t x = 0; x < 100; ++x)
+        {
+            uint32_t x_start = 50 - (MAP_WIDTH / 2);
+            uint32_t x_end = 50 + (MAP_WIDTH / 2);
+            uint32_t y_start = 50 - (MAP_HEIGHT / 2);
+            uint32_t y_end = 50 + (MAP_HEIGHT / 2);
+
+            v3 q = {(float)x - 50, (float)y - 50, 0};
+            v3 q_size = {1, 1, 0};
+
+            if ((x >= x_start && x < x_end) && (y >= y_start && y < y_end))
+            {
+                uint32_t x_ = x - x_start;
+                uint32_t y_ = y - y_start;
+                v2i tile = {(int32_t)x_, (int32_t)y_};
+                int32_t texture_id = get_terrain_texture(map, x_, y_);
+                PushQuad(render_list, q, q_size, {1,1,1,1}, 1, texture_id);
+
+                {
+                    v4 color = {0.0f, 0.0f, 0.5f, 0.2f};
+                    if (v2iequal(tile, selected_tile))
+                    {
+                         color = {0.75f, 0.25f, 0.5f, 0.5f};
+                    }
+                    v3 pq = v3add(q, {0.4f, 0.4f, 0.0f});
+                    v3 pq_size = {0.2f, 0.2f, 0.0f};
+                    PushQuad(render_list2, pq, pq_size, color, 1, -1);
+                }
+
+                if (x_ == 0)
+                {
+                    bool passable = get_passable_x(map, x_, y_);
+                    if (!passable)
+                    {
+                        v3 pq = v3sub(q, {0.05f, 0, 0});
+                        v3 pq_size = {0.1f, 1.0f, 0};
+                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                    }
+                }
+                {
+                    bool passable = get_passable_x(map, x_ + 1, y_);
+                    if (!passable)
+                    {
+                        v3 pq = v3add(q, {0.95f, 0, 0});
+                        v3 pq_size = {0.1f, 1.0f, 0};
+                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                    }
+                }
+                if (y_ == 0)
+                {
+                    bool passable = get_passable_y(map, x_, y_);
+                    if (!passable)
+                    {
+                        v3 pq = v3sub(q, {0, 0.05f, 0});
+                        v3 pq_size = {1.0f, 0.1f, 0};
+                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                    }
+                }
+                {
+                    bool passable = get_passable_y(map, x_, y_ + 1);
+                    if (!passable)
+                    {
+                        v3 pq = v3add(q, {0, 0.95f, 0});
+                        v3 pq_size = {1.0f, 0.1f, 0};
+                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                    }
+                }
+            }
+            else
+            {
+                int32_t texture_id = 1;
+                PushQuad(render_list, q, q_size, {1,1,1,1}, 1, texture_id);
+            }
+        }
+    }
+}
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
@@ -1455,6 +1535,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             struct {
                 entity_movement *entity_movement;
                 movement_history *entity_history;
+                movement_history_playback *entity_playback;
                 bool *show_window;
                 const char *name;
                 v2 acceleration;
@@ -1462,6 +1543,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {
                     &state->player_movement,
                     &state->player_history,
+                    &state->history_playback,
                     &state->debug.player_movement,
                     "player",
                     acceleration,
@@ -1469,6 +1551,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {
                     &state->familiar_movement,
                     &state->familiar_history,
+                    &state->history_playback,
                     &state->debug.familiar_movement,
                     "familiar",
                     familiar_acceleration,
@@ -1500,11 +1583,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                         {
                             ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
                         }
-                        m_data = load_movement_history(state, m.entity_history);
+                        m_data = load_movement_history(m.entity_history, m.entity_playback);
                     } break;
                     case game_mode::normal:
                     {
-                        save_movement_history(state, m.entity_history, m_data, *m.show_window);
+                        save_movement_history(m.entity_history, m_data, *m.show_window);
                     } break;
                     case game_mode::pathfinding: break;
                 }
@@ -1520,83 +1603,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         case game_mode::pathfinding: break;
     };
 
-    for (uint32_t y = 0; y < 100; ++y)
-    {
-        for (uint32_t x = 0; x < 100; ++x)
-        {
-            uint32_t x_start = 50 - (MAP_WIDTH / 2);
-            uint32_t x_end = 50 + (MAP_WIDTH / 2);
-            uint32_t y_start = 50 - (MAP_HEIGHT / 2);
-            uint32_t y_end = 50 + (MAP_HEIGHT / 2);
-
-            v3 q = {(float)x - 50, (float)y - 50, 0};
-            v3 q_size = {1, 1, 0};
-
-            if ((x >= x_start && x < x_end) && (y >= y_start && y < y_end))
-            {
-                uint32_t x_ = x - x_start;
-                uint32_t y_ = y - y_start;
-                v2i tile = {(int32_t)x_, (int32_t)y_};
-                int32_t texture_id = get_terrain_texture(&state->map, x_, y_);
-                PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
-
-                {
-                    v4 color = {0.0f, 0.0f, 0.5f, 0.5f};
-                    if (v2iequal(tile, state->debug.selected_tile))
-                    {
-                         color = {0.75f, 0.25f, 0.5f, 0.75f};
-                    }
-                    v3 pq = v3add(q, {0.4f, 0.4f, 0.0f});
-                    v3 pq_size = {0.2f, 0.2f, 0.0f};
-                    PushQuad(&state->render_list2, pq, pq_size, color, 1, -1);
-                }
-
-                if (x_ == 0)
-                {
-                    bool passable = get_passable_x(&state->map, x_, y_);
-                    if (!passable)
-                    {
-                        v3 pq = v3sub(q, {0.05f, 0, 0});
-                        v3 pq_size = {0.1f, 1.0f, 0};
-                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
-                    }
-                }
-                {
-                    bool passable = get_passable_x(&state->map, x_ + 1, y_);
-                    if (!passable)
-                    {
-                        v3 pq = v3add(q, {0.95f, 0, 0});
-                        v3 pq_size = {0.1f, 1.0f, 0};
-                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
-                    }
-                }
-                if (y_ == 0)
-                {
-                    bool passable = get_passable_y(&state->map, x_, y_);
-                    if (!passable)
-                    {
-                        v3 pq = v3sub(q, {0, 0.05f, 0});
-                        v3 pq_size = {1.0f, 0.1f, 0};
-                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
-                    }
-                }
-                {
-                    bool passable = get_passable_y(&state->map, x_, y_ + 1);
-                    if (!passable)
-                    {
-                        v3 pq = v3add(q, {0, 0.95f, 0});
-                        v3 pq_size = {1.0f, 0.1f, 0};
-                        PushQuad(&state->render_list, pq, pq_size, {1,1,1,1}, 1, -1);
-                    }
-                }
-            }
-            else
-            {
-                int32_t texture_id = 1;
-                PushQuad(&state->render_list, q, q_size, {1,1,1,1}, 1, texture_id);
-            }
-        }
-    }
+    draw_map(&state->map, &state->render_list, &state->render_list2, state->debug.selected_tile);
 
     v3 player_size = { 1.0f, 2.0f, 0 };
     v3 player_position = {state->player_movement.position.x - 0.5f, state->player_movement.position.y, 0};
@@ -1604,7 +1611,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     v3 player_position2 = {state->player_movement.position.x - 0.2f, state->player_movement.position.y, 0};
     v3 player_size2 = {0.4f, 0.1f, 0};
-    PushQuad(&state->render_list, player_position2, player_size2, {1,1,1,1}, 1, -1);
+    PushQuad(&state->render_list, player_position2, player_size2, {1,1,1,0.4f}, 1, -1);
 
     v3 familiar_size = { 1.0f, 2.0f, 0 };
     v3 familiar_position = {state->familiar_movement.position.x - 0.5f, state->familiar_movement.position.y, 0};
@@ -1612,7 +1619,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     v3 familiar_position2 = {state->familiar_movement.position.x - 0.2f, state->familiar_movement.position.y, 0};
     v3 familiar_size2 = {0.4f, 0.1f, 0};
-    PushQuad(&state->render_list, familiar_position2, familiar_size2, {1,1,1,1}, 1, -1);
+    PushQuad(&state->render_list, familiar_position2, familiar_size2, {1,1,1,0.4f}, 1, -1);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
