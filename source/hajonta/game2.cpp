@@ -190,7 +190,7 @@ debug_state
     struct {
         bool show;
         astar_data data;
-        bool auto_iterate;
+        bool single_step;
     } familiar_path;
 };
 
@@ -1059,7 +1059,6 @@ _astar_init(astar_data *data)
     queue_clear(&data->queue);
     data->found_path = false;
     data->completed = false;
-    data->completed = false;
 }
 void
 astar_start(astar_data *data, v2i start_tile, v2i end_tile)
@@ -1246,7 +1245,7 @@ astar(astar_data *data, map_data *map, bool one_step = false)
         }
         if (one_step)
         {
-            break;;
+            return;
         }
     }
     data->completed = true;
@@ -1314,7 +1313,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         RenderListBuffer(state->render_list2, state->render_buffer2);
         state->pixel_size = 32;
         state->familiar_movement.position = {-2, 2};
-        state->debug.familiar_path.show = true;
 
         state->acceleration_multiplier = 50.0f;
 
@@ -1564,10 +1562,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    ImGui::Checkbox("LMB down", &input->mouse.buttons.left.ended_down);
-    ImGui::SameLine();
-    ImGui::Checkbox("LMB repeat", &input->mouse.buttons.left.repeat);
-
     if (BUTTON_WENT_UP(input->mouse.buttons.left))
     {
         int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
@@ -1586,35 +1580,49 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     bool has_next_tile = true;
 
     auto &familiar_path = state->debug.familiar_path;
+    auto familiar_window_shown = familiar_path.show;
     if (familiar_path.show)
     {
         ImGui::Begin("Familiar Path", &familiar_path.show);
+    }
 
-        next_tile = familiar_tile;
-        auto &data = familiar_path.data;
+    next_tile = familiar_tile;
+    auto &data = familiar_path.data;
 
-        if (!v2iequal(data.end_tile, target_tile))
+    if (!v2iequal(data.end_tile, target_tile))
+    {
+        ImGui::Text("Selected tile %d,%d is different from astar end tile of %d,%d, restarting.",
+            target_tile.x, target_tile.y, data.end_tile.x, data.end_tile.y);
+        astar_start(&data, familiar_tile, target_tile);
+    }
+
+    bool single_step = false;
+    bool next_step = true;
+    if (familiar_window_shown)
+    {
+        ImGui::Checkbox("Single step", &familiar_path.single_step);
+
+        if (familiar_path.single_step)
         {
-            ImGui::Text("data.end_tile = %d,%d, target_tile = %d, %d", data.end_tile.x, data.end_tile.y, target_tile.x, target_tile.y);
-            astar_start(&data, familiar_tile, target_tile);
-        }
-
-        ImGui::Checkbox("Auto iterate", &familiar_path.auto_iterate);
-        if (!familiar_path.auto_iterate)
-        {
+            single_step = true;
+            next_step = false;
             if (ImGui::Button("Next iteration"))
             {
-                ImGui::Text("Calculating next iteration");
-                astar(&data, &state->map, true);
+                next_step = true;
             }
         }
-        else
-        {
-            if (!data.found_path)
-            {
-                astar(&data, &state->map, false);
-            }
-        }
+        bool _c = data.completed;
+        ImGui::Checkbox("Completed", &_c);
+        bool _p = data.found_path;
+        ImGui::Checkbox("Path found", &_p);
+    }
+    if (next_step && !data.completed)
+    {
+        astar(&data, &state->map, single_step);
+    }
+
+    if (familiar_window_shown)
+    {
         ImGui::InputTextMultiline("##source", data.log, data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
 
         auto &queue = data.queue;
@@ -1636,26 +1644,24 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::End();
     }
 
-    if (v2iequal(familiar_path.data.end_tile, target_tile) && familiar_path.data.found_path)
+    if (v2iequal(familiar_tile, target_tile))
     {
-        if (v2iequal(familiar_tile, target_tile))
+        has_next_tile = false;
+    }
+
+    if (has_next_tile && v2iequal(familiar_path.data.end_tile, target_tile) && familiar_path.data.found_path)
+    {
+        auto *path_next_tile = familiar_path.data.path + familiar_path.data.path_length - 1;
+        if (v2iequal(*path_next_tile, familiar_tile))
         {
-            has_next_tile = false;
-        }
-        else
-        {
-            auto *path_next_tile = familiar_path.data.path + familiar_path.data.path_length - 1;
-            if (v2iequal(*path_next_tile, familiar_tile))
-            {
-                ImGui::Text("Next tile in path %d, %d is where familiar is (%d, %d), moving to next target",
-                    path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
-                familiar_path.data.path_length--;
-                path_next_tile--;
-            }
-            ImGui::Text("Next tile in path %d, %d is not where familiar is (%d, %d), keeping target",
+            ImGui::Text("Next tile in path %d, %d is where familiar is (%d, %d), moving to next target",
                 path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
-            next_tile = *path_next_tile;
+            familiar_path.data.path_length--;
+            path_next_tile--;
         }
+        ImGui::Text("Next tile in path %d, %d is not where familiar is (%d, %d), keeping target",
+            path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
+        next_tile = *path_next_tile;
     }
 
     v2 familiar_acceleration = {};
@@ -1699,11 +1705,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
             for (auto &&m : movements)
             {
-                movement_data data;
-                data.position = m.entity_movement->position;
-                data.velocity = m.entity_movement->velocity;
-                data.acceleration = m.acceleration;
-                data.delta_t = input->delta_t;
+                movement_data m_data;
+                m_data.position = m.entity_movement->position;
+                m_data.velocity = m.entity_movement->velocity;
+                m_data.acceleration = m.acceleration;
+                m_data.delta_t = input->delta_t;
 
                 char window_name[100];
                 sprintf(window_name, "Movement of %s", m.name);
@@ -1722,15 +1728,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                         {
                             ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
                         }
-                        data = load_movement_history(state, m.entity_history);
+                        m_data = load_movement_history(state, m.entity_history);
                     } break;
                     case game_mode::normal:
                     {
-                        save_movement_history(state, m.entity_history, data, *m.show_window);
+                        save_movement_history(state, m.entity_history, m_data, *m.show_window);
                     } break;
                     case game_mode::pathfinding: break;
                 }
-                movement_data data_out = apply_movement(&state->map, data, *m.show_window);
+                movement_data data_out = apply_movement(&state->map, m_data, *m.show_window);
                 if (opened_window)
                 {
                     ImGui::End();
