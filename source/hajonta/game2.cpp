@@ -59,14 +59,8 @@ _asset_ids
     int32_t sea_ground_b_l;
     int32_t sea_ground_b_r;
     int32_t player;
+    int32_t familiar_ship;
     int32_t familiar;
-};
-
-enum struct
-terrain
-{
-    water,
-    land,
 };
 
 struct
@@ -183,11 +177,41 @@ game_mode
     pathfinding,
 };
 
+enum struct
+terrain
+{
+    water,
+    land,
+};
+
+enum struct
+furniture_type
+{
+    none,
+    ship,
+};
+
+enum struct
+furniture_status
+{
+    normal,
+    constructing,
+    deconstructing,
+};
+
+struct
+Furniture
+{
+    furniture_type type;
+    furniture_status status;
+};
+
 struct
 map_data
 {
     terrain terrain_tiles[MAP_HEIGHT * MAP_WIDTH];
     int32_t texture_tiles[MAP_HEIGHT * MAP_WIDTH];
+    array2<MAP_WIDTH, MAP_HEIGHT, Furniture> furniture_tiles;
     bool passable_x[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
     bool passable_y[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
 };
@@ -502,6 +526,8 @@ build_map(game_state *state, map_data *map)
 {
     build_terrain_tiles(map);
     terrain_tiles_to_texture(state, map);
+    Furniture f = {furniture_type::ship, furniture_status::constructing};
+    map->furniture_tiles.set({16, 14}, f);
     build_passable(map);
 }
 
@@ -1184,6 +1210,22 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                         PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
                     }
                 }
+
+                Furniture furniture = map->furniture_tiles.get(tile);
+                float opacity = 1.0f;
+                if (furniture.status != furniture_status::normal)
+                {
+                    opacity = 0.4f;
+                }
+                switch (furniture.type)
+                {
+                    case furniture_type::none: {
+                    } break;
+                    case furniture_type::ship: {
+                        ImGui::Text("Ship at %d, %d", tile.x, tile.y);
+                        PushQuad(render_list, q, q_size, {1,1,1,opacity}, 1, _hidden_state->asset_ids.familiar_ship);
+                    } break;
+                };
             }
             else
             {
@@ -1218,6 +1260,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.sea_ground_b_l = add_asset(state, "sea_ground_b_l");
         state->asset_ids.sea_ground_b_r = add_asset(state, "sea_ground_b_r");
         state->asset_ids.player = add_asset(state, "player");
+        state->asset_ids.familiar_ship = add_asset(state, "familiar_ship");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         hassert(state->asset_ids.familiar > 0);
