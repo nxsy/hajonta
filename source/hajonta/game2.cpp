@@ -206,6 +206,30 @@ Furniture
     furniture_status status;
 };
 
+
+enum struct
+job_type
+{
+    build_furniture,
+};
+
+struct
+furniture_job_data
+{
+    v2i tile;
+    furniture_type type;
+};
+
+struct
+job
+{
+    job_type type;
+    union {
+        furniture_job_data furniture_data;
+    };
+};
+
+
 struct
 map_data
 {
@@ -259,6 +283,9 @@ struct game_state
     uint32_t repeat_count;
 
     debug_state debug;
+
+    uint32_t job_count;
+    job jobs[10];
 };
 
 game_state *_hidden_state;
@@ -522,12 +549,29 @@ build_passable(map_data *map)
 }
 
 void
+add_job(game_state *state, job Job)
+{
+    hassert(state->job_count < harray_count(state->jobs));
+    state->jobs[state->job_count++] = Job;
+}
+
+void
+add_furniture_job(game_state *state, map_data *map, v2i where, furniture_type type)
+{
+    Furniture f = {type, furniture_status::constructing};
+    map->furniture_tiles.set(where, f);
+    job Job = {};
+    Job.type = job_type::build_furniture;
+    Job.furniture_data = { where, type };
+    add_job(state, Job);
+}
+
+void
 build_map(game_state *state, map_data *map)
 {
     build_terrain_tiles(map);
     terrain_tiles_to_texture(state, map);
-    Furniture f = {furniture_type::ship, furniture_status::constructing};
-    map->furniture_tiles.set({16, 14}, f);
+    add_furniture_job(state, map, {16, 14}, furniture_type::ship);
     build_passable(map);
 }
 
@@ -1236,6 +1280,132 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
     }
 }
 
+v2
+calculate_familiar_acceleration(game_state *state)
+{
+    v2 result = {};
+    job *Job = 0;
+    for (uint32_t i = 0; i < state->job_count; ++i)
+    {
+        job &PossibleJob = state->jobs[i];
+        if (PossibleJob.type == job_type::build_furniture)
+        {
+            Job = &PossibleJob;
+            break;
+        }
+    }
+    if (!Job)
+    {
+        return result;
+    }
+
+    v2i target_tile = Job->furniture_data.tile;
+
+    v2i familiar_tile = {
+        MAP_WIDTH / 2 + (int32_t)floorf(state->familiar_movement.position.x),
+        MAP_HEIGHT / 2 + (int32_t)floorf(state->familiar_movement.position.y),
+    };
+
+
+
+
+    v2i next_tile = target_tile;
+    bool has_next_tile = true;
+
+    auto &familiar_path = state->debug.familiar_path;
+    auto familiar_window_shown = familiar_path.show;
+    if (familiar_path.show)
+    {
+        ImGui::Begin("Familiar Path", &familiar_path.show);
+    }
+
+    next_tile = familiar_tile;
+    auto &data = familiar_path.data;
+
+    if (!v2iequal(data.end_tile, target_tile))
+    {
+        ImGui::Text("Selected tile %d,%d is different from astar end tile of %d,%d, restarting.",
+            target_tile.x, target_tile.y, data.end_tile.x, data.end_tile.y);
+        astar_start(&data, familiar_tile, target_tile);
+    }
+
+    bool single_step = false;
+    bool next_step = true;
+    if (familiar_window_shown)
+    {
+        ImGui::Checkbox("Single step", &familiar_path.single_step);
+
+        if (familiar_path.single_step)
+        {
+            single_step = true;
+            next_step = false;
+            if (ImGui::Button("Next iteration"))
+            {
+                next_step = true;
+            }
+        }
+        bool _c = data.completed;
+        ImGui::Checkbox("Completed", &_c);
+        bool _p = data.found_path;
+        ImGui::Checkbox("Path found", &_p);
+    }
+    if (next_step && !data.completed)
+    {
+        astar(&data, &state->map, single_step);
+    }
+
+    if (familiar_window_shown)
+    {
+        ImGui::InputTextMultiline("##source", data.log, data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
+
+        auto &queue = data.queue;
+        ImGui::Text("Queue has %d of %d entries", queue.num_entries, queue.max_entries);
+        for (uint32_t i = 0; i < queue.num_entries; ++i)
+        {
+            auto &entry = queue.entries[i];
+            ImGui::Text("%d: Score %f, Tile %d, %d", i, entry.score, entry.tile_position.x, entry.tile_position.y);
+        }
+
+        ImGui::Text("Found path: %d", data.found_path);
+
+        ImGui::Text("Path has %d entries", data.path_length);
+        for (uint32_t i = 0; i < data.path_length; ++i)
+        {
+            v2i *current = data.path + i;
+            ImGui::Text("%d: %d,%d", i, current->x, current->y);
+        }
+        ImGui::End();
+    }
+
+    if (v2iequal(familiar_tile, target_tile))
+    {
+        has_next_tile = false;
+    }
+
+    if (has_next_tile && v2iequal(familiar_path.data.end_tile, target_tile) && familiar_path.data.found_path)
+    {
+        auto *path_next_tile = familiar_path.data.path + familiar_path.data.path_length - 1;
+        if (v2iequal(*path_next_tile, familiar_tile))
+        {
+            ImGui::Text("Next tile in path %d, %d is where familiar is (%d, %d), moving to next target",
+                path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
+            familiar_path.data.path_length--;
+            path_next_tile--;
+        }
+        ImGui::Text("Next tile in path %d, %d is not where familiar is (%d, %d), keeping target",
+            path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
+        next_tile = *path_next_tile;
+    }
+
+    ImGui::Text("Has next tile: %d, next tile is %f, %f", has_next_tile, next_tile.x, next_tile.y);
+    if (has_next_tile)
+    {
+        result = calculate_acceleration(state->familiar_movement, next_tile, 20.0f);
+    }
+    return result;
+}
+
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -1465,106 +1635,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     ImGui::Text("Selected_tile is %d, %d", state->debug.selected_tile.x, state->debug.selected_tile.y);
 
-    v2i familiar_tile = {
-        MAP_WIDTH / 2 + (int32_t)floorf(state->familiar_movement.position.x),
-        MAP_HEIGHT / 2 + (int32_t)floorf(state->familiar_movement.position.y),
-    };
-    v2i target_tile = state->debug.selected_tile;
-
-    v2i next_tile = target_tile;
-    bool has_next_tile = true;
-
-    auto &familiar_path = state->debug.familiar_path;
-    auto familiar_window_shown = familiar_path.show;
-    if (familiar_path.show)
-    {
-        ImGui::Begin("Familiar Path", &familiar_path.show);
-    }
-
-    next_tile = familiar_tile;
-    auto &data = familiar_path.data;
-
-    if (!v2iequal(data.end_tile, target_tile))
-    {
-        ImGui::Text("Selected tile %d,%d is different from astar end tile of %d,%d, restarting.",
-            target_tile.x, target_tile.y, data.end_tile.x, data.end_tile.y);
-        astar_start(&data, familiar_tile, target_tile);
-    }
-
-    bool single_step = false;
-    bool next_step = true;
-    if (familiar_window_shown)
-    {
-        ImGui::Checkbox("Single step", &familiar_path.single_step);
-
-        if (familiar_path.single_step)
-        {
-            single_step = true;
-            next_step = false;
-            if (ImGui::Button("Next iteration"))
-            {
-                next_step = true;
-            }
-        }
-        bool _c = data.completed;
-        ImGui::Checkbox("Completed", &_c);
-        bool _p = data.found_path;
-        ImGui::Checkbox("Path found", &_p);
-    }
-    if (next_step && !data.completed)
-    {
-        astar(&data, &state->map, single_step);
-    }
-
-    if (familiar_window_shown)
-    {
-        ImGui::InputTextMultiline("##source", data.log, data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
-
-        auto &queue = data.queue;
-        ImGui::Text("Queue has %d of %d entries", queue.num_entries, queue.max_entries);
-        for (uint32_t i = 0; i < queue.num_entries; ++i)
-        {
-            auto &entry = queue.entries[i];
-            ImGui::Text("%d: Score %f, Tile %d, %d", i, entry.score, entry.tile_position.x, entry.tile_position.y);
-        }
-
-        ImGui::Text("Found path: %d", data.found_path);
-
-        ImGui::Text("Path has %d entries", data.path_length);
-        for (uint32_t i = 0; i < data.path_length; ++i)
-        {
-            v2i *current = data.path + i;
-            ImGui::Text("%d: %d,%d", i, current->x, current->y);
-        }
-        ImGui::End();
-    }
-
-    if (v2iequal(familiar_tile, target_tile))
-    {
-        has_next_tile = false;
-    }
-
-    if (has_next_tile && v2iequal(familiar_path.data.end_tile, target_tile) && familiar_path.data.found_path)
-    {
-        auto *path_next_tile = familiar_path.data.path + familiar_path.data.path_length - 1;
-        if (v2iequal(*path_next_tile, familiar_tile))
-        {
-            ImGui::Text("Next tile in path %d, %d is where familiar is (%d, %d), moving to next target",
-                path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
-            familiar_path.data.path_length--;
-            path_next_tile--;
-        }
-        ImGui::Text("Next tile in path %d, %d is not where familiar is (%d, %d), keeping target",
-            path_next_tile->x, path_next_tile->y, familiar_tile.x, familiar_tile.y);
-        next_tile = *path_next_tile;
-    }
-
-    v2 familiar_acceleration = {};
-    ImGui::Text("Has next tile: %d, next tile is %f, %f", has_next_tile, next_tile.x, next_tile.y);
-    if (has_next_tile)
-    {
-        familiar_acceleration = calculate_acceleration(state->familiar_movement, next_tile, 20.0f);
-    }
+    v2 familiar_acceleration = calculate_familiar_acceleration(state);
 
     ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
     acceleration = v2mul(acceleration, state->acceleration_multiplier);
