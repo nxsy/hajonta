@@ -218,6 +218,7 @@ furniture_job_data
 {
     v2i tile;
     furniture_type type;
+    float remaining_build_time;
 };
 
 struct
@@ -240,9 +241,16 @@ map_data
     bool passable_y[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
 };
 
+
+
 struct game_state
 {
     bool initialized;
+
+    struct
+    {
+        float delta_t;
+    } frame_state;
 
     uint8_t render_buffer[4 * 1024 * 1024];
     render_entry_list render_list;
@@ -562,7 +570,7 @@ add_furniture_job(game_state *state, map_data *map, v2i where, furniture_type ty
     map->furniture_tiles.set(where, f);
     job Job = {};
     Job.type = job_type::build_furniture;
-    Job.furniture_data = { where, type };
+    Job.furniture_data = { where, type, 2.0f };
     add_job(state, Job);
 }
 
@@ -571,7 +579,6 @@ build_map(game_state *state, map_data *map)
 {
     build_terrain_tiles(map);
     terrain_tiles_to_texture(state, map);
-    add_furniture_job(state, map, {16, 14}, furniture_type::ship);
     build_passable(map);
 }
 
@@ -1280,6 +1287,25 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
     }
 }
 
+void
+remove_job(game_state *state, job *Job)
+{
+    ptrdiff_t job_number = Job - state->jobs;
+    if (job_number == state->job_count - 1)
+    {
+        // This covers two cases:
+        // a) We're the last job
+        // b) We're the only job
+        --state->job_count;
+    }
+    else
+    {
+        // There's another "last job"
+        state->jobs[job_number] = state->jobs[state->job_count - 1];
+        --state->job_count;
+    }
+}
+
 v2
 calculate_familiar_acceleration(game_state *state)
 {
@@ -1306,7 +1332,16 @@ calculate_familiar_acceleration(game_state *state)
         MAP_HEIGHT / 2 + (int32_t)floorf(state->familiar_movement.position.y),
     };
 
-
+    if (v2iequal(familiar_tile, target_tile))
+    {
+        Job->furniture_data.remaining_build_time -= state->frame_state.delta_t;
+        if (Job->furniture_data.remaining_build_time <= 0.0f)
+        {
+            Furniture f = {Job->furniture_data.type, furniture_status::normal};
+            state->map.furniture_tiles.set(target_tile, f);
+            remove_job(state, Job);
+        }
+    }
 
 
     v2i next_tile = target_tile;
@@ -1456,6 +1491,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             astar_data.entries
         );
     }
+    state->frame_state.delta_t = input->delta_t;
     if (memory->imgui_state)
     {
         ImGui::SetInternalState(memory->imgui_state);
@@ -1632,6 +1668,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
         int32_t t_y = (int32_t)floorf((input->window.height  / 2.0f - input->mouse.y) / state->pixel_size);
         state->debug.selected_tile = {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y};
+        add_furniture_job(state, &state->map, {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y}, furniture_type::ship);
     }
     ImGui::Text("Selected_tile is %d, %d", state->debug.selected_tile.x, state->debug.selected_tile.y);
 
