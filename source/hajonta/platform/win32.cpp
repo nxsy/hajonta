@@ -203,7 +203,7 @@ main_window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             wglDeleteContext(wgl_context);
             wglMakeCurrent(state->device_context, final_context);
 
-            glViewport(0, 0, 960, 540);
+            glViewport(0, 0, state->window_width, state->window_height);
         } break;
         case WM_SIZE:
         {
@@ -844,6 +844,9 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 {
     win32_state state = {};
 
+    state.window_width = 1920;
+    state.window_height = 1080;
+
     WNDCLASSEXA window_class = {};
     window_class.cbSize = sizeof(WNDCLASSEXA);
     window_class.lpfnWndProc = main_window_callback;
@@ -860,8 +863,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
     DWORD style;
     style = WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
-    state.window_width = 960;
-    state.window_height = 540;
     RECT create_window_rect = {};
     create_window_rect.left = 0;
     create_window_rect.top = 0;
