@@ -35,9 +35,13 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
 }
 
 inline void
-glErrorAssert()
+glErrorAssert(bool skip = false)
 {
     GLenum error = glGetError();
+    if (skip)
+    {
+         return;
+    }
     switch(error)
     {
         case GL_NO_ERROR:
@@ -764,6 +768,8 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
 RENDERER_RENDER(renderer_render)
 {
+    glErrorAssert(true);
+
     renderer_state *state = &_GlobalRendererState;
     hassert(memory->render_lists_count > 0);
     for (uint32_t i = 0; i < memory->render_lists_count; ++i)
