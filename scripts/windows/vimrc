@@ -13,6 +13,8 @@ function! s:run()
     execute "silent !start /b build\\win32_msvc.exe"
 endfunction
 
+map <Leader>R :source $HAJONTA_VIMRC<CR>
+
 command! Run call s:run()
 map <Leader>r :Run<cr>
 
@@ -42,10 +44,14 @@ set switchbuf=useopen,split
 
 let NERDTreeShowHidden=0
 let NERDTreeDirArrows=1
+let g:ctrlp_open_new_file='v'
+let g:ctrlp_match_window = 'bottom,order:ttb,min:10,max:10,results:10'
 
 if has("gui_running")
+    set guioptions-=m
     set guioptions-=l
     set guioptions-=L
     set guioptions-=r
     set guioptions-=R
+    set lines=60 columns=240
 endif
