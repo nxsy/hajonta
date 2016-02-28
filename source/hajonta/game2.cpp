@@ -58,6 +58,7 @@ _asset_ids
     int32_t sea_ground_t_r;
     int32_t sea_ground_b_l;
     int32_t sea_ground_b_r;
+    int32_t bottom_wall;
     int32_t player;
     int32_t familiar_ship;
     int32_t familiar;
@@ -160,6 +161,7 @@ debug_state
 {
     bool player_movement;
     bool familiar_movement;
+    bool rendering;
     priority_queue_debug priority_queue;
     v2i selected_tile;
     struct {
@@ -185,10 +187,12 @@ terrain
 };
 
 enum struct
-furniture_type
+FurnitureType
 {
     none,
     ship,
+    wall,
+    MAX = wall,
 };
 
 enum struct
@@ -202,7 +206,7 @@ furniture_status
 struct
 Furniture
 {
-    furniture_type type;
+    FurnitureType type;
     furniture_status status;
 };
 
@@ -217,7 +221,7 @@ struct
 furniture_job_data
 {
     v2i tile;
-    furniture_type type;
+    FurnitureType type;
     float remaining_build_time;
 };
 
@@ -241,15 +245,59 @@ map_data
     bool passable_y[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
 };
 
+template<uint32_t TARGETS>
+struct
+_click_targets
+{
+    uint32_t target_count;
+    rectangle2 targets[TARGETS];
+};
 
+template<uint32_t TARGETS>
+void
+clear_click_targets(_click_targets<TARGETS> *targets)
+{
+    targets->target_count = 0;
+}
+
+template<uint32_t TARGETS>
+void
+add_click_target(_click_targets<TARGETS> *targets, rectangle2 r)
+{
+    assert(targets->target_count < TARGETS);
+    targets->targets[targets->target_count++] = r;
+}
+
+enum struct
+ToolType
+{
+    none,
+    furniture,
+    MAX = furniture,
+};
+
+struct
+SelectedTool
+{
+    ToolType type;
+    union
+    {
+        FurnitureType furniture_type;
+    };
+};
 
 struct game_state
 {
     bool initialized;
 
+    SelectedTool selected_tool;
+
+    _click_targets<10> click_targets;
+
     struct
     {
         float delta_t;
+        v2 mouse_position;
     } frame_state;
 
     uint8_t render_buffer[4 * 1024 * 1024];
@@ -294,6 +342,7 @@ struct game_state
 
     uint32_t job_count;
     job jobs[10];
+    int32_t furniture_to_asset[FurnitureType::MAX];
 };
 
 game_state *_hidden_state;
@@ -564,7 +613,7 @@ add_job(game_state *state, job Job)
 }
 
 void
-add_furniture_job(game_state *state, map_data *map, v2i where, furniture_type type)
+add_furniture_job(game_state *state, map_data *map, v2i where, FurnitureType type)
 {
     Furniture f = {type, furniture_status::constructing};
     map->furniture_tiles.set(where, f);
@@ -933,6 +982,11 @@ show_debug_main_menu(game_state *state)
     {
         if (ImGui::BeginMenu("Debug"))
         {
+            if (ImGui::BeginMenu("General"))
+            {
+                ImGui::MenuItem("Debug rendering", "", &state->debug.rendering);
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("Movement"))
             {
                 ImGui::MenuItem("Player", "", &state->debug.player_movement);
@@ -1263,20 +1317,15 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                 }
 
                 Furniture furniture = map->furniture_tiles.get(tile);
-                float opacity = 1.0f;
-                if (furniture.status != furniture_status::normal)
+                if (furniture.type != FurnitureType::none)
                 {
-                    opacity = 0.4f;
+                    float opacity = 1.0f;
+                    if (furniture.status != furniture_status::normal)
+                    {
+                        opacity = 0.4f;
+                    }
+                    PushQuad(render_list, q, q_size, {1,1,1,opacity}, 1, _hidden_state->furniture_to_asset[(uint32_t)furniture.type]);
                 }
-                switch (furniture.type)
-                {
-                    case furniture_type::none: {
-                    } break;
-                    case furniture_type::ship: {
-                        ImGui::Text("Ship at %d, %d", tile.x, tile.y);
-                        PushQuad(render_list, q, q_size, {1,1,1,opacity}, 1, _hidden_state->asset_ids.familiar_ship);
-                    } break;
-                };
             }
             else
             {
@@ -1464,15 +1513,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.sea_ground_t_r = add_asset(state, "sea_ground_t_r");
         state->asset_ids.sea_ground_b_l = add_asset(state, "sea_ground_b_l");
         state->asset_ids.sea_ground_b_r = add_asset(state, "sea_ground_b_r");
+        state->asset_ids.bottom_wall = add_asset(state, "bottom_wall");
         state->asset_ids.player = add_asset(state, "player");
         state->asset_ids.familiar_ship = add_asset(state, "familiar_ship");
         state->asset_ids.familiar = add_asset(state, "familiar");
+
+        state->furniture_to_asset[0] = -1;
+        state->furniture_to_asset[(uint32_t)FurnitureType::ship] = state->asset_ids.familiar_ship;
+        state->furniture_to_asset[(uint32_t)FurnitureType::wall] = state->asset_ids.bottom_wall;
 
         hassert(state->asset_ids.familiar > 0);
         build_map(state, &state->map);
         RenderListBuffer(state->render_list, state->render_buffer);
         RenderListBuffer(state->render_list2, state->render_buffer2);
-        state->pixel_size = 32;
+        state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
 
         state->acceleration_multiplier = 50.0f;
@@ -1491,7 +1545,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             astar_data.entries
         );
     }
+
     state->frame_state.delta_t = input->delta_t;
+    state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
+
     if (memory->imgui_state)
     {
         ImGui::SetInternalState(memory->imgui_state);
@@ -1665,11 +1722,31 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if (BUTTON_WENT_UP(input->mouse.buttons.left))
     {
-        int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
-        int32_t t_y = (int32_t)floorf((input->window.height  / 2.0f - input->mouse.y) / state->pixel_size);
-        state->debug.selected_tile = {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y};
-        add_furniture_job(state, &state->map, {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y}, furniture_type::ship);
+        bool mouse_free = true;
+        for (uint32_t i = 0; i < state->click_targets.target_count; ++i)
+        {
+            rectangle2 r = state->click_targets.targets[i];
+            if (point_in_rectangle(state->frame_state.mouse_position, r))
+            {
+                mouse_free = false;
+                break;
+            }
+        }
+        if (mouse_free)
+        {
+            int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
+            int32_t t_y = (int32_t)floorf((input->window.height  / 2.0f - input->mouse.y) / state->pixel_size);
+            state->debug.selected_tile = {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y};
+
+            if (state->selected_tool.type == ToolType::furniture)
+            {
+                add_furniture_job(state, &state->map, {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y}, state->selected_tool.furniture_type);
+            }
+        }
     }
+
+    clear_click_targets(&state->click_targets);
+
     ImGui::Text("Selected_tile is %d, %d", state->debug.selected_tile.x, state->debug.selected_tile.y);
 
     v2 familiar_acceleration = calculate_familiar_acceleration(state);
@@ -1772,10 +1849,44 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 familiar_size2 = {0.4f, 0.1f, 0};
     PushQuad(&state->render_list, familiar_position2, familiar_size2, {1,1,1,0.4f}, 1, -1);
 
+    for (uint32_t i = 0; i < (uint32_t)FurnitureType::MAX; ++i)
+    {
+        FurnitureType type = (FurnitureType)(i + 1);
+        v3 quad_bl = { i * 96.0f + 16.0f, 16.0f, 0.0f };
+        v3 quad_size = { 80.0f, 80.0f };
+        rectangle2 cl = { {quad_bl.x, quad_bl.y}, {quad_size.x, quad_size.y}};
+        add_click_target(&state->click_targets, cl);
+        v4 opacity = {0.1f, 0.1f, 0.1f, 0.7f};
+        if (point_in_rectangle(state->frame_state.mouse_position, cl))
+        {
+             opacity = {0.3f, 0.3f, 0.3f, 0.9f};
+            if (BUTTON_WENT_UP(input->mouse.buttons.left))
+            {
+                state->selected_tool.type = ToolType::furniture;
+                state->selected_tool.furniture_type = type;
+            }
+        }
+        if (state->selected_tool.type == ToolType::furniture)
+        {
+             if (state->selected_tool.furniture_type == type)
+             {
+                 opacity = {0.7f, 0.7f, 0.3f, 0.9f};
+             }
+        }
+        PushQuad(&state->render_list, quad_bl, quad_size, opacity, 0, -1);
+
+        quad_bl = { i * 96.0f + 24.0f, 24.0f, 0.0f };
+        quad_size = { 64.0f, 64.0f };
+        PushQuad(&state->render_list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
+    }
+
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->render_list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
     AddRenderList(memory, &state->render_list);
-    AddRenderList(memory, &state->render_list2);
+    if (state->debug.rendering)
+    {
+        AddRenderList(memory, &state->render_list2);
+    }
 }
