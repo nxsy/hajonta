@@ -110,6 +110,7 @@ array2
     void setall(T value);
     void set(v2i location, T value);
     T get(v2i location);
+    T get(int32_t x, int32_t y);
 };
 
 template<uint32_t H, uint32_t W, typename T>
@@ -134,6 +135,13 @@ T
 array2<H,W,T>::get(v2i location)
 {
     return values[location.y * W + location.x];
+}
+
+template<uint32_t H, uint32_t W, typename T>
+T
+array2<H,W,T>::get(int32_t x, int32_t y)
+{
+    return values[y * W + x];
 }
 
 struct
@@ -238,7 +246,7 @@ job
 struct
 map_data
 {
-    terrain terrain_tiles[MAP_HEIGHT * MAP_WIDTH];
+    array2<MAP_WIDTH, MAP_HEIGHT, terrain> terrain_tiles;
     int32_t texture_tiles[MAP_HEIGHT * MAP_WIDTH];
     array2<MAP_WIDTH, MAP_HEIGHT, Furniture> furniture_tiles;
     bool passable_x[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
@@ -308,7 +316,7 @@ struct game_state
 
     _asset_ids asset_ids;
     uint32_t asset_count;
-    asset_descriptor assets[32];
+    asset_descriptor assets[64];
 
     uint32_t elements[6000 / 4 * 6];
 
@@ -370,18 +378,6 @@ DEMO(demo_b)
 }
 
 void
-set_tile(map_data *map, uint32_t x, uint32_t y, terrain value)
-{
-    map->terrain_tiles[y * MAP_WIDTH + x] = value;
-}
-
-terrain
-get_tile(map_data *map, uint32_t x, uint32_t y)
-{
-    return map->terrain_tiles[y * MAP_WIDTH + x];
-}
-
-void
 set_passable_x(map_data *map, uint32_t x, uint32_t y, bool value)
 {
     map->passable_x[y * (MAP_WIDTH + 1) + x] = value;
@@ -435,11 +431,11 @@ get_terrain_texture(map_data *map, uint32_t x, uint32_t y)
 void
 build_lake(map_data *map, v2 bl, v2 tr)
 {
-    for (uint32_t y = (uint32_t)bl.y; y <= (uint32_t)tr.y; ++y)
+    for (int32_t y = (int32_t)bl.y; y <= (int32_t)tr.y; ++y)
     {
-        for (uint32_t x = (uint32_t)bl.x; x <= (uint32_t)tr.x; ++x)
+        for (int32_t x = (int32_t)bl.x; x <= (int32_t)tr.x; ++x)
         {
-            set_tile(map, x, y, terrain::water);
+            map->terrain_tiles.set({x, y}, terrain::water);
         }
     }
 }
@@ -447,16 +443,16 @@ build_lake(map_data *map, v2 bl, v2 tr)
 void
 build_terrain_tiles(map_data *map)
 {
-    for (uint32_t y = 0; y < MAP_HEIGHT; ++y)
+    for (int32_t y = 0; y < MAP_HEIGHT; ++y)
     {
-        for (uint32_t x = 0; x < MAP_WIDTH; ++x)
+        for (int32_t x = 0; x < MAP_WIDTH; ++x)
         {
             terrain result = terrain::land;
             if ((x == 0) || (x == MAP_WIDTH - 1) || (y == 0) || (y == MAP_HEIGHT - 1))
             {
                 result = terrain::water;
             }
-            map->terrain_tiles[y * MAP_WIDTH + x] = result;
+            map->terrain_tiles.set({x,y}, result);
         }
     }
     build_lake(map, {16+6, 16}, {20+6, 22});
@@ -472,7 +468,7 @@ get_terrain_for_tile(map_data *map, int32_t x, int32_t y)
     terrain result = terrain::water;
     if ((x >= 0) && (x < MAP_WIDTH) && (y >= 0) && (y < MAP_HEIGHT))
     {
-        result = map->terrain_tiles[y * MAP_WIDTH + x];
+        result = map->terrain_tiles.get(x, y);
     }
     return result;
 }
@@ -585,7 +581,7 @@ build_passable(map_data *map)
             }
             else
             {
-                set_passable_x(map, x + 1, y, get_tile(map, x, y) == get_tile(map, x + 1, y));
+                set_passable_x(map, x + 1, y, map->terrain_tiles.get((int32_t)x, (int32_t)y) == map->terrain_tiles.get((int32_t)x + 1, (int32_t)y));
             }
 
             if (y == 0)
@@ -599,7 +595,7 @@ build_passable(map_data *map)
             }
             else
             {
-                set_passable_y(map, x, y + 1, get_tile(map, x, y) == get_tile(map, x, y + 1));
+                set_passable_y(map, x, y + 1, map->terrain_tiles.get((int32_t)x, (int32_t)y) == map->terrain_tiles.get((int32_t)x, (int32_t)y + 1));
             }
         }
     }
@@ -1489,6 +1485,21 @@ calculate_familiar_acceleration(game_state *state)
     return result;
 }
 
+bool
+furniture_terrain_compatible(map_data *map, FurnitureType furniture_type, v2i tile)
+{
+    terrain t = map->terrain_tiles.get(tile);
+    if (t == terrain::water)
+    {
+        return false;
+    }
+    Furniture furniture = map->furniture_tiles.get(tile);
+    if (furniture.type != FurnitureType::none)
+    {
+        return false;
+    }
+    return true;
+}
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
@@ -1564,8 +1575,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
     state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x + state->camera_offset.x, -max_y + state->camera_offset.y}, {max_x + state->camera_offset.x, max_y + state->camera_offset.y});
 
-    RenderListReset(state->render_list);
-    RenderListReset(state->render_list2);
+    RenderListReset(&state->render_list);
+    RenderListReset(&state->render_list2);
 
     ImGui::ColorEdit3("Clear colour", state->clear_color);
     demo_data demoes[] = {
@@ -1737,10 +1748,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
             int32_t t_y = (int32_t)floorf((input->window.height  / 2.0f - input->mouse.y) / state->pixel_size);
             state->debug.selected_tile = {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y};
+            v2i &tile = state->debug.selected_tile;
 
             if (state->selected_tool.type == ToolType::furniture)
             {
-                add_furniture_job(state, &state->map, {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y}, state->selected_tool.furniture_type);
+                if (furniture_terrain_compatible(&state->map, state->selected_tool.furniture_type, tile))
+                {
+                    add_furniture_job(state, &state->map, {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y}, state->selected_tool.furniture_type);
+                }
             }
         }
     }

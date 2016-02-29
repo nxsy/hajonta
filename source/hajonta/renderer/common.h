@@ -11,6 +11,11 @@ render_entry_type
     quad,
     matrices,
     asset_descriptors,
+
+    QUADS,
+    QUADS_lookup,
+
+    MAX = QUADS_lookup,
 };
 
 struct
@@ -46,6 +51,20 @@ render_entry_type_quad
 };
 
 struct
+render_entry_type_QUADS
+{
+    render_entry_header header;
+    uint32_t entry_count;
+    int32_t matrix_id;
+    int32_t asset_descriptor_id;
+    struct {
+        v3 position;
+        v3 size;
+        v4 color;
+    } entries[2000];
+};
+
+struct
 render_entry_type_matrices
 {
     render_entry_header header;
@@ -69,6 +88,23 @@ render_entry_type_asset_descriptors
     asset_descriptor *descriptors;
 };
 
+struct render_entry_type_list;
+struct
+render_entry_type_QUADS_lookup
+{
+    render_entry_header header;
+
+    render_entry_type_QUADS_lookup *next;
+
+    uint32_t lookup_count;
+    struct
+    {
+        render_entry_type_QUADS *QUADS;
+        int32_t matrix_id;
+        int32_t asset_descriptor_id;
+    } lookups[20];
+};
+
 struct
 render_entry_list
 {
@@ -76,10 +112,38 @@ render_entry_list
     uint32_t current_size;
     uint8_t *base;
     uint32_t element_count;
+    uint32_t element_counts[uint32_t(render_entry_type::MAX) + 1];
+
+    render_entry_type_QUADS_lookup *first_QUADS_lookup;
+
+#ifndef RENDER_ENTRY_LIST_OPTIMIZED
+    render_entry_header *element_pointers[50];
+    render_entry_type element_types[50];
+#endif
 };
 
 #define RenderListBuffer(r, b) { r.max_size = sizeof(b); r.base = b; }
-#define RenderListReset(r) { r.current_size = r.element_count = 0; }
+inline void
+RenderListReset(render_entry_list *list)
+{
+    list->current_size = 0;
+    list->element_count = 0;
+    list->first_QUADS_lookup = 0;
+    for (uint32_t i = 0; i < harray_count(list->element_counts); ++i)
+    {
+         list->element_counts[i] = 0;
+    }
+#ifndef RENDER_ENTRY_LIST_OPTIMIZED
+    for (uint32_t i = 0; i < harray_count(list->element_pointers); ++i)
+    {
+         list->element_pointers[i] = 0;
+    }
+    for (uint32_t i = 0; i < harray_count(list->element_types); ++i)
+    {
+         list->element_types[i] = (render_entry_type)0;
+    }
+#endif
+}
 
 #define PushRenderElement(list, type) (render_entry_type_##type *)PushRenderElement_(list, sizeof(render_entry_type_##type), render_entry_type::type)
 inline void *
@@ -90,20 +154,29 @@ PushRenderElement_(render_entry_list *list, uint32_t size, render_entry_type typ
     if (list->current_size + size > list->max_size)
     {
         hassert(!"render list too small");
-         return res;
+        return res;
     }
 
     render_entry_header *header = (render_entry_header *)(list->base + list->current_size);
     header->type = type;
     res = header;
     list->current_size += size;
+#ifndef RENDER_ENTRY_LIST_OPTIMIZED
+    if (list->element_count < harray_count(list->element_pointers))
+    {
+        list->element_pointers[list->element_count] = header;
+        list->element_types[list->element_count] = type;
+    }
+#endif
     ++list->element_count;
+    ++list->element_counts[(uint32_t)type];
 
     return res;
 }
 
 #define ExtractRenderElement(type, name, header) render_entry_type_##type *##name = (render_entry_type_##type *)header
 #define ExtractRenderElementWithSize(type, name, header, size) ExtractRenderElement(type, name, header); size = sizeof(*##name)
+#define ExtractRenderElementSizeOnly(type, size) size = sizeof(render_entry_type_##type)
 
 inline void
 PushClear(render_entry_list *list, v4 color)
@@ -125,19 +198,95 @@ PushUi2d(render_entry_list *list, ui2d_push_context *pushctx)
      }
 }
 
-inline void
-PushQuad(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id, int32_t asset_descriptor_id)
+render_entry_type_QUADS *
+_find_QUADS_for(render_entry_list *list, int32_t matrix_id, int32_t asset_descriptor_id)
 {
-     render_entry_type_quad *entry = PushRenderElement(list, quad);
-     if (entry)
-     {
-         entry->position = position;
-         entry->size = size;
-         entry->color = color;
-         entry->matrix_id = matrix_id;
-         entry->asset_descriptor_id = asset_descriptor_id;
-     }
+    render_entry_type_QUADS *result = 0;
+    render_entry_type_QUADS_lookup *l;
+    render_entry_type_QUADS_lookup *prev = 0;
+
+    for(l = list->first_QUADS_lookup; l; l = l->next)
+    {
+        for (uint32_t i = 0; i < l->lookup_count; ++i)
+        {
+            auto &lookup = l->lookups[i];
+            if (lookup.matrix_id == matrix_id && lookup.asset_descriptor_id == asset_descriptor_id)
+            {
+                if (lookup.QUADS->entry_count < harray_count(result->entries))
+                {
+                    return lookup.QUADS;
+                }
+            }
+        }
+        if (l->lookup_count < harray_count(l->lookups))
+        {
+            auto &lookup = l->lookups[l->lookup_count++];
+            result = PushRenderElement(list, QUADS);
+            result->entry_count = 0;
+            result->matrix_id = matrix_id;
+            result->asset_descriptor_id = asset_descriptor_id;
+            lookup.QUADS = result;
+            lookup.matrix_id = matrix_id;
+            lookup.asset_descriptor_id = asset_descriptor_id;
+            return result;
+        }
+        prev = l;
+    }
+
+    hassert(!l);
+    l = PushRenderElement(list, QUADS_lookup);
+    hassert(l);
+    if (!list->first_QUADS_lookup)
+    {
+        list->first_QUADS_lookup = l;
+    }
+    else
+    {
+        hassert(prev);
+        prev->next = l;
+    }
+    l->lookup_count = 0;
+    l->next = 0;
+    auto &lookup = l->lookups[l->lookup_count++];
+    result = PushRenderElement(list, QUADS);
+    result->entry_count = 0;
+    result->matrix_id = matrix_id;
+    result->asset_descriptor_id = asset_descriptor_id;
+    hassert(result);
+    lookup.QUADS = result;
+    lookup.matrix_id = matrix_id;
+    lookup.asset_descriptor_id = asset_descriptor_id;
+    return result;
 }
+
+inline void
+_PushQuadFast(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id, int32_t asset_descriptor_id)
+{
+    render_entry_type_QUADS *entry = _find_QUADS_for(list, matrix_id, asset_descriptor_id);
+    if (entry)
+    {
+        auto &quad_entry = entry->entries[entry->entry_count++];
+        quad_entry.position = position;
+        quad_entry.size = size;
+        quad_entry.color = color;
+    }
+}
+
+inline void
+_PushQuadSlow(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id, int32_t asset_descriptor_id)
+{
+    render_entry_type_quad *entry = PushRenderElement(list, quad);
+    if (entry)
+    {
+        entry->position = position;
+        entry->size = size;
+        entry->color = color;
+        entry->matrix_id = matrix_id;
+        entry->asset_descriptor_id = asset_descriptor_id;
+    }
+}
+
+#define PushQuad _PushQuadFast
 
 inline void
 PushMatrices(render_entry_list *list, uint32_t count, m4 *matrices)

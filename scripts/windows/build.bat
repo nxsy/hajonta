@@ -7,7 +7,7 @@ IF NOT EXIST %BUILDDIR%\generated mkdir %BUILDDIR%\generated
 pushd %BUILDDIR%
 
 set INCLUDES=-I..\source -Igenerated -Zi -I..\source\hajonta\thirdparty -I..\thirdparty\stb -I..\thirdparty\imgui
-set CPPFLAGS=%includes% /FC /nologo /Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd4514 /wd4191 /wd4201 /wd4505 /wd4710
+set CPPFLAGS=%includes% /FC /nologo /Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd4514 /wd4191 /wd4201 /wd4505 /wd4710 /EHsc
 
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 REM .\program.exe ..\source hajonta\programs a

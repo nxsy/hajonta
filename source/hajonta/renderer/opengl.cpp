@@ -4,6 +4,8 @@
 
 #include <stdio.h>
 
+#include <chrono>
+
 #include "hajonta/platform/common.h"
 #include "hajonta/renderer/common.h"
 
@@ -134,6 +136,7 @@ struct renderer_state
     imgui_program_struct imgui_program;
     uint32_t vbo;
     uint32_t ibo;
+    uint32_t QUADS_ibo;
     uint32_t vao;
     int32_t tex_id;
     uint32_t font_texture;
@@ -158,6 +161,15 @@ struct renderer_state
     uint32_t generation_id;
 
     mouse_input original_mouse_input;
+
+    uint32_t vertices_count;
+    struct
+    {
+        v2 pos;
+        v2 uv;
+        uint32_t col;
+    } vertices_scratch[4 * 2000];
+    uint32_t indices_scratch[6 * 2000];
 };
 
 int32_t
@@ -343,6 +355,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     glGenBuffers(1, &state->vbo);
     glGenBuffers(1, &state->ibo);
+    glGenBuffers(1, &state->QUADS_ibo);
 
     glGenVertexArrays(1, &state->vao);
     glBindVertexArray(state->vao);
@@ -475,6 +488,8 @@ add_tilemap_asset(renderer_state *state, char *asset_name, char *asset_file_name
 
 RENDERER_SETUP(renderer_setup)
 {
+    static std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
+
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
     if (!glCreateProgram)
     {
@@ -511,6 +526,23 @@ RENDERER_SETUP(renderer_setup)
         add_asset(state, "player", "testing/kenney/alienPink_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar_ship", "testing/kenney/shipBlue.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar", "testing/kenney/alienBlue_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+
+        uint32_t scratch_pos = 0;
+        for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
+        {
+            uint32_t start = i * 4;
+            state->indices_scratch[scratch_pos++] = start + 0;
+            state->indices_scratch[scratch_pos++] = start + 1;
+            state->indices_scratch[scratch_pos++] = start + 2;
+            state->indices_scratch[scratch_pos++] = start + 2;
+            state->indices_scratch[scratch_pos++] = start + 3;
+            state->indices_scratch[scratch_pos++] = start + 0;
+        }
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->QUADS_ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            sizeof(state->indices_scratch),
+            state->indices_scratch,
+            GL_STATIC_DRAW);
     }
 
     _GlobalRendererState.input = input;
@@ -520,7 +552,12 @@ RENDERER_SETUP(renderer_setup)
     io.DisplaySize = ImVec2((float)input->window.width, (float)input->window.height);
     io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
 
-    io.DeltaTime = input->delta_t;
+    std::chrono::steady_clock::time_point this_frame_start_time = std::chrono::steady_clock::now();
+    auto diff = this_frame_start_time - last_frame_start_time;
+    using microseconds = std::chrono::microseconds;
+    int64_t duration_us = std::chrono::duration_cast<microseconds>(diff).count();
+    io.DeltaTime = (float)duration_us / 1000 / 1000;
+    last_frame_start_time = this_frame_start_time;
 
     io.MousePos = ImVec2((float)input->mouse.x, (float)input->mouse.y);
     io.MouseDown[0] = input->mouse.buttons.left.ended_down;
@@ -613,8 +650,6 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
         { 0.0f,                  0.0f,                  -1.0f, 0.0f },
         {-1.0f,                  1.0f,                   0.0f, 1.0f },
     };
-    glUseProgram(state->imgui_program.program);
-    glUniform1i(state->tex_id, 0);
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, &ortho_projection[0][0]);
     glBindVertexArray(state->vao);
 
@@ -647,11 +682,14 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
     glBindVertexArray(0);
 }
 
+static uint32_t generations_updated_this_frame = 0;
+
 void
 update_asset_descriptor_asset_id(renderer_state *state, asset_descriptor *descriptor)
 {
     if (descriptor->generation_id != state->generation_id)
     {
+        ++generations_updated_this_frame;
         int32_t result = -1;
         for (uint32_t i = 0; i < state->asset_count; ++i)
         {
@@ -669,22 +707,7 @@ update_asset_descriptor_asset_id(renderer_state *state, asset_descriptor *descri
 void
 draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
 {
-
-    window_data *window = &state->input->window;
-    glEnable(GL_BLEND);
-    glBlendEquation(GL_FUNC_ADD);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
-    float ratio = (float)window->width / (float)window->height;
-    m4 projection;
-    if (quad->matrix_id == -1)
-    {
-        projection = m4orthographicprojection(1.0f, -1.0f, {-ratio, -1.0f}, {ratio, 1.0f});
-    }
-    else
-    {
-        projection = matrices[quad->matrix_id];
-    }
+    m4 projection = matrices[quad->matrix_id];
 
     uint32_t texture = state->white_texture;
     v2 st0 = {0, 0};
@@ -715,9 +738,6 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
         }
     }
 
-    glUseProgram(state->imgui_program.program);
-    glActiveTexture(GL_TEXTURE0);
-    glUniform1i(state->tex_id, 0);
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     glBindVertexArray(state->vao);
 
@@ -764,18 +784,114 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
 
     glBindTexture(GL_TEXTURE_2D, texture);
-    glScissor(0, 0, window->width, window->height);
     glDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, 0);
 
     glBindVertexArray(0);
 }
 
+void
+draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
+{
+    m4 projection = matrices[quads->matrix_id];
+
+    uint32_t texture = state->white_texture;
+    v2 st0 = {0, 0};
+    v2 st1 = {1, 1};
+
+    if (quads->asset_descriptor_id != -1)
+    {
+        asset_descriptor *descriptor = descriptors + quads->asset_descriptor_id;
+        update_asset_descriptor_asset_id(state, descriptor);
+        if (descriptor->asset_id >= 0)
+        {
+            asset *descriptor_asset = state->assets + descriptor->asset_id;
+            st0 = descriptor_asset->st0;
+            st1 = descriptor_asset->st1;
+            int32_t asset_file_id = descriptor_asset->asset_file_id;
+            int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
+            if (texture_lookup >= 0)
+            {
+                texture = (uint32_t)texture_lookup;
+            }
+            else
+            {
+                int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
+                if (texture_id >= 0)
+                {
+                    texture = (uint32_t)texture_id;
+                }
+            }
+        }
+    }
+
+    glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glBindVertexArray(state->vao);
+
+    hassert(harray_count(state->vertices_scratch) >= quads->entry_count * 4);
+
+    uint32_t scratch_pos = 0;
+    for (uint32_t i = 0; i < quads->entry_count; ++i)
+    {
+        auto &entry = quads->entries[i];
+        uint32_t col = 0x00000000;
+        col |= (uint32_t)(entry.color.w * 255.0f) << 24;
+        col |= (uint32_t)(entry.color.z * 255.0f) << 16;
+        col |= (uint32_t)(entry.color.y * 255.0f) << 8;
+        col |= (uint32_t)(entry.color.x * 255.0f) << 0;
+        state->vertices_scratch[scratch_pos++] = {
+            { entry.position.x, entry.position.y, },
+            { st0.x, st0.y },
+            col,
+        };
+        state->vertices_scratch[scratch_pos++] = {
+            { entry.position.x + entry.size.x, entry.position.y, },
+            { st1.x, st0.y },
+            col,
+        };
+
+        state->vertices_scratch[scratch_pos++] = {
+            { entry.position.x + entry.size.x, entry.position.y + entry.size.y, },
+            { st1.x, st1.y },
+            col,
+        };
+
+        state->vertices_scratch[scratch_pos++] = {
+            { entry.position.x, entry.position.y + entry.size.y, },
+            { st0.x, st1.y },
+            col,
+        };
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(state->vertices_scratch[0])) * 4 * quads->entry_count, state->vertices_scratch, GL_STREAM_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->QUADS_ibo);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glDrawElements(GL_TRIANGLES, (GLsizei)quads->entry_count * 6, GL_UNSIGNED_INT, 0);
+
+    glBindVertexArray(0);
+}
+
+
 RENDERER_RENDER(renderer_render)
 {
+    ImGuiIO& io = ImGui::GetIO();
+    generations_updated_this_frame = 0;
     glErrorAssert(true);
 
     renderer_state *state = &_GlobalRendererState;
     hassert(memory->render_lists_count > 0);
+
+    window_data *window = &state->input->window;
+
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glScissor(0, 0, window->width, window->height);
+    glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
+    glUseProgram(state->imgui_program.program);
+    glUniform1i(state->tex_id, 0);
+
+    uint32_t quads_drawn = 0;
     for (uint32_t i = 0; i < memory->render_lists_count; ++i)
     {
         render_entry_list *render_list = memory->render_lists[i];
@@ -813,11 +929,8 @@ RENDERER_RENDER(renderer_render)
                     hassert(matrix_count > 0 || item->matrix_id == -1);
                     hassert(asset_descriptor_count > 0 || item->asset_descriptor_id == -1);
                     draw_quad(ctx, memory, state, matrices, asset_descriptors, item);
+                    ++quads_drawn;
                 } break;
-                default:
-                {
-                    hassert(!"Unhandled render entry type")
-                };
                 case render_entry_type::matrices:
                 {
                     ExtractRenderElementWithSize(matrices, item, header, element_size);
@@ -830,11 +943,28 @@ RENDERER_RENDER(renderer_render)
                     asset_descriptors = item->descriptors;
                     asset_descriptor_count = item->count;
                 } break;
+                case render_entry_type::QUADS:
+                {
+                    ExtractRenderElementWithSize(QUADS, item, header, element_size);
+                    draw_quads(ctx, memory, state, matrices, asset_descriptors, item);
+                } break;
+                case render_entry_type::QUADS_lookup:
+                {
+                    ExtractRenderElementSizeOnly(QUADS_lookup, element_size);
+                } break;
+                default:
+                {
+                    hassert(!"Unhandled render entry type")
+                };
             }
             hassert(element_size > 0);
             offset += element_size;
         }
     }
+    ImGui::Text("Quads drawn: %d", quads_drawn);
+    ImGui::Text("Generations updated: %d", generations_updated_this_frame);
+    ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+    ImGui::Text("This frame: %.3f ms", 1000.0f * io.DeltaTime);
 
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
