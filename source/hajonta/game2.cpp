@@ -350,7 +350,7 @@ struct game_state
 
     uint32_t job_count;
     job jobs[10];
-    int32_t furniture_to_asset[FurnitureType::MAX];
+    int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
 };
 
 game_state *_hidden_state;
@@ -628,7 +628,7 @@ build_map(game_state *state, map_data *map)
 }
 
 int32_t
-add_asset(game_state *state, char *name)
+add_asset(game_state *state, const char *name)
 {
     int32_t result = -1;
     if (state->asset_count < harray_count(state->assets))
@@ -1477,7 +1477,7 @@ calculate_familiar_acceleration(game_state *state)
         next_tile = *path_next_tile;
     }
 
-    ImGui::Text("Has next tile: %d, next tile is %f, %f", has_next_tile, next_tile.x, next_tile.y);
+    ImGui::Text("Has next tile: %d, next tile is %d, %d", has_next_tile, next_tile.x, next_tile.y);
     if (has_next_tile)
     {
         result = calculate_acceleration(state->familiar_movement, next_tile, 20.0f);

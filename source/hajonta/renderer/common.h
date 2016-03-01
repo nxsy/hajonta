@@ -174,8 +174,8 @@ PushRenderElement_(render_entry_list *list, uint32_t size, render_entry_type typ
     return res;
 }
 
-#define ExtractRenderElement(type, name, header) render_entry_type_##type *##name = (render_entry_type_##type *)header
-#define ExtractRenderElementWithSize(type, name, header, size) ExtractRenderElement(type, name, header); size = sizeof(*##name)
+#define ExtractRenderElement(type, name, header) render_entry_type_##type *name = (render_entry_type_##type *)header
+#define ExtractRenderElementWithSize(type, name, header, size) ExtractRenderElement(type, name, header); size = sizeof(*name)
 #define ExtractRenderElementSizeOnly(type, size) size = sizeof(render_entry_type_##type)
 
 inline void

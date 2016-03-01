@@ -1,6 +1,10 @@
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <gl/gl.h>
+#elif defined(__APPLE__)
+#include <OpenGL/gl3.h>
+#endif
 
 #include <stdio.h>
 
@@ -390,7 +394,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 }
 
 int32_t
-lookup_asset_file(renderer_state *state, char *asset_file_path)
+lookup_asset_file(renderer_state *state, const char *asset_file_path)
 {
     int32_t result = -1;
     for (uint32_t i = 0; i < state->asset_file_count; ++i)
@@ -405,7 +409,7 @@ lookup_asset_file(renderer_state *state, char *asset_file_path)
 }
 
 int32_t
-add_asset_file(renderer_state *state, char *asset_file_path)
+add_asset_file(renderer_state *state, const char *asset_file_path)
 {
     int32_t result = lookup_asset_file(state, asset_file_path);
     hassert(state->asset_file_count < harray_count(state->asset_files));
@@ -442,7 +446,7 @@ add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, ren
 }
 
 int32_t
-add_asset(renderer_state *state, char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
+add_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
 {
     int32_t result = -1;
     hassert(state->asset_count < harray_count(state->assets));
@@ -458,7 +462,7 @@ add_asset(renderer_state *state, char *asset_name, int32_t asset_file_id, v2 st0
 }
 
 int32_t
-add_asset(renderer_state *state, char *asset_name, char *asset_file_name, v2 st0, v2 st1)
+add_asset(renderer_state *state, const char *asset_name, const char *asset_file_name, v2 st0, v2 st1)
 {
     int32_t result = -1;
 
@@ -471,7 +475,7 @@ add_asset(renderer_state *state, char *asset_name, char *asset_file_name, v2 st0
 }
 
 int32_t
-add_tilemap_asset(renderer_state *state, char *asset_name, char *asset_file_name, uint32_t width, uint32_t height, uint32_t tile_width, uint32_t tile_height, uint32_t spacing, uint32_t tile_id)
+add_tilemap_asset(renderer_state *state, const char *asset_name, const char *asset_file_name, uint32_t width, uint32_t height, uint32_t tile_width, uint32_t tile_height, uint32_t spacing, uint32_t tile_id)
 {
     uint32_t tiles_wide = (width + spacing) / (tile_width + spacing);
     uint32_t tile_x_position = tile_id % tiles_wide;
@@ -486,7 +490,7 @@ add_tilemap_asset(renderer_state *state, char *asset_name, char *asset_file_name
     return add_asset(state, asset_name, asset_file_name, st0, st1);
 }
 
-RENDERER_SETUP(renderer_setup)
+extern "C" RENDERER_SETUP(renderer_setup)
 {
     static std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
 
@@ -580,7 +584,7 @@ RENDERER_SETUP(renderer_setup)
             {
                 if (ki->ascii == 8)
                 {
-                     io.KeysDown[ki->ascii] = true;
+                     io.KeysDown[(uint32_t)ki->ascii] = true;
                 }
                 else
                 {
@@ -872,7 +876,7 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
 }
 
 
-RENDERER_RENDER(renderer_render)
+extern "C" RENDERER_RENDER(renderer_render)
 {
     ImGuiIO& io = ImGui::GetIO();
     generations_updated_this_frame = 0;

@@ -38,6 +38,7 @@ struct sdl2_state
 
     char *base_path;
     char asset_path[MAX_PATH];
+    char arg_asset_path[MAX_PATH];
 
     game_input *new_input;
     game_input *old_input;
@@ -49,6 +50,14 @@ struct sdl2_state
 struct game_code
 {
     game_update_and_render_func *game_update_and_render;
+
+    void *handle;
+};
+
+struct renderer_code
+{
+    renderer_setup_func *renderer_setup;
+    renderer_render_func *renderer_render;
 
     void *handle;
 };
@@ -222,23 +231,38 @@ PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 PLATFORM_LOAD_ASSET(platform_load_asset)
 {
     sdl2_state *state = (sdl2_state *)ctx;
-    char full_pathname[MAX_PATH];
-    _snprintf(full_pathname, sizeof(full_pathname), "%s/%s", state->asset_path, asset_path);
-    SDL_RWops* sdlrw = SDL_RWFromFile(full_pathname, "rb");
+
+    char *asset_folder_paths[] = {
+        state->asset_path,
+        state->arg_asset_path,
+    };
+
+    SDL_RWops *sdlrw = 0;
+    for (uint32_t i = 0; i < harray_count(asset_folder_paths); ++i)
+    {
+        char *asset_folder_path = asset_folder_paths[i];
+        char full_pathname[MAX_PATH];
+        if (!asset_folder_path)
+        {
+            break;
+        }
+        _snprintf(full_pathname, sizeof(full_pathname), "%s/%s", asset_folder_path, asset_path);
+        sdlrw = SDL_RWFromFile(full_pathname, "rb");
+        if (sdlrw)
+        {
+            break;
+        }
+    }
+
     if (!sdlrw)
     {
         const char *error = SDL_GetError();
         hassert(!error);
         return false;
     }
+
     size_t bytes_read = SDL_RWread(sdlrw, dest, 1, size);
     SDL_RWclose(sdlrw);
-    if (bytes_read != size)
-    {
-        const char *error = SDL_GetError();
-        hassert(!error);
-        return false;
-    }
     return true;
 }
 
@@ -253,6 +277,23 @@ bool sdl_load_game_code(sdl2_state *state, game_code *code, const char *filename
     code->handle = SDL_LoadObject(libfile);
     code->game_update_and_render = (game_update_and_render_func *)SDL_LoadFunction(code->handle, "game_update_and_render");
     hassert(code->game_update_and_render);
+    return true;
+}
+
+bool
+sdl_load_renderer_code(sdl2_state *state, renderer_code *code, const char *filename)
+{
+    char libfile[1024];
+    _snprintf(libfile, sizeof(libfile), "%s%s", state->base_path, filename);
+    if (code->handle)
+    {
+        SDL_UnloadObject(code->handle);
+    }
+    code->handle = SDL_LoadObject(libfile);
+    code->renderer_setup = (renderer_setup_func *)SDL_LoadFunction(code->handle, "renderer_setup");
+    code->renderer_render = (renderer_render_func *)SDL_LoadFunction(code->handle, "renderer_render");
+    hassert(code->renderer_setup);
+    hassert(code->renderer_render);
     return true;
 }
 
@@ -401,7 +442,16 @@ main(int argc, char *argv[])
     state.window_height = 480;
 
     game_code code = {};
+    renderer_code renderercode = {};
+
     sdl_load_game_code(&state, &code, hquoted(HAJONTA_LIBRARY_NAME));
+    sdl_load_renderer_code(&state, &renderercode, "libopenglrenderer.dylib");
+
+    char *arg_asset = getenv("HAJONTA_ASSET_PATH");
+    if (arg_asset)
+    {
+        strncpy(state.arg_asset_path, arg_asset, sizeof(state.arg_asset_path));
+    }
 
     while (!state.stopping)
     {
@@ -438,6 +488,8 @@ main(int argc, char *argv[])
         state.new_input->window.width = state.window_width;
         state.new_input->window.height = state.window_height;
 
+        renderercode.renderer_setup((hajonta_thread_context *)&state, &memory, state.new_input);
+
         game_sound_output sound_output;
         sound_output.samples_per_second = 48000;
         sound_output.channels = 2;
@@ -450,6 +502,8 @@ main(int argc, char *argv[])
         code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
 
         sdl_queue_sound(&state, &sound_output);
+
+        renderercode.renderer_render((hajonta_thread_context *)&state, &memory, state.new_input);
 
         if (memory.quit)
         {
