@@ -145,8 +145,10 @@ sdl_init(sdl2_state *state)
     }
     state->sdl_inited = true;
 
-    state->window = SDL_CreateWindow("My First Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
-    if (!state->window)
+    state->window = SDL_CreateWindow("Hajonta",
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            state->window_width, state->window_height,
+            SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL); if (!state->window)
     {
         const char *error = SDL_GetError();
         hassert(error);
@@ -209,6 +211,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(!error);
     }
+    SDL_ShowCursor(SDL_DISABLE);
 
     return true;
 }
@@ -367,6 +370,37 @@ handle_sdl2_events(sdl2_state *state)
                     sdl2_process_keypress(button_state, was_down, is_down);
                 }
             } break;
+            case SDL_MOUSEMOTION:
+            {
+                state->new_input->mouse.x = sdl_event.motion.x;
+                state->new_input->mouse.y = sdl_event.motion.y;
+            } break;
+            case SDL_MOUSEBUTTONDOWN:
+            case SDL_MOUSEBUTTONUP:
+            {
+                bool was_down = (sdl_event.type == SDL_MOUSEBUTTONUP);
+                bool is_down = (sdl_event.type != SDL_MOUSEBUTTONUP);
+                game_button_state *button_state = 0;
+                switch (sdl_event.button.button)
+                {
+                    case SDL_BUTTON_LEFT:
+                    {
+                        button_state = &state->new_input->mouse.buttons.left;
+                    } break;
+                    case SDL_BUTTON_RIGHT:
+                    {
+                        button_state = &state->new_input->mouse.buttons.right;
+                    } break;
+                    case SDL_BUTTON_MIDDLE:
+                    {
+                        button_state = &state->new_input->mouse.buttons.middle;
+                    } break;
+                }
+                if (button_state)
+                {
+                    sdl2_process_keypress(button_state, was_down, is_down);
+                }
+            } break;
         }
     }
 }
@@ -422,6 +456,8 @@ main(int argc, char *argv[])
 #endif
 {
     sdl2_state state = {};
+    state.window_width = 1920;
+    state.window_height = 1080;
     sdl_init(&state);
 
     platform_memory memory = {};
@@ -439,8 +475,6 @@ main(int argc, char *argv[])
     game_input input[2] = {};
     state.new_input = &input[0];
     state.old_input = &input[1];
-    state.window_width = 640;
-    state.window_height = 480;
 
     game_code code = {};
     renderer_code renderercode = {};
@@ -486,6 +520,8 @@ main(int argc, char *argv[])
         state.new_input->mouse.y = state.old_input->mouse.y;
         state.new_input->mouse.vertical_wheel_delta = 0;
 
+        handle_sdl2_events(&state);
+
         state.new_input->window.width = state.window_width;
         state.new_input->window.height = state.window_height;
 
@@ -496,15 +532,25 @@ main(int argc, char *argv[])
         sound_output.channels = 2;
         sound_output.number_of_samples = 48000 / 60;
 
-        handle_sdl2_events(&state);
-
-        SDL_GL_SwapWindow(state.window);
-
         code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
 
         sdl_queue_sound(&state, &sound_output);
 
         renderercode.renderer_render((hajonta_thread_context *)&state, &memory, state.new_input);
+
+        SDL_GL_SwapWindow(state.window);
+
+        game_input *temp_input = state.new_input;
+        state.new_input = state.old_input;
+        state.old_input = temp_input;
+
+        for (uint32_t input_idx = 0;
+                input_idx < harray_count(state.new_input->keyboard_inputs);
+                ++input_idx)
+        {
+            *(state.new_input->keyboard_inputs + input_idx) = {};
+        }
+        state.new_input->mouse = {};
 
         if (memory.quit)
         {
