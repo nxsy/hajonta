@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #if defined(SDL_WITH_SUBDIR)
 #include <SDL2/SDL.h>
@@ -261,7 +262,7 @@ PLATFORM_LOAD_ASSET(platform_load_asset)
         return false;
     }
 
-    size_t bytes_read = SDL_RWread(sdlrw, dest, 1, size);
+    SDL_RWread(sdlrw, dest, 1, size);
     SDL_RWclose(sdlrw);
     return true;
 }
@@ -445,7 +446,7 @@ main(int argc, char *argv[])
     renderer_code renderercode = {};
 
     sdl_load_game_code(&state, &code, hquoted(HAJONTA_LIBRARY_NAME));
-    sdl_load_renderer_code(&state, &renderercode, "libopenglrenderer.dylib");
+    sdl_load_renderer_code(&state, &renderercode, hquoted(HAJONTA_RENDERER_LIBRARY_NAME));
 
     char *arg_asset = getenv("HAJONTA_ASSET_PATH");
     if (arg_asset)

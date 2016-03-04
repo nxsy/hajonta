@@ -33,4 +33,4 @@ ${CLANG} ${CPPFLAGS} ${WARNFLAGS} -c source/hajonta/renderer/opengl.cpp ${DEBUG_
 ${CLANG} ${WARNFLAGS} -dynamiclib -o build/debug/libopenglrenderer.dylib build/debug/opengl.o -framework OpenGL ${DEBUG_FLAGS}
 
 # binary
-${CLANG} ${CPPFLAGS} ${WARNFLAGS} -F ~/Library/Frameworks/ -framework SDL2 -framework OpenGL -o build/debug/hajonta source/hajonta/platform/sdl2.cpp ${DEBUG_FLAGS} ${INCLUDES} -DHAJONTA_LIBRARY_NAME=libgame2.dylib
+${CLANG} ${CPPFLAGS} ${WARNFLAGS} -F ~/Library/Frameworks/ -framework SDL2 -framework OpenGL -o build/debug/hajonta source/hajonta/platform/sdl2.cpp ${DEBUG_FLAGS} ${INCLUDES} -DHAJONTA_LIBRARY_NAME=libgame2.dylib -DHAJONTA_RENDERER_LIBRARY_NAME=libopenglrenderer.dylib
