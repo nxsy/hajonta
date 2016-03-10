@@ -18,7 +18,6 @@
 #include "hajonta/game2/pq.cpp"
 #include "hajonta/game2/pq_debug.cpp"
 
-
 struct demo_context
 {
     bool switched;
@@ -312,7 +311,7 @@ struct game_state
     render_entry_list render_list;
     uint8_t render_buffer2[4 * 1024 * 1024];
     render_entry_list render_list2;
-    m4 matrices[2];
+    m4 matrices[3];
 
     _asset_ids asset_ids;
     uint32_t asset_count;
@@ -351,6 +350,10 @@ struct game_state
     uint32_t job_count;
     job jobs[10];
     int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
+    Mesh plane_mesh;
+    v3 plane_vertices[4];
+    v2 plane_uvs[4];
+    uint16_t plane_indices[6];
 };
 
 game_state *_hidden_state;
@@ -633,6 +636,7 @@ add_asset(game_state *state, const char *name)
     int32_t result = -1;
     if (state->asset_count < harray_count(state->assets))
     {
+        state->assets[state->asset_count].type = asset_descriptor_type::name;
         state->assets[state->asset_count].asset_name = name;
         result = (int32_t)state->asset_count;
         ++state->asset_count;
@@ -1555,6 +1559,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             harray_count(astar_data.entries),
             astar_data.entries
         );
+
+        state->plane_vertices[0] = {0.0f, 0.0f, -0.2f};
+        state->plane_vertices[1] = {0.0f, 1.0f, -0.2f};
+        state->plane_vertices[2] = {1.0f, 1.0f, -0.2f};
+        state->plane_vertices[3] = {1.0f, 0.0f, -0.2f};
+        state->plane_uvs[0] = {0.0f, 0.0f};
+        state->plane_uvs[1] = {0.0f, 1.0f};
+        state->plane_uvs[2] = {1.0f, 1.0f};
+        state->plane_uvs[3] = {1.0f, 0.0f};
+        state->plane_indices[0] = 0;
+        state->plane_indices[1] = 1;
+        state->plane_indices[2] = 2;
+        state->plane_indices[3] = 2;
+        state->plane_indices[4] = 3;
+        state->plane_indices[5] = 0;
+
+        state->plane_mesh.vertices = {
+            &state->plane_vertices,
+            sizeof(float) * harray_count(state->plane_vertices) * 3,
+        };
+        state->plane_mesh.uvs = {
+            &state->plane_uvs,
+            sizeof(float) * harray_count(state->plane_uvs) * 2,
+        };
+        state->plane_mesh.indices = {
+            &state->plane_indices,
+            sizeof(uint16_t) * harray_count(state->plane_indices),
+        };
+        state->plane_mesh.num_triangles = 2;
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -1574,6 +1607,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     float max_y = (float)input->window.height / state->pixel_size / 2.0f;
     state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
     state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x + state->camera_offset.x, -max_y + state->camera_offset.y}, {max_x + state->camera_offset.x, max_y + state->camera_offset.y});
+    float ratio = (float)input->window.width / (float)input->window.height;
+    state->matrices[2] = m4frustumprojection(0.1f, 10.0f, {-ratio, -1.0f}, {ratio, 1.0f});
 
     RenderListReset(&state->render_list);
     RenderListReset(&state->render_list2);
@@ -1894,6 +1929,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         quad_size = { 64.0f, 64.0f };
         PushQuad(&state->render_list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
+
+    PushMesh(&state->render_list, 2, state->plane_mesh, state->asset_ids.ground_0);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

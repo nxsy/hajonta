@@ -15,6 +15,8 @@ render_entry_type
     QUADS,
     QUADS_lookup,
 
+    mesh,
+
     MAX = QUADS_lookup,
 };
 
@@ -73,9 +75,47 @@ render_entry_type_matrices
 };
 
 struct
+buffer
+{
+    void *data;
+    uint32_t size;
+};
+
+struct
+Mesh
+{
+    buffer vertices;
+    buffer uvs;
+    buffer normals;
+    buffer indices;
+    uint32_t num_triangles;
+};
+
+struct
+render_entry_type_mesh
+{
+    render_entry_header header;
+    int32_t matrix_id;
+    Mesh mesh;
+    int32_t texture_asset_descriptor_id;
+};
+
+enum struct
+asset_descriptor_type
+{
+    name,
+    vertices,
+};
+
+struct
 asset_descriptor
 {
-    const char *asset_name;
+    asset_descriptor_type type;
+    union
+    {
+        const char *asset_name;
+        void *ptr;
+    };
     int32_t asset_id;
     uint32_t generation_id;
 };
@@ -307,6 +347,18 @@ PushAssetDescriptors(render_entry_list *list, uint32_t count, asset_descriptor *
      {
          entry->count = count;
          entry->descriptors = descriptors;
+     }
+}
+
+inline void
+PushMesh(render_entry_list *list, int32_t matrix_id, Mesh mesh, int32_t texture_asset_descriptor_id)
+{
+     render_entry_type_mesh *entry = PushRenderElement(list, mesh);
+     if (entry)
+     {
+         entry->matrix_id = matrix_id;
+         entry->mesh = mesh;
+         entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
      }
 }
 

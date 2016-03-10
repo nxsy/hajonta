@@ -141,6 +141,8 @@ struct renderer_state
     uint32_t vbo;
     uint32_t ibo;
     uint32_t QUADS_ibo;
+    uint32_t mesh_vertex_vbo;
+    uint32_t mesh_uvs_vbo;
     uint32_t vao;
     int32_t tex_id;
     uint32_t font_texture;
@@ -360,6 +362,8 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     glGenBuffers(1, &state->vbo);
     glGenBuffers(1, &state->ibo);
     glGenBuffers(1, &state->QUADS_ibo);
+    glGenBuffers(1, &state->mesh_vertex_vbo);
+    glGenBuffers(1, &state->mesh_uvs_vbo);
 
     glGenVertexArrays(1, &state->vao);
     glBindVertexArray(state->vao);
@@ -655,7 +659,13 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
         {-1.0f,                  1.0f,                   0.0f, 1.0f },
     };
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, &ortho_projection[0][0]);
+    glUniform1f(state->imgui_program.u_use_color_id, 1.0f);
     glBindVertexArray(state->vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    glVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
+    glVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
+    glVertexAttribPointer((GLuint)state->imgui_program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
 
     for (int n = 0; n < draw_data->CmdListsCount; n++)
     {
@@ -743,6 +753,7 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     }
 
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glUniform1f(state->imgui_program.u_use_color_id, 1.0f);
     glBindVertexArray(state->vao);
 
     uint32_t col = 0x00000000;
@@ -794,41 +805,62 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 }
 
 void
-draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
+get_texture_id_from_asset_descriptor(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    asset_descriptor *descriptors,
+    int32_t asset_descriptor_id,
+    // out
+    uint32_t *texture,
+    v2 *st0,
+    v2 *st1)
 {
-    m4 projection = matrices[quads->matrix_id];
+    *texture = state->white_texture;
+    *st0 = {0, 0};
+    *st1 = {1, 1};
 
-    uint32_t texture = state->white_texture;
-    v2 st0 = {0, 0};
-    v2 st1 = {1, 1};
-
-    if (quads->asset_descriptor_id != -1)
+    if (asset_descriptor_id != -1)
     {
-        asset_descriptor *descriptor = descriptors + quads->asset_descriptor_id;
+        asset_descriptor *descriptor = descriptors + asset_descriptor_id;
         update_asset_descriptor_asset_id(state, descriptor);
         if (descriptor->asset_id >= 0)
         {
             asset *descriptor_asset = state->assets + descriptor->asset_id;
-            st0 = descriptor_asset->st0;
-            st1 = descriptor_asset->st1;
+            *st0 = descriptor_asset->st0;
+            *st1 = descriptor_asset->st1;
             int32_t asset_file_id = descriptor_asset->asset_file_id;
             int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
             if (texture_lookup >= 0)
             {
-                texture = (uint32_t)texture_lookup;
+                *texture = (uint32_t)texture_lookup;
             }
             else
             {
                 int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
                 if (texture_id >= 0)
                 {
-                    texture = (uint32_t)texture_id;
+                    *texture = (uint32_t)texture_id;
                 }
             }
         }
     }
+}
+
+void
+draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
+{
+    m4 projection = matrices[quads->matrix_id];
+
+    v2 st0 = {};
+    v2 st1 = {};
+    uint32_t texture = 0;
+    get_texture_id_from_asset_descriptor(
+        ctx, memory, state, descriptors, quads->asset_descriptor_id,
+        &texture, &st0, &st1);
 
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glUniform1f(state->imgui_program.u_use_color_id, 1.0f);
     glBindVertexArray(state->vao);
 
     hassert(harray_count(state->vertices_scratch) >= quads->entry_count * 4);
@@ -867,6 +899,9 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    glVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
+    glVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
+    glVertexAttribPointer((GLuint)state->imgui_program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
     glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(state->vertices_scratch[0])) * 4 * quads->entry_count, state->vertices_scratch, GL_STREAM_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->QUADS_ibo);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -875,6 +910,50 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     glBindVertexArray(0);
 }
 
+void
+draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh *mesh)
+{
+    glDisable(GL_BLEND);
+    m4 projection = matrices[mesh->matrix_id];
+
+    v2 st0 = {};
+    v2 st1 = {};
+    uint32_t texture = 0;
+    get_texture_id_from_asset_descriptor(
+        ctx, memory, state, descriptors, mesh->texture_asset_descriptor_id,
+        &texture, &st0, &st1);
+
+    glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glUniform1f(state->imgui_program.u_use_color_id, 0.0f);
+    glBindVertexArray(state->vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            mesh->mesh.vertices.size,
+            mesh->mesh.vertices.data,
+            GL_STATIC_DRAW);
+    glVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            mesh->mesh.uvs.size,
+            mesh->mesh.uvs.data,
+            GL_STATIC_DRAW);
+    glVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            mesh->mesh.indices.size,
+            mesh->mesh.indices.data,
+            GL_STATIC_DRAW);
+
+    glDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
+    glDrawElements(GL_TRIANGLES, (GLsizei)(mesh->mesh.num_triangles * 3), GL_UNSIGNED_SHORT, 0);
+    glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
+
+    glBindVertexArray(0);
+    glEnable(GL_BLEND);
+}
 
 extern "C" RENDERER_RENDER(renderer_render)
 {
@@ -955,6 +1034,11 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::QUADS_lookup:
                 {
                     ExtractRenderElementSizeOnly(QUADS_lookup, element_size);
+                } break;
+                case render_entry_type::mesh:
+                {
+                    ExtractRenderElementWithSize(mesh, item, header, element_size);
+                    draw_mesh(ctx, memory, state, matrices, asset_descriptors, item);
                 } break;
                 default:
                 {
