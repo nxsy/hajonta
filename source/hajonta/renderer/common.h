@@ -95,7 +95,8 @@ struct
 render_entry_type_mesh
 {
     render_entry_header header;
-    int32_t matrix_id;
+    int32_t projection_matrix_id;
+    int32_t model_matrix_id;
     Mesh mesh;
     int32_t texture_asset_descriptor_id;
 };
@@ -351,12 +352,13 @@ PushAssetDescriptors(render_entry_list *list, uint32_t count, asset_descriptor *
 }
 
 inline void
-PushMesh(render_entry_list *list, int32_t matrix_id, Mesh mesh, int32_t texture_asset_descriptor_id)
+PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, Mesh mesh, int32_t texture_asset_descriptor_id)
 {
      render_entry_type_mesh *entry = PushRenderElement(list, mesh);
      if (entry)
      {
-         entry->matrix_id = matrix_id;
+         entry->projection_matrix_id = projection_matrix_id;
+         entry->model_matrix_id = model_matrix_id;
          entry->mesh = mesh;
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
      }

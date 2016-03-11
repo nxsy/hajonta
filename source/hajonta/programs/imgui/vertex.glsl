@@ -1,5 +1,8 @@
 #version 330
 uniform mat4 u_projection;
+uniform mat4 u_view_matrix;
+uniform mat4 u_model_matrix;
+
 uniform float u_use_color;
 
 in vec3 a_position;
@@ -20,5 +23,5 @@ void main()
     {
         v_color = vec4(1, 1, 1, 1);
     }
-    gl_Position = u_projection * vec4(a_position.xyz, 1);
+    gl_Position = u_projection * u_view_matrix * u_model_matrix * vec4(a_position.xyz, 1);
 }

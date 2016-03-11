@@ -176,6 +176,8 @@ struct renderer_state
         uint32_t col;
     } vertices_scratch[4 * 2000];
     uint32_t indices_scratch[6 * 2000];
+
+    m4 m4identity;
 };
 
 int32_t
@@ -551,6 +553,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
             sizeof(state->indices_scratch),
             state->indices_scratch,
             GL_STATIC_DRAW);
+        state->m4identity = m4identity();
     }
 
     _GlobalRendererState.input = input;
@@ -659,6 +662,8 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
         {-1.0f,                  1.0f,                   0.0f, 1.0f },
     };
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, &ortho_projection[0][0]);
+    glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+    glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     glUniform1f(state->imgui_program.u_use_color_id, 1.0f);
     glBindVertexArray(state->vao);
 
@@ -914,7 +919,8 @@ void
 draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh *mesh)
 {
     glDisable(GL_BLEND);
-    m4 projection = matrices[mesh->matrix_id];
+    m4 projection = matrices[mesh->projection_matrix_id];
+    m4 model = matrices[mesh->model_matrix_id];
 
     v2 st0 = {};
     v2 st1 = {};
@@ -925,6 +931,8 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     glUniform1f(state->imgui_program.u_use_color_id, 0.0f);
+    glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+    glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
     glBindVertexArray(state->vao);
 
     glBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);
