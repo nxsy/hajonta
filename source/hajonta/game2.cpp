@@ -61,6 +61,8 @@ _asset_ids
     int32_t player;
     int32_t familiar_ship;
     int32_t familiar;
+    int32_t tree_mesh;
+    int32_t tree_texture;
 };
 
 struct
@@ -293,6 +295,16 @@ SelectedTool
     };
 };
 
+enum struct matrix_ids
+{
+    pixel_projection_matrix,
+    quad_projection_matrix,
+    mesh_projection_matrix,
+    mesh_model_matrix,
+
+    MAX = mesh_model_matrix,
+};
+
 struct game_state
 {
     bool initialized;
@@ -311,7 +323,7 @@ struct game_state
     render_entry_list render_list;
     uint8_t render_buffer2[4 * 1024 * 1024];
     render_entry_list render_list2;
-    m4 matrices[4];
+    m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
     _asset_ids asset_ids;
     uint32_t asset_count;
@@ -1531,6 +1543,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.bottom_wall = add_asset(state, "bottom_wall");
         state->asset_ids.player = add_asset(state, "player");
         state->asset_ids.familiar_ship = add_asset(state, "familiar_ship");
+        state->asset_ids.tree_mesh = add_asset(state, "tree_mesh");
+        state->asset_ids.tree_texture = add_asset(state, "tree_texture");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -1605,18 +1619,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     ImGui::SliderFloat2("Camera Offset", (float *)&state->camera_offset, -0.5f, 0.5f);
     float max_x = (float)input->window.width / state->pixel_size / 2.0f;
     float max_y = (float)input->window.height / state->pixel_size / 2.0f;
-    state->matrices[0] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
-    state->matrices[1] = m4orthographicprojection(1.0f, -1.0f, {-max_x + state->camera_offset.x, -max_y + state->camera_offset.y}, {max_x + state->camera_offset.x, max_y + state->camera_offset.y});
+    state->matrices[(uint32_t)matrix_ids::pixel_projection_matrix] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
+    state->matrices[(uint32_t)matrix_ids::quad_projection_matrix] = m4orthographicprojection(1.0f, -1.0f, {-max_x + state->camera_offset.x, -max_y + state->camera_offset.y}, {max_x + state->camera_offset.x, max_y + state->camera_offset.y});
+
     float ratio = (float)input->window.width / (float)input->window.height;
-    state->matrices[2] = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+    state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
     static float rotation = 0;
     rotation += state->frame_state.delta_t;
     m4 translate = m4identity();
-    translate.cols[3] = {0, 0, -10.0f, 1.0f};
-    m4 rotate = m4rotation({0,1,0}, rotation);
+    translate.cols[3] = {0, 0, -20.0f, 1.0f};
+    m4 rotate = m4rotation({1,0,0}, rotation);
     m4 local_translate = m4identity();
     local_translate.cols[3] = {-0.5f, -0.5f, 0.0f, 1.0f};
-    state->matrices[3] = m4mul(translate,m4mul(rotate, local_translate));
+    state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
 
     RenderListReset(&state->render_list);
     RenderListReset(&state->render_list2);
@@ -1938,7 +1953,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushQuad(&state->render_list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    PushMesh(&state->render_list, 2, 3, state->plane_mesh, state->asset_ids.ground_0);
+    PushMeshFromAsset(&state->render_list, 2, 3, state->asset_ids.tree_mesh, state->asset_ids.tree_texture);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

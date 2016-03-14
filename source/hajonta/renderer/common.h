@@ -16,8 +16,9 @@ render_entry_type
     QUADS_lookup,
 
     mesh,
+    mesh_from_asset,
 
-    MAX = QUADS_lookup,
+    MAX = mesh_from_asset,
 };
 
 struct
@@ -98,6 +99,16 @@ render_entry_type_mesh
     int32_t projection_matrix_id;
     int32_t model_matrix_id;
     Mesh mesh;
+    int32_t texture_asset_descriptor_id;
+};
+
+struct
+render_entry_type_mesh_from_asset
+{
+    render_entry_header header;
+    int32_t projection_matrix_id;
+    int32_t model_matrix_id;
+    int32_t mesh_asset_descriptor_id;
     int32_t texture_asset_descriptor_id;
 };
 
@@ -360,6 +371,19 @@ PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_ma
          entry->projection_matrix_id = projection_matrix_id;
          entry->model_matrix_id = model_matrix_id;
          entry->mesh = mesh;
+         entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
+     }
+}
+
+inline void
+PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id)
+{
+     render_entry_type_mesh_from_asset *entry = PushRenderElement(list, mesh_from_asset);
+     if (entry)
+     {
+         entry->projection_matrix_id = projection_matrix_id;
+         entry->model_matrix_id = model_matrix_id;
+         entry->mesh_asset_descriptor_id = mesh_asset_descriptor_id;
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
      }
 }

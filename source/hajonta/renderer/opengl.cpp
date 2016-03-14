@@ -118,19 +118,40 @@ struct asset_file_to_texture
     int32_t texture_offset;
 };
 
+struct asset_file_to_mesh
+{
+    int32_t asset_file_id;
+    int32_t mesh_offset;
+};
+
 struct
 asset_file
 {
     char asset_file_path[1024];
 };
 
+enum struct
+AssetType
+{
+    texture,
+    mesh,
+};
+
 struct asset
 {
+    AssetType type;
     uint32_t asset_id;
     char asset_name[100];
     int32_t asset_file_id;
     v2 st0;
     v2 st1;
+};
+
+struct mesh_asset
+{
+    uint32_t asset_id;
+    char asset_name[100];
+    int32_t asset_file_id;
 };
 
 struct renderer_state
@@ -159,6 +180,11 @@ struct renderer_state
     asset_file_to_texture texture_lookup[16];
     uint32_t texture_lookup_count;
 
+    Mesh meshes[16];
+    uint32_t mesh_count;
+    asset_file_to_mesh mesh_lookup[16];
+    uint32_t mesh_lookup_count;
+
     asset_file asset_files[16];
     uint32_t asset_file_count;
     asset assets[32];
@@ -178,6 +204,13 @@ struct renderer_state
     uint32_t indices_scratch[6 * 2000];
 
     m4 m4identity;
+
+    struct
+    {
+        v3 plane_vertices[4];
+        v2 plane_uvs[4];
+        uint16_t plane_indices[6];
+    } debug_mesh_data;
 };
 
 int32_t
@@ -196,6 +229,22 @@ lookup_asset_file_to_texture(renderer_state *state, int32_t asset_file_id)
     return result;
 }
 
+int32_t
+lookup_asset_file_to_mesh(renderer_state *state, int32_t asset_file_id)
+{
+    int32_t result = -1;
+    for (uint32_t i = 0; i < state->mesh_lookup_count; ++i)
+    {
+        asset_file_to_mesh *lookup = state->mesh_lookup + i;
+        if (lookup->asset_file_id == asset_file_id)
+        {
+            result = lookup->mesh_offset;
+            break;
+        }
+    }
+    return result;
+}
+
 void
 add_asset_file_texture_lookup(renderer_state *state, int32_t asset_file_id, int32_t texture_offset)
 {
@@ -204,6 +253,16 @@ add_asset_file_texture_lookup(renderer_state *state, int32_t asset_file_id, int3
     ++state->texture_lookup_count;
     lookup->asset_file_id = asset_file_id;
     lookup->texture_offset = texture_offset;
+}
+
+void
+add_asset_file_mesh_lookup(renderer_state *state, int32_t asset_file_id, int32_t mesh_offset)
+{
+    hassert(state->mesh_lookup_count < harray_count(state->mesh_lookup));
+    asset_file_to_mesh *lookup = state->mesh_lookup + state->mesh_lookup_count;
+    ++state->mesh_lookup_count;
+    lookup->asset_file_id = asset_file_id;
+    lookup->mesh_offset = mesh_offset;
 }
 
 static renderer_state _GlobalRendererState;
@@ -325,6 +384,75 @@ load_texture_asset_failed(
 {
     char msg[1024];
     sprintf(msg, "Could not load %s\n", filename);
+    memory->platform_fail(ctx, msg);
+    memory->quit = true;
+}
+
+bool
+load_mesh_asset(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    const char *filename,
+    uint8_t *mesh_buffer,
+    uint32_t mesh_buffer_size,
+    Mesh *mesh
+)
+{
+    if (!memory->platform_load_asset(ctx, filename, mesh_buffer_size, mesh_buffer)) {
+        return false;
+    }
+
+    struct binary_format_v1
+    {
+        uint32_t format;
+        uint32_t version;
+
+        uint32_t vertices_offset;
+        uint32_t vertices_size;
+        uint32_t normals_offset;
+        uint32_t normals_size;
+        uint32_t texcoords_offset;
+        uint32_t texcoords_size;
+        uint32_t indices_offset;
+        uint32_t indices_size;
+        uint32_t num_triangles;
+
+    } *format = (binary_format_v1 *)mesh_buffer;
+    uint32_t memory_size = format->vertices_size + format->normals_size + format->texcoords_size + format->indices_size;
+    uint8_t *m = (uint8_t *)malloc(memory_size);
+
+    memcpy((void *)m, mesh_buffer + sizeof(binary_format_v1) + format->vertices_offset, format->vertices_size);
+    mesh->vertices = {
+        (void *)m,
+        format->vertices_size,
+    };
+
+    memcpy((void *)(m + format->vertices_size), mesh_buffer + sizeof(binary_format_v1) + format->indices_offset, format->indices_size);
+    mesh->indices = {
+        (void *)(m + format->vertices_size),
+        format->indices_size,
+    };
+
+    memcpy((void *)(m + format->vertices_size + format->indices_size), mesh_buffer + sizeof(binary_format_v1) + format->texcoords_offset, format->texcoords_size);
+    mesh->uvs = {
+        (void *)(m + format->vertices_size + format->indices_size),
+        format->texcoords_size,
+    };
+
+    mesh->num_triangles = format->num_triangles;
+    return true;
+}
+
+void
+load_mesh_asset_failed(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    char *filename
+)
+{
+    char msg[1024];
+    sprintf(msg, "Could not load mesh %s\n", filename);
     memory->platform_fail(ctx, msg);
     memory->quit = true;
 }
@@ -452,7 +580,35 @@ add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, ren
 }
 
 int32_t
-add_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
+add_asset_file_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
+{
+    int32_t result = lookup_asset_file_to_mesh(state, asset_file_id);
+    hassert(state->mesh_count < harray_count(state->meshes));
+    if (result < 0)
+    {
+        asset_file *asset_file0 = state->asset_files + asset_file_id;
+        bool loaded = load_mesh_asset(
+            ctx,
+            memory,
+            state,
+            asset_file0->asset_file_path,
+            state->asset_scratch,
+            sizeof(state->asset_scratch),
+            state->meshes + state->mesh_count);
+        if (!loaded)
+        {
+            load_mesh_asset_failed(ctx, memory, asset_file0->asset_file_path);
+            return false;
+        }
+        result = (int32_t)state->mesh_count;
+        ++state->mesh_count;
+        add_asset_file_mesh_lookup(state, asset_file_id, result);
+    }
+    return result;
+}
+
+int32_t
+_add_asset(renderer_state *state, AssetType type, const char *asset_name, int32_t asset_file_id)
 {
     int32_t result = -1;
     hassert(state->asset_count < harray_count(state->assets));
@@ -460,10 +616,18 @@ add_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id, 
     asset0->asset_id = 0;
     strcpy(asset0->asset_name, asset_name);
     asset0->asset_file_id = asset_file_id;
-    asset0->st0 = st0;
-    asset0->st1 = st1;
     result = (int32_t)state->asset_count;
     ++state->asset_count;
+    return result;
+}
+
+int32_t
+add_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
+{
+    int32_t result = _add_asset(state, AssetType::texture, asset_name, asset_file_id);
+    asset *asset0 = state->assets + result;
+    asset0->st0 = st0;
+    asset0->st1 = st1;
     return result;
 }
 
@@ -476,6 +640,26 @@ add_asset(renderer_state *state, const char *asset_name, const char *asset_file_
     if (asset_file_id >= 0)
     {
         result = add_asset(state, asset_name, asset_file_id, st0, st1);
+    }
+    return result;
+}
+
+int32_t
+add_mesh_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id)
+{
+    int32_t result = _add_asset(state, AssetType::mesh, asset_name, asset_file_id);
+    return result;
+}
+
+int32_t
+add_mesh_asset(renderer_state *state, const char *asset_name, const char *asset_file_name)
+{
+    int32_t result = -1;
+
+    int32_t asset_file_id = add_asset_file(state, asset_file_name);
+    if (asset_file_id >= 0)
+    {
+        result = add_mesh_asset(state, asset_name, asset_file_id);
     }
     return result;
 }
@@ -536,6 +720,9 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "player", "testing/kenney/alienPink_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar_ship", "testing/kenney/shipBlue.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar", "testing/kenney/alienBlue_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
+        add_asset(state, "tree_texture", "testing/low_poly_tree/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        //add_mesh_asset(state, "tree_mesh", "testing/plane.hjm");
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -853,6 +1040,40 @@ get_texture_id_from_asset_descriptor(
 }
 
 void
+get_mesh_from_asset_descriptor(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    asset_descriptor *descriptors,
+    int32_t asset_descriptor_id,
+    // out
+    Mesh *mesh)
+{
+    if (asset_descriptor_id != -1)
+    {
+        asset_descriptor *descriptor = descriptors + asset_descriptor_id;
+        update_asset_descriptor_asset_id(state, descriptor);
+        if (descriptor->asset_id >= 0)
+        {
+            asset *descriptor_asset = state->assets + descriptor->asset_id;
+            int32_t asset_file_id = descriptor_asset->asset_file_id;
+
+            int32_t mesh_id = lookup_asset_file_to_mesh(state, asset_file_id);
+            if (mesh_id < 0)
+            {
+                mesh_id = add_asset_file_mesh(ctx, memory, state, asset_file_id);
+            }
+            hassert(mesh_id >= 0);
+            if (mesh_id >= 0)
+            {
+                *mesh = state->meshes[mesh_id];
+
+            }
+        }
+    }
+}
+
+void
 draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
 {
     m4 projection = matrices[quads->matrix_id];
@@ -913,6 +1134,7 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     glDrawElements(GL_TRIANGLES, (GLsizei)quads->entry_count * 6, GL_UNSIGNED_INT, 0);
 
     glBindVertexArray(0);
+    glErrorAssert();
 }
 
 void
@@ -957,6 +1179,60 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     glDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
     glDrawElements(GL_TRIANGLES, (GLsizei)(mesh->mesh.num_triangles * 3), GL_UNSIGNED_SHORT, 0);
+    glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
+
+    glBindVertexArray(0);
+    glEnable(GL_BLEND);
+}
+
+void
+draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
+{
+    glDisable(GL_BLEND);
+    m4 projection = matrices[mesh_from_asset->projection_matrix_id];
+    m4 model = matrices[mesh_from_asset->model_matrix_id];
+
+    v2 st0 = {};
+    v2 st1 = {};
+    uint32_t texture = 0;
+    get_texture_id_from_asset_descriptor(
+        ctx, memory, state, descriptors, mesh_from_asset->texture_asset_descriptor_id,
+        &texture, &st0, &st1);
+
+    Mesh mesh = {};
+    get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id, &mesh);
+
+    glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glUniform1f(state->imgui_program.u_use_color_id, 0.0f);
+    glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+    glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+
+    glBindVertexArray(state->vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            mesh.vertices.size,
+            mesh.vertices.data,
+            GL_STATIC_DRAW);
+    glVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            mesh.uvs.size,
+            mesh.uvs.data,
+            GL_STATIC_DRAW);
+    glVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            mesh.indices.size,
+            mesh.indices.data,
+            GL_STATIC_DRAW);
+
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
+    glDrawElements(GL_TRIANGLES, (GLsizei)(mesh.num_triangles * 3), GL_UNSIGNED_INT, 0);
     glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
 
     glBindVertexArray(0);
@@ -1048,11 +1324,18 @@ extern "C" RENDERER_RENDER(renderer_render)
                     ExtractRenderElementWithSize(mesh, item, header, element_size);
                     draw_mesh(ctx, memory, state, matrices, asset_descriptors, item);
                 } break;
+                case render_entry_type::mesh_from_asset:
+                {
+                    ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
+                    draw_mesh(ctx, memory, state, matrices, asset_descriptors, item);
+                    //ExtractRenderElementSizeOnly(mesh_from_asset, element_size);
+                } break;
                 default:
                 {
                     hassert(!"Unhandled render entry type")
                 };
             }
+            glErrorAssert();
             hassert(element_size > 0);
             offset += element_size;
         }

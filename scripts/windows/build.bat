@@ -6,8 +6,13 @@ IF NOT EXIST %BUILDDIR% mkdir %BUILDDIR%
 IF NOT EXIST %BUILDDIR%\generated mkdir %BUILDDIR%\generated
 pushd %BUILDDIR%
 
-set INCLUDES=-I..\source -Igenerated -Zi -I..\source\hajonta\thirdparty -I..\thirdparty\stb -I..\thirdparty\imgui
-set CPPFLAGS=%includes% /FC /nologo /Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd4514 /wd4191 /wd4201 /wd4505 /wd4710 /EHsc
+set INCLUDES=-I..\source -Igenerated -Zi -I..\source\hajonta\thirdparty -I..\thirdparty\stb -I..\thirdparty\imgui -I..\thirdparty\tinyobjloader
+
+set GAME_WARNINGS=/Wall /wd4820 /wd4668 /wd4996 /wd4100 /wd4514 /wd4191 /wd4201 /wd4505 /wd4710
+set TOOL_WARNINGS=/W4 -D_CRT_SECURE_NO_WARNINGS=1
+set COMMON_CPPFLAGS=%includes% /FC /nologo /EHsc
+set CPPFLAGS=%COMMON_CPPFLAGS% %GAME_WARNINGS%
+set TOOL_CPPFLAGS=%COMMON_CPPFLAGS% %TOOL_WARNINGS%
 
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 REM .\program.exe ..\source hajonta\programs a
@@ -43,5 +48,7 @@ REM copy ..\source\hajonta\platform\win32.cpp generated\win32_ddsviewer.cpp
 REM cl %CPPFLAGS% -DHAJONTA_LIBRARY_NAME=ddsviewer.dll -DHAJONTA_DEBUG=1 generated\win32_ddsviewer.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
 
 REM cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\bump_to_normal.cpp /link /incremental:no User32.lib Gdi32.lib Opengl32.lib Xaudio2.lib Ole32.lib Shlwapi.lib
+cl %TOOL_CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\utils\obj_to_mesh_v1.cpp /link /incremental:no User32.lib
+echo "Build Successful"
 
 popd
