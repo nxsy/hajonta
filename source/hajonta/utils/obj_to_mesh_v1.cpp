@@ -106,18 +106,17 @@ main(int argc, char **argv)
     {
         for (size_t i = 0; i < shapes.size(); i++) {
             auto &&mesh = shapes[i].mesh;
-            fwrite(&mesh.texcoords[0], sizeof(float), mesh.texcoords.size(), of);
-            /*
             uint32_t num_texcoords = (uint32_t)mesh.texcoords.size() / 2;
 
             for (uint32_t ii = 0; ii < num_texcoords; ++ii)
             {
-                float u = mesh.positions[ii*2+0];
-                float v = 1.0f - mesh.positions[ii*2+1];
-                fwrite(&u, sizeof(float), 1, of);
-                fwrite(&v, sizeof(float), 1, of);
+                float s = mesh.texcoords[ii*2+0];
+                float t = 1.0f - mesh.texcoords[ii*2+1];
+                written = fwrite(&s, sizeof(float), 1, of);
+                assert(written == 1);
+                written = fwrite(&t, sizeof(float), 1, of);
+                assert(written == 1);
             }
-            */
         }
     }
 
