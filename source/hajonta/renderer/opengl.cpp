@@ -721,8 +721,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "familiar_ship", "testing/kenney/shipBlue.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar", "testing/kenney/alienBlue_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
+        add_mesh_asset(state, "plane_mesh", "testing/plane.hjm");
         add_asset(state, "tree_texture", "testing/low_poly_tree/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        //add_mesh_asset(state, "tree_mesh", "testing/plane.hjm");
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1141,6 +1141,8 @@ void
 draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh *mesh)
 {
     glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     m4 projection = matrices[mesh->projection_matrix_id];
     m4 model = matrices[mesh->model_matrix_id];
 
@@ -1182,6 +1184,8 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
 
     glBindVertexArray(0);
+    glDisable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
     glEnable(GL_BLEND);
 }
 
@@ -1189,6 +1193,8 @@ void
 draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
 {
     glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     m4 projection = matrices[mesh_from_asset->projection_matrix_id];
     m4 model = matrices[mesh_from_asset->model_matrix_id];
 
@@ -1236,6 +1242,8 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
 
     glBindVertexArray(0);
+    glDisable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
     glEnable(GL_BLEND);
 }
 
@@ -1283,7 +1291,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     v4 *color = &item->color;
                     glScissor(0, 0, state->input->window.width, state->input->window.height);
                     glClearColor(color->r, color->g, color->b, color->a);
-                    glClear(GL_COLOR_BUFFER_BIT);
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 } break;
                 case render_entry_type::ui2d:
                 {
