@@ -146,7 +146,7 @@ sdl_init(sdl2_state *state)
     state->sdl_inited = true;
 
     state->window = SDL_CreateWindow("Hajonta",
-            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            0, 0,
             state->window_width, state->window_height,
             SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL); if (!state->window)
     {

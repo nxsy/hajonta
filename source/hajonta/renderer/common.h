@@ -130,6 +130,15 @@ asset_descriptor
     };
     int32_t asset_id;
     uint32_t generation_id;
+    bool debug;
+    union
+    {
+        struct
+        {
+            int32_t start_face;
+            int32_t end_face;
+        } mesh_debug;
+    };
 };
 
 struct

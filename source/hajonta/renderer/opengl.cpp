@@ -720,9 +720,11 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "player", "testing/kenney/alienPink_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar_ship", "testing/kenney/shipBlue.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar", "testing/kenney/alienBlue_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
         add_mesh_asset(state, "plane_mesh", "testing/plane.hjm");
+        add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
         add_asset(state, "tree_texture", "testing/low_poly_tree/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "horse_mesh", "testing/rigged_horse/horse.hjm");
+        add_asset(state, "horse_texture", "testing/rigged_horse/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1190,7 +1192,7 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 }
 
 void
-draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
+draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
 {
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
@@ -1207,6 +1209,8 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     Mesh mesh = {};
     get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id, &mesh);
+
+    auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
 
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     glUniform1f(state->imgui_program.u_use_color_id, 0.0f);
@@ -1238,7 +1242,32 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
     glBindTexture(GL_TEXTURE_2D, texture);
     glDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
-    glDrawElements(GL_TRIANGLES, (GLsizei)(mesh.num_triangles * 3), GL_UNSIGNED_INT, 0);
+
+    int32_t max_faces = (int32_t)mesh.num_triangles;
+    int32_t start_face = 0;
+    int32_t end_face = max_faces;
+    if (mesh_descriptor.debug)
+    {
+        if (mesh_descriptor.mesh_debug.start_face > max_faces)
+        {
+            mesh_descriptor.mesh_debug.start_face = 0;
+        }
+        if (mesh_descriptor.mesh_debug.end_face > max_faces)
+        {
+            mesh_descriptor.mesh_debug.end_face = max_faces;
+        }
+
+        ImGui::DragIntRange2("mesh faces", &mesh_descriptor.mesh_debug.start_face, &mesh_descriptor.mesh_debug.end_face, 5.0f, 0, max_faces);
+        if (ImGui::Button("Mesh debug reset"))
+        {
+            mesh_descriptor.mesh_debug.start_face = 0;
+            mesh_descriptor.mesh_debug.end_face = max_faces;
+        }
+        start_face = mesh_descriptor.mesh_debug.start_face;
+        end_face = mesh_descriptor.mesh_debug.end_face;
+    }
+    int32_t num_faces = end_face - start_face;
+    glDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
     glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
 
     glBindVertexArray(0);
@@ -1335,7 +1364,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::mesh_from_asset:
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
-                    draw_mesh(ctx, memory, state, matrices, asset_descriptors, item);
+                    draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, item);
                     //ExtractRenderElementSizeOnly(mesh_from_asset, element_size);
                 } break;
                 default:

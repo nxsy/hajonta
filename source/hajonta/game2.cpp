@@ -61,9 +61,11 @@ _asset_ids
     int32_t player;
     int32_t familiar_ship;
     int32_t familiar;
-    int32_t tree_mesh;
     int32_t plane_mesh;
+    int32_t tree_mesh;
     int32_t tree_texture;
+    int32_t horse_mesh;
+    int32_t horse_texture;
 };
 
 struct
@@ -301,7 +303,7 @@ enum struct matrix_ids
     pixel_projection_matrix,
     quad_projection_matrix,
     mesh_projection_matrix,
-    plane_model_matrix,
+    horse_model_matrix,
     mesh_model_matrix,
 
     MAX = mesh_model_matrix,
@@ -645,13 +647,14 @@ build_map(game_state *state, map_data *map)
 }
 
 int32_t
-add_asset(game_state *state, const char *name)
+add_asset(game_state *state, const char *name, bool debug = false)
 {
     int32_t result = -1;
     if (state->asset_count < harray_count(state->assets))
     {
         state->assets[state->asset_count].type = asset_descriptor_type::name;
         state->assets[state->asset_count].asset_name = name;
+        state->assets[state->asset_count].debug = debug;
         result = (int32_t)state->asset_count;
         ++state->asset_count;
     }
@@ -1545,9 +1548,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.bottom_wall = add_asset(state, "bottom_wall");
         state->asset_ids.player = add_asset(state, "player");
         state->asset_ids.familiar_ship = add_asset(state, "familiar_ship");
-        state->asset_ids.tree_mesh = add_asset(state, "tree_mesh");
         state->asset_ids.plane_mesh = add_asset(state, "plane_mesh");
+        state->asset_ids.tree_mesh = add_asset(state, "tree_mesh");
         state->asset_ids.tree_texture = add_asset(state, "tree_texture");
+        state->asset_ids.horse_mesh = add_asset(state, "horse_mesh", true);
+        state->asset_ids.horse_texture = add_asset(state, "horse_texture");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -1635,10 +1640,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 local_translate = m4identity();
     local_translate.cols[3] = {-0.5f, -0.5f, 0.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
-    translate.cols[3] = {-1.0f, 0, -3.0f, 1.0f};
+    static float horse_z = -5.0f;
+    ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
+    translate.cols[3] = {-1.0f, 0, horse_z, 1.0f};
     rotate = m4rotation({0,1,0}, rotation / 2.0f);
     local_translate.cols[3] = {0, 0, 0.0f, 1.0f};
-    state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
+    state->matrices[(uint32_t)matrix_ids::horse_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
 
     RenderListReset(&state->render_list);
     RenderListReset(&state->render_list2);
@@ -1960,7 +1967,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushQuad(&state->render_list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.tree_texture);
+    PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.horse_mesh, state->asset_ids.horse_texture);
     PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
