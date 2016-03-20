@@ -34,7 +34,9 @@ main(int argc, char **argv)
 
     auto quality = aiProcessPreset_TargetRealtime_MaxQuality;
     // quality &= ~aiProcess_SplitLargeMeshes;
-    // quality |= aiProcess_PreTransformVertices;
+
+    importer.SetPropertyInteger(AI_CONFIG_PP_PTV_NORMALIZE, true);
+    quality |= aiProcess_PreTransformVertices;
 
     // One node, one mesh
     quality |= aiProcess_OptimizeGraph;
