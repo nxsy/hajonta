@@ -725,6 +725,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "tree_texture", "testing/low_poly_tree/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "horse_mesh", "testing/rigged_horse/horse.hjm");
         add_asset(state, "horse_texture", "testing/rigged_horse/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "chest_mesh", "testing/chest/chest.hjm");
+        add_asset(state, "chest_texture", "testing/chest/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "konserian_mesh", "testing/konserian_swamptree/konserian.hjm");
+        add_asset(state, "konserian_texture", "testing/konserian_swamptree/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1194,6 +1198,7 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 void
 draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
 {
+    glErrorAssert();
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -1216,6 +1221,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     glUniform1f(state->imgui_program.u_use_color_id, 0.0f);
     glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+    glErrorAssert();
 
     glBindVertexArray(state->vao);
 
@@ -1225,6 +1231,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             mesh.vertices.data,
             GL_STATIC_DRAW);
     glVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glErrorAssert();
 
     glBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
     glBufferData(GL_ARRAY_BUFFER,
@@ -1232,6 +1239,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             mesh.uvs.data,
             GL_STATIC_DRAW);
     glVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glErrorAssert();
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
@@ -1242,6 +1250,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
     glBindTexture(GL_TEXTURE_2D, texture);
     glDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
+    glErrorAssert();
 
     int32_t max_faces = (int32_t)mesh.num_triangles;
     int32_t start_face = 0;
@@ -1269,11 +1278,13 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t num_faces = end_face - start_face;
     glDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
     glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
+    glErrorAssert();
 
     glBindVertexArray(0);
     glDisable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glEnable(GL_BLEND);
+    glErrorAssert();
 }
 
 extern "C" RENDERER_RENDER(renderer_render)

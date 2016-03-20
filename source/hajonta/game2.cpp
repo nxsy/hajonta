@@ -66,6 +66,10 @@ _asset_ids
     int32_t tree_texture;
     int32_t horse_mesh;
     int32_t horse_texture;
+    int32_t chest_mesh;
+    int32_t chest_texture;
+    int32_t konserian_mesh;
+    int32_t konserian_texture;
 };
 
 struct
@@ -304,6 +308,7 @@ enum struct matrix_ids
     quad_projection_matrix,
     mesh_projection_matrix,
     horse_model_matrix,
+    chest_model_matrix,
     mesh_model_matrix,
 
     MAX = mesh_model_matrix,
@@ -1553,6 +1558,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.tree_texture = add_asset(state, "tree_texture");
         state->asset_ids.horse_mesh = add_asset(state, "horse_mesh", true);
         state->asset_ids.horse_texture = add_asset(state, "horse_texture");
+        state->asset_ids.chest_mesh = add_asset(state, "chest_mesh");
+        state->asset_ids.chest_texture = add_asset(state, "chest_texture");
+        state->asset_ids.konserian_mesh = add_asset(state, "konserian_mesh");
+        state->asset_ids.konserian_texture = add_asset(state, "konserian_texture");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -1646,6 +1655,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     rotate = m4rotation({0,1,0}, rotation / 2.0f);
     local_translate.cols[3] = {0, 0, 0.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::horse_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
+
+    translate.cols[3] = {-5.0f, 0, horse_z, 1.0f};
+    state->matrices[(uint32_t)matrix_ids::chest_model_matrix] = m4mul(translate, m4mul(rotate, local_translate));
 
     RenderListReset(&state->render_list);
     RenderListReset(&state->render_list2);
@@ -1968,6 +1980,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.horse_mesh, state->asset_ids.horse_texture);
+    PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.konserian_mesh, state->asset_ids.konserian_texture);
     PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};

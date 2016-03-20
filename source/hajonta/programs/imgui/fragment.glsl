@@ -10,4 +10,8 @@ out vec4 o_color;
 void main()
 {
     o_color = v_color * texture(tex, v_uv.st);
+    if (o_color.a < 0.001)
+    {
+        discard;
+    }
 }
