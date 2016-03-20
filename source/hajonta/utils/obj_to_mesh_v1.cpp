@@ -29,7 +29,11 @@ struct binary_format_v1
 int
 main(int argc, char **argv)
 {
-    assert(argc >= 2);
+    if (argc < 3)
+    {
+        printf("usage: %s infile outfile\n", argv[0]);
+        return 1;
+    }
     char *inputfile = argv[1];
     char *outputfile = argv[2];
     std::string inputfilepath(inputfile);
