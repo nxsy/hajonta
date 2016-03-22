@@ -185,9 +185,9 @@ struct renderer_state
     asset_file_to_mesh mesh_lookup[16];
     uint32_t mesh_lookup_count;
 
-    asset_file asset_files[16];
+    asset_file asset_files[32];
     uint32_t asset_file_count;
-    asset assets[32];
+    asset assets[64];
     uint32_t asset_count;
 
     uint32_t generation_id;
@@ -729,6 +729,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "chest_texture", "testing/chest/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "konserian_mesh", "testing/konserian_swamptree/konserian.hjm");
         add_asset(state, "konserian_texture", "testing/konserian_swamptree/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "cactus_mesh", "testing/cactus/cactus.hjm");
+        add_asset(state, "cactus_texture", "testing/cactus/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "kitchen_mesh", "testing/kitchen/kitchen.hjm");
+        add_asset(state, "kitchen_texture", "testing/kitchen/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
