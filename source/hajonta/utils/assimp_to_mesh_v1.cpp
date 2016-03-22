@@ -45,6 +45,8 @@ main(int argc, char **argv)
     // Remove everything but the mesh itself
     importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, aiComponent_COLORS | aiComponent_BONEWEIGHTS | aiComponent_ANIMATIONS | aiComponent_LIGHTS | aiComponent_CAMERAS | aiComponent_MATERIALS);
     quality |= aiProcess_RemoveComponent;
+    // Remove lines and points
+    importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE | aiPrimitiveType_POINT);
 
     const aiScene* scene = importer.ReadFile(inputfile, quality);
 
@@ -61,8 +63,6 @@ main(int argc, char **argv)
         return 1;
     }
 
-    /*
-    printf("Scene number of animations: %d\n", scene->mNumAnimations);
     printf("Scene number of meshes: %d\n", scene->mNumMeshes);
 
     printf("\n");
@@ -84,34 +84,34 @@ main(int argc, char **argv)
         printf("child[%d] number of meshes: %d\n", i, child->mNumMeshes);
         printf("child[%d] transformation is identity: %d\n", i, child->mTransformation.IsIdentity());
 
+        for (uint32_t j = 0; j < child->mNumMeshes; ++j)
+        {
+            aiMesh *mesh = scene->mMeshes[child->mMeshes[j]];
+            printf("child[%d] mesh[%d] number of vertices: %d\n", i, j, mesh->mNumVertices);
+        }
         printf("\n");
     }
 
-
-    printf("Yatta!");
-    */
-
-    aiNode *root = scene->mRootNode;
-    assert(root->mNumChildren == 0);
-    assert(root->mNumMeshes == 1);
-    assert(root->mTransformation.IsIdentity());
-
-    aiMesh *mesh = scene->mMeshes[0];
-
-    assert(mesh->HasPositions());
-
-    printf("mesh vertices: %d\n", mesh->mNumVertices);
-    printf("mesh faces: %d\n", mesh->mNumFaces);
+    if (!root->mTransformation.IsIdentity())
+    {
+        printf("root transformation is not identity\n");
+        return 1;
+    }
 
     binary_format_v1 format = {};
     format.version = 1;
-    format.vertices_size = sizeof(float) * 3 * mesh->mNumVertices;
-    format.indices_size = sizeof(uint32_t) * 3 * mesh->mNumFaces;
-    if (mesh->HasTextureCoords(0))
+
+    uint32_t num_vertices = 0;
+
+    for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
     {
-        format.texcoords_size = sizeof(float) * 2 * mesh->mNumVertices;
+        aiMesh *mesh = scene->mMeshes[i];
+        format.vertices_size += sizeof(float) * 3 * mesh->mNumVertices;
+        format.indices_size += sizeof(uint32_t) * 3 * mesh->mNumFaces;
+        format.texcoords_size += sizeof(float) * 2 * mesh->mNumVertices;
+        num_vertices += mesh->mNumVertices;
+        format.num_triangles += mesh->mNumFaces;
     }
-    format.num_triangles = mesh->mNumFaces;
 
     format.texcoords_offset = format.vertices_size;
     format.indices_offset = format.vertices_size + format.texcoords_size;
@@ -125,13 +125,17 @@ main(int argc, char **argv)
     assert(written == 1);
 
     std::vector<float> positions;
-    positions.reserve(3 * mesh->mNumVertices);
-    for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+    positions.reserve(3 * num_vertices);
+    for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
     {
-        aiVector3D *v = mesh->mVertices + i;
-        positions.push_back(v->x);
-        positions.push_back(v->y);
-        positions.push_back(v->z);
+        aiMesh *mesh = scene->mMeshes[h];
+        for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+        {
+            aiVector3D *v = mesh->mVertices + i;
+            positions.push_back(v->x);
+            positions.push_back(v->y);
+            positions.push_back(v->z);
+        }
     }
 
     fwrite(&positions[0], sizeof(float), positions.size(), of);
@@ -139,25 +143,40 @@ main(int argc, char **argv)
     if (format.texcoords_size)
     {
         std::vector<float> texcoords;
-        texcoords.reserve(2 * mesh->mNumVertices);
-        for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+        texcoords.reserve(2 * num_vertices);
+        for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
         {
-            aiVector3D *v = mesh->mTextureCoords[0] + i;
-            texcoords.push_back(v->x);
-            texcoords.push_back(v->y);
+            aiMesh *mesh = scene->mMeshes[h];
+            for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+            {
+                aiVector3D *v = mesh->mTextureCoords[0] + i;
+                texcoords.push_back(v->x);
+                texcoords.push_back(v->y);
+            }
+            fwrite(&texcoords[0], sizeof(float), texcoords.size(), of);
         }
-        fwrite(&texcoords[0], sizeof(float), texcoords.size(), of);
     }
 
     std::vector<uint32_t> indices;
-    indices.reserve(3 * mesh->mNumFaces);
+    indices.reserve(3 * format.num_triangles);
 
-    for (uint32_t i = 0; i < mesh->mNumFaces; ++i) {
-        aiFace *face = mesh->mFaces + i;
-        assert(face->mNumIndices == 3);
-        indices.push_back(face->mIndices[0]);
-        indices.push_back(face->mIndices[1]);
-        indices.push_back(face->mIndices[2]);
+    uint32_t start_index = 0;
+    for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
+    {
+        aiMesh *mesh = scene->mMeshes[h];
+        for (uint32_t i = 0; i < mesh->mNumFaces; ++i) {
+            aiFace *face = mesh->mFaces + i;
+            if (face->mNumIndices != 3)
+            {
+                printf("Wanted only triangles, got polygon with %d indices\n", face->mNumIndices);
+                return 1;
+            }
+            assert(face->mNumIndices == 3);
+            indices.push_back(start_index + face->mIndices[0]);
+            indices.push_back(start_index + face->mIndices[1]);
+            indices.push_back(start_index + face->mIndices[2]);
+        }
+        start_index += mesh->mNumVertices;
     }
 
     fwrite(&indices[0], sizeof(uint32_t), indices.size(), of);
