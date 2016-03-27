@@ -112,11 +112,30 @@ render_entry_type_mesh_from_asset
     int32_t texture_asset_descriptor_id;
 };
 
+struct FramebufferFlags
+{
+    unsigned int initialized:1;
+    unsigned int frame_initialized:1;
+};
+
+struct
+FramebufferDescriptor
+{
+    v2i size;
+
+    FramebufferFlags _flags;
+    uint32_t _fbo;
+    uint32_t _texture;
+    uint32_t _renderbuffer;
+    v2i _current_size;
+};
+
 enum struct
 asset_descriptor_type
 {
     name,
-    vertices,
+    framebuffer,
+    //renderbuffer,
 };
 
 struct
@@ -127,6 +146,7 @@ asset_descriptor
     {
         const char *asset_name;
         void *ptr;
+        FramebufferDescriptor *framebuffer;
     };
     int32_t asset_id;
     uint32_t generation_id;
@@ -175,6 +195,8 @@ render_entry_list
     uint32_t element_count;
     uint32_t element_counts[uint32_t(render_entry_type::MAX) + 1];
 
+    FramebufferDescriptor *framebuffer;
+
     render_entry_type_QUADS_lookup *first_QUADS_lookup;
 
 #ifndef RENDER_ENTRY_LIST_OPTIMIZED
@@ -204,6 +226,44 @@ RenderListReset(render_entry_list *list)
          list->element_types[i] = (render_entry_type)0;
     }
 #endif
+}
+
+inline void
+FramebufferReset(FramebufferDescriptor *descriptor)
+{
+    descriptor->_flags.frame_initialized = 0;
+}
+
+inline bool
+FramebufferInitialized(FramebufferDescriptor *descriptor)
+{
+    return descriptor->_flags.initialized != 0;
+}
+
+inline void
+FramebufferMakeInitialized(FramebufferDescriptor *descriptor)
+{
+    descriptor->_flags.initialized = 1;
+}
+
+inline bool
+FramebufferFrameInitialized(FramebufferDescriptor *descriptor)
+{
+    return descriptor->_flags.frame_initialized != 0;
+}
+
+inline void
+FramebufferMakeFrameInitialized(FramebufferDescriptor *descriptor)
+{
+    descriptor->_flags.frame_initialized = 1;
+}
+
+inline bool
+FramebufferNeedsResize(FramebufferDescriptor *descriptor)
+{
+    bool same = (descriptor->size.x == descriptor->_current_size.x) &&
+        (descriptor->size.y == descriptor->_current_size.y);
+    return !same;
 }
 
 #define PushRenderElement(list, type) (render_entry_type_##type *)PushRenderElement_(list, sizeof(render_entry_type_##type), render_entry_type::type)

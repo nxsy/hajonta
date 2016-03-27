@@ -74,6 +74,7 @@ _asset_ids
     int32_t cactus_texture;
     int32_t kitchen_mesh;
     int32_t kitchen_texture;
+    int32_t framebuffer;
 };
 
 struct
@@ -313,9 +314,18 @@ enum struct matrix_ids
     mesh_projection_matrix,
     horse_model_matrix,
     chest_model_matrix,
+    plane_model_matrix,
     mesh_model_matrix,
 
     MAX = mesh_model_matrix,
+};
+
+template<uint32_t BUFFER_SIZE>
+struct
+_render_list
+{
+    render_entry_list list;
+    uint8_t buffer[BUFFER_SIZE];
 };
 
 struct game_state
@@ -332,10 +342,13 @@ struct game_state
         v2 mouse_position;
     } frame_state;
 
-    uint8_t render_buffer[4 * 1024 * 1024];
-    render_entry_list render_list;
-    uint8_t render_buffer2[4 * 1024 * 1024];
-    render_entry_list render_list2;
+    _render_list<4*1024*1024> main_renderer;
+    _render_list<4*1024*1024> debug_renderer;
+    _render_list<4*1024*1024> three_dee_renderer;
+    _render_list<4*1024*1024> framebuffer_renderer;
+
+    FramebufferDescriptor framebuffer;
+
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
     _asset_ids asset_ids;
@@ -375,10 +388,6 @@ struct game_state
     uint32_t job_count;
     job jobs[10];
     int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
-    Mesh plane_mesh;
-    v3 plane_vertices[4];
-    v2 plane_uvs[4];
-    uint16_t plane_indices[6];
 };
 
 game_state *_hidden_state;
@@ -656,13 +665,34 @@ build_map(game_state *state, map_data *map)
 }
 
 int32_t
-add_asset(game_state *state, const char *name, bool debug = false)
+add_asset(game_state *state, const char *name, asset_descriptor_type type, bool debug)
 {
     int32_t result = -1;
     if (state->asset_count < harray_count(state->assets))
     {
         state->assets[state->asset_count].type = asset_descriptor_type::name;
         state->assets[state->asset_count].asset_name = name;
+        state->assets[state->asset_count].debug = debug;
+        result = (int32_t)state->asset_count;
+        ++state->asset_count;
+    }
+    return result;
+}
+
+int32_t
+add_asset(game_state *state, const char *name, bool debug = false)
+{
+    return add_asset(state, name, asset_descriptor_type::name, debug);
+}
+
+int32_t
+add_framebuffer_asset(game_state *state, FramebufferDescriptor *framebuffer, bool debug = false)
+{
+    int32_t result = -1;
+    if (state->asset_count < harray_count(state->assets))
+    {
+        state->assets[state->asset_count].type = asset_descriptor_type::framebuffer;
+        state->assets[state->asset_count].framebuffer = framebuffer;
         state->assets[state->asset_count].debug = debug;
         result = (int32_t)state->asset_count;
         ++state->asset_count;
@@ -804,7 +834,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
             v3 pq_size = {l->direction.x, l->direction.y, 0};
             pq_size = v3add(pq_size, {0.05f, 0.05f, 0});
 
-            PushQuad(&_hidden_state->render_list2, pq, pq_size, {1,0,1,0.5f}, 1, -1);
+            PushQuad(&_hidden_state->debug_renderer.list, pq, pq_size, {1,0,1,0.5f}, 1, -1);
 
             v2 n = v2normalize({-l->direction.y,  l->direction.x});
             if (v2dot(movement, n) > 0)
@@ -817,7 +847,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
             v3 npq_size = {n.x, n.y, 0};
             npq_size = v3add(npq_size, {0.05f, 0.05f, 0});
 
-            PushQuad(&_hidden_state->render_list2, npq, npq_size, {1,1,0,0.5f}, 1, -1);
+            PushQuad(&_hidden_state->debug_renderer.list, npq, npq_size, {1,1,0,0.5f}, 1, -1);
 
         }
 
@@ -976,7 +1006,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
                 {
                     v3 q = {l->position.x + closest_point_on_line.x - 0.05f, l->position.y + closest_point_on_line.y - 0.05f, 0};
                     v3 q_size = {0.1f, 0.1f, 0};
-                    PushQuad(&_hidden_state->render_list2, q, q_size, {0,1,0,0.5f}, 1, -1);
+                    PushQuad(&_hidden_state->debug_renderer.list, q, q_size, {0,1,0,0.5f}, 1, -1);
 
                     if (distance < 0.002f)
                     {
@@ -1270,7 +1300,7 @@ calculate_acceleration(entity_movement entity, v2i next_tile, float acceleration
 }
 
 void
-draw_map(map_data *map, render_entry_list *render_list, render_entry_list *render_list2, v2i selected_tile)
+draw_map(map_data *map, render_entry_list *render_list, render_entry_list *debug_render_list, v2i selected_tile)
 {
     for (uint32_t y = 0; y < 100; ++y)
     {
@@ -1300,7 +1330,7 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                     }
                     v3 pq = v3add(q, {0.4f, 0.4f, 0.0f});
                     v3 pq_size = {0.2f, 0.2f, 0.0f};
-                    PushQuad(render_list2, pq, pq_size, color, 1, -1);
+                    PushQuad(debug_render_list, pq, pq_size, color, 1, -1);
                 }
 
                 if (x_ == 0)
@@ -1310,7 +1340,7 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                     {
                         v3 pq = v3sub(q, {0.05f, 0, 0});
                         v3 pq_size = {0.1f, 1.0f, 0};
-                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                        PushQuad(debug_render_list, pq, pq_size, {1,1,1,0.2f}, 1, -1);
                     }
                 }
                 {
@@ -1319,7 +1349,7 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                     {
                         v3 pq = v3add(q, {0.95f, 0, 0});
                         v3 pq_size = {0.1f, 1.0f, 0};
-                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                        PushQuad(debug_render_list, pq, pq_size, {1,1,1,0.2f}, 1, -1);
                     }
                 }
                 if (y_ == 0)
@@ -1329,7 +1359,7 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                     {
                         v3 pq = v3sub(q, {0, 0.05f, 0});
                         v3 pq_size = {1.0f, 0.1f, 0};
-                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                        PushQuad(debug_render_list, pq, pq_size, {1,1,1,0.2f}, 1, -1);
                     }
                 }
                 {
@@ -1338,7 +1368,7 @@ draw_map(map_data *map, render_entry_list *render_list, render_entry_list *rende
                     {
                         v3 pq = v3add(q, {0, 0.95f, 0});
                         v3 pq_size = {1.0f, 0.1f, 0};
-                        PushQuad(render_list2, pq, pq_size, {1,1,1,0.2f}, 1, -1);
+                        PushQuad(debug_render_list, pq, pq_size, {1,1,1,0.2f}, 1, -1);
                     }
                 }
 
@@ -1539,6 +1569,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if (!memory->initialized)
     {
         memory->initialized = 1;
+        state->asset_ids.framebuffer = add_framebuffer_asset(state, &state->framebuffer);
         state->asset_ids.mouse_cursor = add_asset(state, "mouse_cursor");
         state->asset_ids.sea_0 = add_asset(state, "sea_0");
         state->asset_ids.ground_0 = add_asset(state, "ground_0");
@@ -1578,8 +1609,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         hassert(state->asset_ids.familiar > 0);
         build_map(state, &state->map);
-        RenderListBuffer(state->render_list, state->render_buffer);
-        RenderListBuffer(state->render_list2, state->render_buffer2);
+        RenderListBuffer(state->main_renderer.list, state->main_renderer.buffer);
+        RenderListBuffer(state->debug_renderer.list, state->debug_renderer.buffer);
+        RenderListBuffer(state->three_dee_renderer.list, state->three_dee_renderer.buffer);
+        RenderListBuffer(state->framebuffer_renderer.list, state->framebuffer_renderer.buffer);
+        state->three_dee_renderer.list.framebuffer = &state->framebuffer;
         state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
 
@@ -1598,36 +1632,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             harray_count(astar_data.entries),
             astar_data.entries
         );
-
-        state->plane_vertices[0] = {0.0f, 0.0f, 0.0f};
-        state->plane_vertices[1] = {0.0f, 1.0f, 0.0f};
-        state->plane_vertices[2] = {1.0f, 1.0f, 0.0f};
-        state->plane_vertices[3] = {1.0f, 0.0f, 0.0f};
-        state->plane_uvs[0] = {0.0f, 0.0f};
-        state->plane_uvs[1] = {0.0f, 1.0f};
-        state->plane_uvs[2] = {1.0f, 1.0f};
-        state->plane_uvs[3] = {1.0f, 0.0f};
-        state->plane_indices[0] = 0;
-        state->plane_indices[1] = 1;
-        state->plane_indices[2] = 2;
-        state->plane_indices[3] = 2;
-        state->plane_indices[4] = 3;
-        state->plane_indices[5] = 0;
-
-        state->plane_mesh.vertices = {
-            &state->plane_vertices,
-            sizeof(float) * harray_count(state->plane_vertices) * 3,
-        };
-        state->plane_mesh.uvs = {
-            &state->plane_uvs,
-            sizeof(float) * harray_count(state->plane_uvs) * 2,
-        };
-        state->plane_mesh.indices = {
-            &state->plane_indices,
-            sizeof(uint16_t) * harray_count(state->plane_indices),
-        };
-        state->plane_mesh.num_triangles = 2;
     }
+
+    RenderListReset(&state->main_renderer.list);
+    RenderListReset(&state->debug_renderer.list);
+    RenderListReset(&state->three_dee_renderer.list);
+    RenderListReset(&state->framebuffer_renderer.list);
+    FramebufferReset(&state->framebuffer);
+    state->framebuffer.size = {input->window.width, input->window.height};
 
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
@@ -1655,8 +1667,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     translate.cols[3] = {0, 0, -20.0f, 1.0f};
     m4 rotate = m4rotation({1,0,0}, rotation);
     m4 local_translate = m4identity();
-    local_translate.cols[3] = {-0.5f, -0.5f, 0.0f, 1.0f};
-    state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
+    local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    m4 scale = m4identity();
+    scale.cols[0].E[0] = 8.0f;
+    scale.cols[1].E[1] = 8.0f;
+    scale.cols[2].E[2] = 8.0f;
+
+    state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+    state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(scale, local_translate));
     static float horse_z = -5.0f;
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
     translate.cols[3] = {-1.0f, 0, horse_z, 1.0f};
@@ -1666,9 +1685,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     translate.cols[3] = {-5.0f, 0, horse_z, 1.0f};
     state->matrices[(uint32_t)matrix_ids::chest_model_matrix] = m4mul(translate, m4mul(rotate, local_translate));
-
-    RenderListReset(&state->render_list);
-    RenderListReset(&state->render_list2);
 
     ImGui::ColorEdit3("Clear colour", state->clear_color);
     demo_data demoes[] = {
@@ -1689,12 +1705,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         1.0f,
     };
 
-    PushClear(&state->render_list, colorv4);
+    PushClear(&state->main_renderer.list, colorv4);
 
-    PushMatrices(&state->render_list, harray_count(state->matrices), state->matrices);
-    PushMatrices(&state->render_list2, harray_count(state->matrices), state->matrices);
-    PushAssetDescriptors(&state->render_list, harray_count(state->assets), state->assets);
-    PushAssetDescriptors(&state->render_list2, harray_count(state->assets), state->assets);
+    PushMatrices(&state->main_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->debug_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->three_dee_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
+    PushAssetDescriptors(&state->main_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->debug_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->three_dee_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->framebuffer_renderer.list, harray_count(state->assets), state->assets);
 
     int32_t previous_demo = state->active_demo;
     for (int32_t i = 0; i < harray_count(demoes); ++i)
@@ -1938,23 +1958,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         case game_mode::pathfinding: break;
     };
 
-    draw_map(&state->map, &state->render_list, &state->render_list2, state->debug.selected_tile);
+    draw_map(&state->map, &state->main_renderer.list, &state->debug_renderer.list, state->debug.selected_tile);
 
     v3 player_size = { 1.0f, 2.0f, 0 };
     v3 player_position = {state->player_movement.position.x - 0.5f, state->player_movement.position.y, 0};
-    PushQuad(&state->render_list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
+    PushQuad(&state->main_renderer.list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
 
     v3 player_position2 = {state->player_movement.position.x - 0.2f, state->player_movement.position.y, 0};
     v3 player_size2 = {0.4f, 0.1f, 0};
-    PushQuad(&state->render_list, player_position2, player_size2, {1,1,1,0.4f}, 1, -1);
+    PushQuad(&state->main_renderer.list, player_position2, player_size2, {1,1,1,0.4f}, 1, -1);
 
     v3 familiar_size = { 1.0f, 2.0f, 0 };
     v3 familiar_position = {state->familiar_movement.position.x - 0.5f, state->familiar_movement.position.y, 0};
-    PushQuad(&state->render_list, familiar_position, familiar_size, {1,1,1,1}, 1, state->asset_ids.familiar);
+    PushQuad(&state->main_renderer.list, familiar_position, familiar_size, {1,1,1,1}, 1, state->asset_ids.familiar);
 
     v3 familiar_position2 = {state->familiar_movement.position.x - 0.2f, state->familiar_movement.position.y, 0};
     v3 familiar_size2 = {0.4f, 0.1f, 0};
-    PushQuad(&state->render_list, familiar_position2, familiar_size2, {1,1,1,0.4f}, 1, -1);
+    PushQuad(&state->main_renderer.list, familiar_position2, familiar_size2, {1,1,1,0.4f}, 1, -1);
 
     for (uint32_t i = 0; i < (uint32_t)FurnitureType::MAX; ++i)
     {
@@ -1980,24 +2000,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                  opacity = {0.7f, 0.7f, 0.3f, 0.9f};
              }
         }
-        PushQuad(&state->render_list, quad_bl, quad_size, opacity, 0, -1);
+        PushQuad(&state->main_renderer.list, quad_bl, quad_size, opacity, 0, -1);
 
         quad_bl = { i * 96.0f + 24.0f, 24.0f, 0.0f };
         quad_size = { 64.0f, 64.0f };
-        PushQuad(&state->render_list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
+        PushQuad(&state->main_renderer.list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.kitchen_mesh, state->asset_ids.kitchen_texture);
-    PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture);
-    PushMeshFromAsset(&state->render_list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture);
+    PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.kitchen_mesh, state->asset_ids.kitchen_texture);
+    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture);
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture);
+
+    PushMeshFromAsset(&state->framebuffer_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.framebuffer);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->render_list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+    PushQuad(&state->main_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
-    AddRenderList(memory, &state->render_list);
+    AddRenderList(memory, &state->main_renderer.list);
     if (state->debug.rendering)
     {
-        AddRenderList(memory, &state->render_list2);
+        AddRenderList(memory, &state->debug_renderer.list);
     }
+    AddRenderList(memory, &state->three_dee_renderer.list);
+    AddRenderList(memory, &state->framebuffer_renderer.list);
+
+    ImGui::Image(
+        (void *)(intptr_t)state->framebuffer._texture,
+        {256, 256.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
+        {0,0}, {1,1}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+    );
 }

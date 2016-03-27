@@ -1025,27 +1025,41 @@ get_texture_id_from_asset_descriptor(
     if (asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
-        update_asset_descriptor_asset_id(state, descriptor);
-        if (descriptor->asset_id >= 0)
+        switch (descriptor->type)
         {
-            asset *descriptor_asset = state->assets + descriptor->asset_id;
-            *st0 = descriptor_asset->st0;
-            *st1 = descriptor_asset->st1;
-            int32_t asset_file_id = descriptor_asset->asset_file_id;
-            int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
-            if (texture_lookup >= 0)
+            case asset_descriptor_type::name:
             {
-                *texture = (uint32_t)texture_lookup;
-            }
-            else
-            {
-                int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
-                if (texture_id >= 0)
+                update_asset_descriptor_asset_id(state, descriptor);
+                if (descriptor->asset_id >= 0)
                 {
-                    *texture = (uint32_t)texture_id;
+                    asset *descriptor_asset = state->assets + descriptor->asset_id;
+                    *st0 = descriptor_asset->st0;
+                    *st1 = descriptor_asset->st1;
+                    int32_t asset_file_id = descriptor_asset->asset_file_id;
+                    int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
+                    if (texture_lookup >= 0)
+                    {
+                        *texture = (uint32_t)texture_lookup;
+                    }
+                    else
+                    {
+                        int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
+                        if (texture_id >= 0)
+                        {
+                            *texture = (uint32_t)texture_id;
+                        }
+                    }
                 }
-            }
+            } break;
+            case asset_descriptor_type::framebuffer:
+            {
+                if (FramebufferInitialized(descriptor->framebuffer))
+                {
+                    *texture = descriptor->framebuffer->_texture;
+                }
+            } break;
         }
+
     }
 }
 
@@ -1096,6 +1110,8 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
         &texture, &st0, &st1);
 
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+    glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     glUniform1f(state->imgui_program.u_use_color_id, 1.0f);
     glBindVertexArray(state->vao);
 
@@ -1301,18 +1317,24 @@ extern "C" RENDERER_RENDER(renderer_render)
     hassert(memory->render_lists_count > 0);
 
     window_data *window = &state->input->window;
-
-    glEnable(GL_BLEND);
-    glBlendEquation(GL_FUNC_ADD);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glScissor(0, 0, window->width, window->height);
-    glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
-    glUseProgram(state->imgui_program.program);
-    glUniform1i(state->tex_id, 0);
+    glErrorAssert();
 
     uint32_t quads_drawn = 0;
     for (uint32_t i = 0; i < memory->render_lists_count; ++i)
     {
+        glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glEnable(GL_BLEND);
+        glBlendEquation(GL_FUNC_ADD);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glScissor(0, 0, window->width, window->height);
+        glUseProgram(state->imgui_program.program);
+        glUniform1i(state->tex_id, 0);
+
+        glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+        glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+
         render_entry_list *render_list = memory->render_lists[i];
         uint32_t offset = 0;
         hassert(render_list->element_count > 0);
@@ -1321,6 +1343,48 @@ extern "C" RENDERER_RENDER(renderer_render)
         asset_descriptor *asset_descriptors = {};
         uint32_t matrix_count = 0;
         uint32_t asset_descriptor_count = 0;
+
+        FramebufferDescriptor *framebuffer = render_list->framebuffer;
+        if (framebuffer)
+        {
+            if (!FramebufferInitialized(framebuffer))
+            {
+                glGenFramebuffers(1, &framebuffer->_fbo); // Throw one away?  Weird bug here.
+                glGenFramebuffers(1, &framebuffer->_fbo);
+                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
+
+                glGenTextures(1, &framebuffer->_texture);
+                glBindTexture(GL_TEXTURE_2D, framebuffer->_texture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+                glGenRenderbuffers(1, &framebuffer->_renderbuffer);
+                glBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer->size.x, framebuffer->size.y);
+
+                FramebufferMakeInitialized(framebuffer);
+            }
+            glErrorAssert();
+
+            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer->_texture, 0);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer->_renderbuffer);
+
+            GLenum draw_buffers[] =
+            {
+                GL_COLOR_ATTACHMENT0,
+            };
+            glDrawBuffers(harray_count(draw_buffers), draw_buffers);
+            glViewport(0, 0, framebuffer->size.x, framebuffer->size.y);
+
+            hassert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+        }
 
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
         {
@@ -1380,7 +1444,6 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
                     draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, item);
-                    //ExtractRenderElementSizeOnly(mesh_from_asset, element_size);
                 } break;
                 default:
                 {
@@ -1390,6 +1453,11 @@ extern "C" RENDERER_RENDER(renderer_render)
             glErrorAssert();
             hassert(element_size > 0);
             offset += element_size;
+        }
+
+        if (framebuffer)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
     ImGui::Text("Quads drawn: %d", quads_drawn);
