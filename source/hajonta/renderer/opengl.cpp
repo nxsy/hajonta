@@ -1426,6 +1426,10 @@ extern "C" RENDERER_RENDER(renderer_render)
                     asset_descriptors = item->descriptors;
                     asset_descriptor_count = item->count;
                 } break;
+                case render_entry_type::descriptors:
+                {
+                    ExtractRenderElementSizeOnly(descriptors, element_size);
+                } break;
                 case render_entry_type::QUADS:
                 {
                     ExtractRenderElementWithSize(QUADS, item, header, element_size);

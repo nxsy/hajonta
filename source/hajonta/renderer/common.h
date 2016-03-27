@@ -11,6 +11,7 @@ render_entry_type
     quad,
     matrices,
     asset_descriptors,
+    descriptors,
 
     QUADS,
     QUADS_lookup,
@@ -75,6 +76,49 @@ render_entry_type_matrices
     m4 *matrices;
 };
 
+enum struct
+LightType
+{
+    directional,
+    point,
+};
+
+struct AttenuationConfig
+{
+    float constant;
+    float linear;
+    float exponential;
+};
+
+struct
+LightDescriptor
+{
+    LightType type;
+    union
+    {
+        v3 direction;
+        v3 position;
+    };
+    v3 color;
+    float ambient_intensity;
+    float diffuse_intensity;
+    AttenuationConfig attenuation;
+};
+
+struct
+LightDescriptors
+{
+    uint32_t count;
+    LightDescriptor *descriptors;
+};
+
+struct
+render_entry_type_descriptors
+{
+    render_entry_header header;
+    LightDescriptors lights;
+};
+
 struct
 buffer
 {
@@ -110,6 +154,8 @@ render_entry_type_mesh_from_asset
     int32_t model_matrix_id;
     int32_t mesh_asset_descriptor_id;
     int32_t texture_asset_descriptor_id;
+    int32_t num_lights;
+    int32_t light_descriptor_ids;
 };
 
 struct FramebufferFlags

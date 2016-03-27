@@ -190,6 +190,7 @@ debug_state
         astar_data data;
         bool single_step;
     } familiar_path;
+    bool show_lights;
 };
 
 enum struct
@@ -328,6 +329,14 @@ _render_list
     uint8_t buffer[BUFFER_SIZE];
 };
 
+enum struct
+LightIds
+{
+    sun,
+
+    MAX = sun,
+};
+
 struct game_state
 {
     bool initialized;
@@ -350,6 +359,8 @@ struct game_state
     FramebufferDescriptor framebuffer;
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
+
+    LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
 
     _asset_ids asset_ids;
     uint32_t asset_count;
@@ -1055,6 +1066,7 @@ show_debug_main_menu(game_state *state)
                 ImGui::MenuItem("Familiar Path", "", &state->debug.familiar_path.show);
                 ImGui::EndMenu();
             }
+            ImGui::MenuItem("Show lights", "", &state->debug.show_lights);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -1632,6 +1644,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             harray_count(astar_data.entries),
             astar_data.entries
         );
+
+        auto &light = state->lights[(uint32_t)LightIds::sun];
+        light.type = LightType::directional;
+        light.direction = {0.0f, 1.0f, 0.0f};
+        light.color = {1.0f, 1.0f, 1.0f};
+        light.ambient_intensity = 0.2f;
+        light.diffuse_intensity = 1.0f;
+        light.attenuation.constant = 1.0f;
     }
 
     RenderListReset(&state->main_renderer.list);
@@ -1651,6 +1671,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     show_debug_main_menu(state);
     show_pq_debug(&state->debug.priority_queue);
 
+    {
+        auto &light = state->lights[(uint32_t)LightIds::sun];
+        light.type = LightType::directional;
+
+        if (state->debug.show_lights) {
+            ImGui::Begin("Lights", &state->debug.show_lights);
+            ImGui::DragFloat3("Direction", &light.direction.x, 0.001f, -1.0f, 1.0f);
+            ImGui::ColorEdit3("Colour", &light.color.x);
+            ImGui::DragFloat("Ambient Intensity", &light.ambient_intensity, 0.001f, -1.0f, 1.0f);
+            ImGui::DragFloat("Diffuse Intensity", &light.diffuse_intensity, 0.001f, -1.0f, 1.0f);
+            ImGui::DragFloat3("Attenuation", &light.attenuation.constant, 0.001f, 0.0f, 10.0f);
+            ImGui::End();
+        }
+    }
 
     ImGui::DragInt("Tile pixel size", &state->pixel_size, 1.0f, 4, 256);
     ImGui::SliderFloat2("Camera Offset", (float *)&state->camera_offset, -0.5f, 0.5f);
