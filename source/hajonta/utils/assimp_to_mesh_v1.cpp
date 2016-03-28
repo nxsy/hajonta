@@ -109,12 +109,17 @@ main(int argc, char **argv)
         format.vertices_size += sizeof(float) * 3 * mesh->mNumVertices;
         format.indices_size += sizeof(uint32_t) * 3 * mesh->mNumFaces;
         format.texcoords_size += sizeof(float) * 2 * mesh->mNumVertices;
+        format.normals_size += sizeof(float) * 3 * mesh->mNumVertices;
         num_vertices += mesh->mNumVertices;
         format.num_triangles += mesh->mNumFaces;
     }
 
-    format.texcoords_offset = format.vertices_size;
-    format.indices_offset = format.vertices_size + format.texcoords_size;
+    uint32_t offset = format.vertices_size;
+    format.texcoords_offset = offset;
+    offset += format.texcoords_size;
+    format.indices_offset = offset;
+    offset += format.indices_size;
+    format.normals_offset = offset;
 
     FILE *of = fopen(outputfile, "wb");
     char fmt[4] = { 'H', 'J', 'N', 'T' };
@@ -153,8 +158,8 @@ main(int argc, char **argv)
                 texcoords.push_back(v->x);
                 texcoords.push_back(v->y);
             }
-            fwrite(&texcoords[0], sizeof(float), texcoords.size(), of);
         }
+        fwrite(&texcoords[0], sizeof(float), texcoords.size(), of);
     }
 
     std::vector<uint32_t> indices;
@@ -180,6 +185,24 @@ main(int argc, char **argv)
     }
 
     fwrite(&indices[0], sizeof(uint32_t), indices.size(), of);
+
+    if (format.normals_size)
+    {
+        std::vector<float> normals;
+        normals.reserve(2 * num_vertices);
+        for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
+        {
+            aiMesh *mesh = scene->mMeshes[h];
+            for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+            {
+                aiVector3D *v = mesh->mNormals + i;
+                normals.push_back(v->x);
+                normals.push_back(v->y);
+                normals.push_back(v->z);
+            }
+        }
+        fwrite(&normals[0], sizeof(float), normals.size(), of);
+    }
 
     fclose(of);
     return 0;
