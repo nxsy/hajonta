@@ -80,14 +80,7 @@ enum struct
 LightType
 {
     directional,
-    point,
-};
-
-struct AttenuationConfig
-{
-    float constant;
-    float linear;
-    float exponential;
+//    point,
 };
 
 struct
@@ -102,7 +95,10 @@ LightDescriptor
     v3 color;
     float ambient_intensity;
     float diffuse_intensity;
-    AttenuationConfig attenuation;
+
+    float attenuation_constant;
+    float attenuation_linear;
+    float attenuation_exponential;
 };
 
 struct
@@ -154,8 +150,7 @@ render_entry_type_mesh_from_asset
     int32_t model_matrix_id;
     int32_t mesh_asset_descriptor_id;
     int32_t texture_asset_descriptor_id;
-    int32_t num_lights;
-    int32_t light_descriptor_ids;
+    int32_t lights_mask;
 };
 
 struct FramebufferFlags
@@ -478,6 +473,16 @@ PushAssetDescriptors(render_entry_list *list, uint32_t count, asset_descriptor *
 }
 
 inline void
+PushDescriptors(render_entry_list *list, LightDescriptors lights)
+{
+     render_entry_type_descriptors *entry = PushRenderElement(list, descriptors);
+     if (entry)
+     {
+         entry->lights = lights;
+     }
+}
+
+inline void
 PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, Mesh mesh, int32_t texture_asset_descriptor_id)
 {
      render_entry_type_mesh *entry = PushRenderElement(list, mesh);
@@ -491,7 +496,7 @@ PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_ma
 }
 
 inline void
-PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id)
+PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask)
 {
      render_entry_type_mesh_from_asset *entry = PushRenderElement(list, mesh_from_asset);
      if (entry)
@@ -500,6 +505,7 @@ PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t
          entry->model_matrix_id = model_matrix_id;
          entry->mesh_asset_descriptor_id = mesh_asset_descriptor_id;
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
+         entry->lights_mask = lights_mask;
      }
 }
 

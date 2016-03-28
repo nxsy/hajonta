@@ -1647,11 +1647,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         auto &light = state->lights[(uint32_t)LightIds::sun];
         light.type = LightType::directional;
-        light.direction = {0.0f, 1.0f, 0.0f};
+        light.direction = {1.0f, -1.0f, -1.0f};
         light.color = {1.0f, 1.0f, 1.0f};
         light.ambient_intensity = 0.2f;
         light.diffuse_intensity = 1.0f;
-        light.attenuation.constant = 1.0f;
+        light.attenuation_constant = 1.0f;
     }
 
     RenderListReset(&state->main_renderer.list);
@@ -1681,7 +1681,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             ImGui::ColorEdit3("Colour", &light.color.x);
             ImGui::DragFloat("Ambient Intensity", &light.ambient_intensity, 0.001f, -1.0f, 1.0f);
             ImGui::DragFloat("Diffuse Intensity", &light.diffuse_intensity, 0.001f, -1.0f, 1.0f);
-            ImGui::DragFloat3("Attenuation", &light.attenuation.constant, 0.001f, 0.0f, 10.0f);
+            ImGui::DragFloat3("Attenuation", &light.attenuation_constant, 0.001f, 0.0f, 10.0f);
             ImGui::End();
         }
     }
@@ -1700,6 +1700,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 translate = m4identity();
     translate.cols[3] = {0, 0, -20.0f, 1.0f};
     m4 rotate = m4rotation({1,0,0}, rotation);
+    rotate = m4identity();
     m4 local_translate = m4identity();
     local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -1714,7 +1715,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
     translate.cols[3] = {-1.0f, 0, horse_z, 1.0f};
     rotate = m4rotation({0,1,0}, rotation / 2.0f);
-    local_translate.cols[3] = {0, 0, 0.0f, 1.0f};
+    rotate = m4identity();
+    local_translate.cols[3] = {0, -2.0f, 0.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::horse_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
 
     translate.cols[3] = {-5.0f, 0, horse_z, 1.0f};
@@ -1749,6 +1751,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushAssetDescriptors(&state->debug_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->three_dee_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->framebuffer_renderer.list, harray_count(state->assets), state->assets);
+
+    LightDescriptors l = {harray_count(state->lights), state->lights};
+    PushDescriptors(&state->main_renderer.list, l);
+    PushDescriptors(&state->debug_renderer.list, l);
+    PushDescriptors(&state->three_dee_renderer.list, l);
+    PushDescriptors(&state->framebuffer_renderer.list, l);
 
     int32_t previous_demo = state->active_demo;
     for (int32_t i = 0; i < harray_count(demoes); ++i)
@@ -2042,11 +2050,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.kitchen_mesh, state->asset_ids.kitchen_texture);
-    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture);
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture);
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.kitchen_mesh, state->asset_ids.kitchen_texture, 1);
+    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1);
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture, 1);
 
-    PushMeshFromAsset(&state->framebuffer_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.framebuffer);
+    PushMeshFromAsset(&state->framebuffer_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.framebuffer, 1);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
@@ -2062,7 +2070,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     ImGui::Image(
         (void *)(intptr_t)state->framebuffer._texture,
-        {256, 256.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
-        {0,0}, {1,1}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        {1024, 1024.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
+        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
     );
 }

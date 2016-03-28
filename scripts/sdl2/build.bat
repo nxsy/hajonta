@@ -17,6 +17,7 @@ set TOOL_CPPFLAGS=%COMMON_CPPFLAGS% %TOOL_WARNINGS%
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\program.exe ..\source hajonta\programs ui2d
 .\program.exe ..\source hajonta\programs imgui
+.\program.exe ..\source hajonta\programs phong_no_normal_map
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\unit.exe
 del *.pdb > NUL 2> NUL

@@ -26,6 +26,7 @@ extern "C" {
 
 #include "hajonta/programs/imgui.h"
 #include "hajonta/programs/ui2d.h"
+#include "hajonta/programs/phong_no_normal_map.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -159,13 +160,16 @@ struct renderer_state
     bool initialized;
 
     imgui_program_struct imgui_program;
+    phong_no_normal_map_program_struct phong_no_normal_map_program;
     uint32_t vbo;
     uint32_t ibo;
     uint32_t QUADS_ibo;
     uint32_t mesh_vertex_vbo;
     uint32_t mesh_uvs_vbo;
+    uint32_t mesh_normals_vbo;
     uint32_t vao;
     int32_t tex_id;
+    int32_t phong_no_normal_map_tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
 
@@ -422,23 +426,34 @@ load_mesh_asset(
     uint32_t memory_size = format->vertices_size + format->normals_size + format->texcoords_size + format->indices_size;
     uint8_t *m = (uint8_t *)malloc(memory_size);
 
-    memcpy((void *)m, mesh_buffer + sizeof(binary_format_v1) + format->vertices_offset, format->vertices_size);
+    uint32_t offset = 0;
+    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->vertices_offset, format->vertices_size);
     mesh->vertices = {
         (void *)m,
         format->vertices_size,
     };
+    offset += format->vertices_size;
 
-    memcpy((void *)(m + format->vertices_size), mesh_buffer + sizeof(binary_format_v1) + format->indices_offset, format->indices_size);
+    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->indices_offset, format->indices_size);
     mesh->indices = {
-        (void *)(m + format->vertices_size),
+        (void *)(m + offset),
         format->indices_size,
     };
+    offset += format->indices_size;
 
-    memcpy((void *)(m + format->vertices_size + format->indices_size), mesh_buffer + sizeof(binary_format_v1) + format->texcoords_offset, format->texcoords_size);
+    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->texcoords_offset, format->texcoords_size);
     mesh->uvs = {
-        (void *)(m + format->vertices_size + format->indices_size),
+        (void *)(m + offset),
         format->texcoords_size,
     };
+    offset += format->texcoords_size;
+
+    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->normals_offset, format->normals_size);
+    mesh->normals = {
+        (void *)(m + offset),
+        format->normals_size,
+    };
+    offset += format->normals_size;
 
     mesh->num_triangles = format->num_triangles;
     return true;
@@ -484,45 +499,54 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
 bool
 program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
 {
-    imgui_program_struct *program = &state->imgui_program;
-    imgui_program(program, ctx, memory);
+    {
+        imgui_program_struct *program = &state->imgui_program;
+        imgui_program(program, ctx, memory);
 
-    state->tex_id = glGetUniformLocation(program->program, "tex");
+        state->tex_id = glGetUniformLocation(program->program, "tex");
 
-    glGenBuffers(1, &state->vbo);
-    glGenBuffers(1, &state->ibo);
-    glGenBuffers(1, &state->QUADS_ibo);
-    glGenBuffers(1, &state->mesh_vertex_vbo);
-    glGenBuffers(1, &state->mesh_uvs_vbo);
+        glGenBuffers(1, &state->vbo);
+        glGenBuffers(1, &state->ibo);
+        glGenBuffers(1, &state->QUADS_ibo);
+        glGenBuffers(1, &state->mesh_vertex_vbo);
+        glGenBuffers(1, &state->mesh_uvs_vbo);
 
-    glGenVertexArrays(1, &state->vao);
-    glBindVertexArray(state->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    glEnableVertexAttribArray((GLuint)program->a_position_id);
-    glEnableVertexAttribArray((GLuint)program->a_uv_id);
-    glEnableVertexAttribArray((GLuint)program->a_color_id);
+        glGenVertexArrays(1, &state->vao);
+        glBindVertexArray(state->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+        glEnableVertexAttribArray((GLuint)program->a_position_id);
+        glEnableVertexAttribArray((GLuint)program->a_uv_id);
+        glEnableVertexAttribArray((GLuint)program->a_color_id);
 
-    glVertexAttribPointer((GLuint)program->a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
-    glVertexAttribPointer((GLuint)program->a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
-    glVertexAttribPointer((GLuint)program->a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
+        glVertexAttribPointer((GLuint)program->a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
+        glVertexAttribPointer((GLuint)program->a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
+        glVertexAttribPointer((GLuint)program->a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
 
-    ImGuiIO& io = ImGui::GetIO();
-    uint8_t *pixels;
-    int width, height;
-    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        ImGuiIO& io = ImGui::GetIO();
+        uint8_t *pixels;
+        int width, height;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
-    glGenTextures(1, &state->font_texture);
-    glBindTexture(GL_TEXTURE_2D, state->font_texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glGenTextures(1, &state->font_texture);
+        glBindTexture(GL_TEXTURE_2D, state->font_texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-    io.Fonts->TexID = (void *)(intptr_t)state->font_texture;
+        io.Fonts->TexID = (void *)(intptr_t)state->font_texture;
 
-    glGenTextures(1, &state->white_texture);
-    glBindTexture(GL_TEXTURE_2D, state->white_texture);
-    uint32_t color32 = 0xffffffff;
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &color32);
+        glGenTextures(1, &state->white_texture);
+        glBindTexture(GL_TEXTURE_2D, state->white_texture);
+        uint32_t color32 = 0xffffffff;
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &color32);
+    }
+
+    {
+        phong_no_normal_map_program_struct *program = &state->phong_no_normal_map_program;
+        phong_no_normal_map_program(program, ctx, memory);
+        state->phong_no_normal_map_tex_id = glGetUniformLocation(program->program, "tex");
+        glGenBuffers(1, &state->mesh_normals_vbo);
+    }
 
     return true;
 }
@@ -842,6 +866,7 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_SCISSOR_TEST);
     glActiveTexture(GL_TEXTURE0);
+    glUseProgram(state->imgui_program.program);
 
     // Handle cases of screen coordinates != from framebuffer coordinates (e.g. retina displays)
     ImGuiIO& io = ImGui::GetIO();
@@ -1109,6 +1134,7 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
         ctx, memory, state, descriptors, quads->asset_descriptor_id,
         &texture, &st0, &st1);
 
+    glUseProgram(state->imgui_program.program);
     glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
@@ -1216,7 +1242,7 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 }
 
 void
-draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
+draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, LightDescriptor *light_descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
 {
     glErrorAssert();
     glDisable(GL_BLEND);
@@ -1237,11 +1263,53 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
     auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
 
-    glUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-    glUniform1f(state->imgui_program.u_use_color_id, 0.0f);
-    glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-    glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+    auto &program = state->phong_no_normal_map_program;
+    glUseProgram(program.program);
+    glUniform1i(state->phong_no_normal_map_tex_id, 0);
+    glUniformMatrix4fv(state->phong_no_normal_map_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+    glUniformMatrix4fv(state->phong_no_normal_map_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+    glUniformMatrix4fv(state->phong_no_normal_map_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+
+    glEnableVertexAttribArray((GLuint)program.a_position_id);
+    glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
+    glEnableVertexAttribArray((GLuint)program.a_normal_id);
     glErrorAssert();
+
+    if (mesh_from_asset->lights_mask == 1)
+    {
+        auto &light = light_descriptors[0];
+
+        v4 position_or_direction;
+
+        switch (light.type)
+        {
+            case LightType::directional:
+            {
+                v3 direction = light.direction;
+                direction = v3normalize(direction);
+
+                position_or_direction = {
+                    direction.x,
+                    direction.y,
+                    direction.z,
+                    0.0f,
+                };
+            } break;
+        }
+
+        glUniform4fv(
+            glGetUniformLocation(program.program, "light.position_or_direction"), 1,
+            (float *)&position_or_direction.x);
+        glUniform3fv(
+            glGetUniformLocation(program.program, "light.color"), 1,
+            (float *)&light.color);
+        glUniform1f(
+            glGetUniformLocation(program.program, "light.ambient_intensity"),
+            light.ambient_intensity);
+        glUniform1f(
+            glGetUniformLocation(program.program, "light.diffuse_intensity"),
+            light.diffuse_intensity);
+    }
 
     glBindVertexArray(state->vao);
 
@@ -1250,7 +1318,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             mesh.vertices.size,
             mesh.vertices.data,
             GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer((GLuint)state->phong_no_normal_map_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glErrorAssert();
 
     glBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
@@ -1258,7 +1326,15 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             mesh.uvs.size,
             mesh.uvs.data,
             GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer((GLuint)state->phong_no_normal_map_program.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glErrorAssert();
+
+    glBindBuffer(GL_ARRAY_BUFFER, state->mesh_normals_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+            mesh.normals.size,
+            mesh.normals.data,
+            GL_STATIC_DRAW);
+    glVertexAttribPointer((GLuint)state->phong_no_normal_map_program.a_normal_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glErrorAssert();
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
@@ -1269,7 +1345,6 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
 
     glBindTexture(GL_TEXTURE_2D, texture);
-    glDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
     glErrorAssert();
 
     int32_t max_faces = (int32_t)mesh.num_triangles;
@@ -1297,7 +1372,6 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     }
     int32_t num_faces = end_face - start_face;
     glDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
-    glEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
     glErrorAssert();
 
     glBindVertexArray(0);
@@ -1341,6 +1415,8 @@ extern "C" RENDERER_RENDER(renderer_render)
 
         m4 *matrices = {};
         asset_descriptor *asset_descriptors = {};
+        LightDescriptors lights = {};
+
         uint32_t matrix_count = 0;
         uint32_t asset_descriptor_count = 0;
 
@@ -1428,7 +1504,8 @@ extern "C" RENDERER_RENDER(renderer_render)
                 } break;
                 case render_entry_type::descriptors:
                 {
-                    ExtractRenderElementSizeOnly(descriptors, element_size);
+                    ExtractRenderElementWithSize(descriptors, item, header, element_size);
+                    lights = item->lights;
                 } break;
                 case render_entry_type::QUADS:
                 {
@@ -1447,7 +1524,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::mesh_from_asset:
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
-                    draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, item);
+                    draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, lights.descriptors, item);
                 } break;
                 default:
                 {
