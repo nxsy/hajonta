@@ -757,6 +757,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "cactus_texture", "testing/cactus/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "kitchen_mesh", "testing/kitchen/kitchen.hjm");
         add_asset(state, "kitchen_texture", "testing/kitchen/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "nature_pack_tree_mesh", "testing/kenney/Nature_Pack_3D/tree.hjm");
+        add_asset(state, "nature_pack_tree_texture", "testing/kenney/Nature_Pack_3D/tree.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1081,6 +1083,13 @@ get_texture_id_from_asset_descriptor(
                 if (FramebufferInitialized(descriptor->framebuffer))
                 {
                     *texture = descriptor->framebuffer->_texture;
+                }
+            } break;
+            case asset_descriptor_type::framebuffer_depth:
+            {
+                if (FramebufferInitialized(descriptor->framebuffer))
+                {
+                    *texture = descriptor->framebuffer->_renderbuffer;
                 }
             } break;
         }
@@ -1425,41 +1434,72 @@ extern "C" RENDERER_RENDER(renderer_render)
         {
             if (!FramebufferInitialized(framebuffer))
             {
-                glGenFramebuffers(1, &framebuffer->_fbo); // Throw one away?  Weird bug here.
                 glGenFramebuffers(1, &framebuffer->_fbo);
                 glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
 
-                glGenTextures(1, &framebuffer->_texture);
-                glBindTexture(GL_TEXTURE_2D, framebuffer->_texture);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                if (!framebuffer->_flags.no_color_buffer)
+                {
+                    glGenTextures(1, &framebuffer->_texture);
+                    glBindTexture(GL_TEXTURE_2D, framebuffer->_texture);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
 
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                }
 
-                glGenRenderbuffers(1, &framebuffer->_renderbuffer);
-                glBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
-                glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer->size.x, framebuffer->size.y);
+                if (!framebuffer->_flags.use_depth_texture)
+                {
+                    glGenRenderbuffers(1, &framebuffer->_renderbuffer);
+                    glBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
+                    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer->size.x, framebuffer->size.y);
+                }
+                else
+                {
+                    glGenTextures(1, &framebuffer->_renderbuffer);
+                    glBindTexture(GL_TEXTURE_2D, framebuffer->_renderbuffer);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                }
 
                 FramebufferMakeInitialized(framebuffer);
             }
             glErrorAssert();
 
             glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
-            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer->_texture, 0);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer->_renderbuffer);
-
-            GLenum draw_buffers[] =
+            if (!framebuffer->_flags.no_color_buffer)
             {
-                GL_COLOR_ATTACHMENT0,
-            };
-            glDrawBuffers(harray_count(draw_buffers), draw_buffers);
-            glViewport(0, 0, framebuffer->size.x, framebuffer->size.y);
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer->_texture, 0);
+                GLenum draw_buffers[] =
+                {
+                    GL_COLOR_ATTACHMENT0,
+                };
+                glDrawBuffers(harray_count(draw_buffers), draw_buffers);
+            }
+            else
+            {
+                glDrawBuffer(GL_NONE);
+            }
 
-            hassert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+            if (!framebuffer->_flags.use_depth_texture)
+            {
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer->_renderbuffer);
+            }
+            else
+            {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
+
+            }
+
+            glViewport(0, 0, framebuffer->size.x, framebuffer->size.y);
+            GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            hassert(framebuffer_status == GL_FRAMEBUFFER_COMPLETE);
         }
 
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)

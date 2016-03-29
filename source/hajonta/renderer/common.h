@@ -157,6 +157,8 @@ struct FramebufferFlags
 {
     unsigned int initialized:1;
     unsigned int frame_initialized:1;
+    unsigned int no_color_buffer:1;
+    unsigned int use_depth_texture:1;
 };
 
 struct
@@ -176,7 +178,7 @@ asset_descriptor_type
 {
     name,
     framebuffer,
-    //renderbuffer,
+    framebuffer_depth,
 };
 
 struct

@@ -75,6 +75,9 @@ _asset_ids
     int32_t kitchen_mesh;
     int32_t kitchen_texture;
     int32_t framebuffer;
+    int32_t shadowmap_framebuffer;
+    int32_t nature_pack_tree_mesh;
+    int32_t nature_pack_tree_texture;
 };
 
 struct
@@ -316,6 +319,8 @@ enum struct matrix_ids
     horse_model_matrix,
     chest_model_matrix,
     plane_model_matrix,
+    tree_model_matrix,
+    light_projection_matrix,
     mesh_model_matrix,
 
     MAX = mesh_model_matrix,
@@ -354,9 +359,11 @@ struct game_state
     _render_list<4*1024*1024> main_renderer;
     _render_list<4*1024*1024> debug_renderer;
     _render_list<4*1024*1024> three_dee_renderer;
+    _render_list<4*1024*1024> shadowmap_renderer;
     _render_list<4*1024*1024> framebuffer_renderer;
 
     FramebufferDescriptor framebuffer;
+    FramebufferDescriptor shadowmap_framebuffer;
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
@@ -703,6 +710,21 @@ add_framebuffer_asset(game_state *state, FramebufferDescriptor *framebuffer, boo
     if (state->asset_count < harray_count(state->assets))
     {
         state->assets[state->asset_count].type = asset_descriptor_type::framebuffer;
+        state->assets[state->asset_count].framebuffer = framebuffer;
+        state->assets[state->asset_count].debug = debug;
+        result = (int32_t)state->asset_count;
+        ++state->asset_count;
+    }
+    return result;
+}
+
+int32_t
+add_framebuffer_depth_asset(game_state *state, FramebufferDescriptor *framebuffer, bool debug = false)
+{
+    int32_t result = -1;
+    if (state->asset_count < harray_count(state->assets))
+    {
+        state->assets[state->asset_count].type = asset_descriptor_type::framebuffer_depth;
         state->assets[state->asset_count].framebuffer = framebuffer;
         state->assets[state->asset_count].debug = debug;
         result = (int32_t)state->asset_count;
@@ -1582,6 +1604,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         memory->initialized = 1;
         state->asset_ids.framebuffer = add_framebuffer_asset(state, &state->framebuffer);
+        state->asset_ids.shadowmap_framebuffer = add_framebuffer_depth_asset(state, &state->shadowmap_framebuffer);
         state->asset_ids.mouse_cursor = add_asset(state, "mouse_cursor");
         state->asset_ids.sea_0 = add_asset(state, "sea_0");
         state->asset_ids.ground_0 = add_asset(state, "ground_0");
@@ -1613,6 +1636,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.cactus_texture = add_asset(state, "cactus_texture");
         state->asset_ids.kitchen_mesh = add_asset(state, "kitchen_mesh");
         state->asset_ids.kitchen_texture = add_asset(state, "kitchen_texture");
+        state->asset_ids.nature_pack_tree_mesh = add_asset(state, "nature_pack_tree_mesh");
+        state->asset_ids.nature_pack_tree_texture = add_asset(state, "nature_pack_tree_texture");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -1624,8 +1649,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         RenderListBuffer(state->main_renderer.list, state->main_renderer.buffer);
         RenderListBuffer(state->debug_renderer.list, state->debug_renderer.buffer);
         RenderListBuffer(state->three_dee_renderer.list, state->three_dee_renderer.buffer);
+        RenderListBuffer(state->shadowmap_renderer.list, state->shadowmap_renderer.buffer);
         RenderListBuffer(state->framebuffer_renderer.list, state->framebuffer_renderer.buffer);
         state->three_dee_renderer.list.framebuffer = &state->framebuffer;
+        //state->shadowmap_framebuffer._flags.no_color_buffer = 1;
+        state->shadowmap_framebuffer._flags.use_depth_texture = 1;
+        state->shadowmap_renderer.list.framebuffer = &state->shadowmap_framebuffer;
         state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
 
@@ -1657,9 +1686,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     RenderListReset(&state->main_renderer.list);
     RenderListReset(&state->debug_renderer.list);
     RenderListReset(&state->three_dee_renderer.list);
+    RenderListReset(&state->shadowmap_renderer.list);
     RenderListReset(&state->framebuffer_renderer.list);
     FramebufferReset(&state->framebuffer);
     state->framebuffer.size = {input->window.width, input->window.height};
+    state->shadowmap_framebuffer.size = {input->window.width, input->window.height};
 
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
@@ -1698,19 +1729,22 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     static float rotation = 0;
     rotation += state->frame_state.delta_t;
     m4 translate = m4identity();
-    translate.cols[3] = {0, 0, -20.0f, 1.0f};
+    translate.cols[3] = {0, 0, -3.0f, 1.0f};
     m4 rotate = m4rotation({1,0,0}, rotation);
     rotate = m4identity();
     m4 local_translate = m4identity();
     local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
 
     m4 scale = m4identity();
-    scale.cols[0].E[0] = 8.0f;
-    scale.cols[1].E[1] = 8.0f;
-    scale.cols[2].E[2] = 8.0f;
+    scale.cols[0].E[0] = 2.0f;
+    scale.cols[1].E[1] = 2.0f;
+    scale.cols[2].E[2] = 2.0f;
 
     state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(scale, local_translate));
+
+    translate.cols[3] = {0, 0, -5.0f, 1.0f};
+    state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
     translate.cols[3] = {-1.0f, 0, horse_z, 1.0f};
@@ -1746,16 +1780,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMatrices(&state->main_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->debug_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->three_dee_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->shadowmap_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
     PushAssetDescriptors(&state->main_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->debug_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->three_dee_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->shadowmap_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->framebuffer_renderer.list, harray_count(state->assets), state->assets);
 
     LightDescriptors l = {harray_count(state->lights), state->lights};
     PushDescriptors(&state->main_renderer.list, l);
     PushDescriptors(&state->debug_renderer.list, l);
     PushDescriptors(&state->three_dee_renderer.list, l);
+    PushDescriptors(&state->shadowmap_renderer.list, l);
     PushDescriptors(&state->framebuffer_renderer.list, l);
 
     int32_t previous_demo = state->active_demo;
@@ -2053,6 +2090,26 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.kitchen_mesh, state->asset_ids.kitchen_texture, 1);
     PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1);
     PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture, 1);
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1);
+
+    m4 shadowmap_projection_matrix = m4orthographicprojection(0.0f, 50.0f, {-ratio * 10.0f, -10.0f}, {ratio * 10.0f, 10.0f});
+
+    m4 shadowmap_view_matrix;
+    {
+        auto &light = state->lights[(uint32_t)LightIds::sun];
+        v3 eye = v3sub({0,0,0}, light.direction);
+        eye = v3mul(eye, 10);
+        static v3 target = {0,0,0};
+        ImGui::DragFloat3("Target", &target.x, 0.1f, -100.0f, 100.0f);
+        v3 up = {0, 1, 0};
+
+        shadowmap_view_matrix = m4lookat(eye, target, up);
+    }
+        state->matrices[(uint32_t)matrix_ids::light_projection_matrix] = m4mul(shadowmap_projection_matrix, shadowmap_view_matrix);
+    //state->matrices[(uint32_t)matrix_ids::light_projection_matrix] = shadowmap_projection_matrix;
+
+    PushClear(&state->shadowmap_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
+    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1);
 
     PushMeshFromAsset(&state->framebuffer_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.framebuffer, 1);
 
@@ -2067,10 +2124,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     AddRenderList(memory, &state->three_dee_renderer.list);
     AddRenderList(memory, &state->framebuffer_renderer.list);
+    AddRenderList(memory, &state->shadowmap_renderer.list);
 
     ImGui::Image(
         (void *)(intptr_t)state->framebuffer._texture,
-        {1024, 1024.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
+        {512, 512.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
+        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+    );
+
+    ImGui::Image(
+        (void *)(intptr_t)state->shadowmap_framebuffer._texture,
+        {512, 512.0f * (float)state->shadowmap_framebuffer.size.y / (float)state->shadowmap_framebuffer.size.x},
+        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+    );
+    ImGui::SameLine();
+    ImGui::Image(
+        (void *)(intptr_t)state->shadowmap_framebuffer._renderbuffer,
+        {512, 512.0f * (float)state->shadowmap_framebuffer.size.y / (float)state->shadowmap_framebuffer.size.x},
         {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
     );
 }
