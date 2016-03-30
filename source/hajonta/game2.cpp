@@ -78,6 +78,7 @@ _asset_ids
     int32_t shadowmap_framebuffer;
     int32_t nature_pack_tree_mesh;
     int32_t nature_pack_tree_texture;
+    int32_t another_ground_0;
 };
 
 struct
@@ -1638,6 +1639,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.kitchen_texture = add_asset(state, "kitchen_texture");
         state->asset_ids.nature_pack_tree_mesh = add_asset(state, "nature_pack_tree_mesh");
         state->asset_ids.nature_pack_tree_texture = add_asset(state, "nature_pack_tree_texture");
+        state->asset_ids.another_ground_0 = add_asset(state, "another_ground_0");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -1741,8 +1743,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[2].E[2] = 2.0f;
 
     state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(scale, local_translate));
+    static float plane_rotation = 0.0f;
+    ImGui::DragFloat("Plane rotation", &plane_rotation, 0.01f, 0, 3.0f);
+    rotate = m4rotation({1,0,0}, 3.14f / 2.0f);
+    translate.cols[3] = {0, -2.0f, -5.0f, 1.0f};
+    scale.cols[0].E[0] = 10.0f;
+    scale.cols[1].E[1] = 10.0f;
+    scale.cols[2].E[2] = 10.0f;
+    state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
+    rotate = m4identity();
 
+    scale.cols[0].E[0] = 2.0f;
+    scale.cols[1].E[1] = 2.0f;
+    scale.cols[2].E[2] = 2.0f;
     translate.cols[3] = {0, 0, -5.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
@@ -2086,32 +2099,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushQuad(&state->main_renderer.list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::horse_model_matrix, state->asset_ids.kitchen_mesh, state->asset_ids.kitchen_texture, 1);
-    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1);
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::mesh_model_matrix, state->asset_ids.tree_mesh, state->asset_ids.tree_texture, 1);
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1);
+    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1, false);
 
-    m4 shadowmap_projection_matrix = m4orthographicprojection(0.0f, 50.0f, {-ratio * 10.0f, -10.0f}, {ratio * 10.0f, 10.0f});
+    m4 shadowmap_projection_matrix = m4orthographicprojection(0.0f, 20.0f, {-ratio * 5.0f, -5.0f}, {ratio * 5.0f, 5.0f});
 
     m4 shadowmap_view_matrix;
     {
         auto &light = state->lights[(uint32_t)LightIds::sun];
         v3 eye = v3sub({0,0,0}, light.direction);
-        eye = v3mul(eye, 10);
+        eye = v3mul(eye, 5);
         static v3 target = {0,0,0};
         ImGui::DragFloat3("Target", &target.x, 0.1f, -100.0f, 100.0f);
         v3 up = {0, 1, 0};
 
         shadowmap_view_matrix = m4lookat(eye, target, up);
     }
-        state->matrices[(uint32_t)matrix_ids::light_projection_matrix] = m4mul(shadowmap_projection_matrix, shadowmap_view_matrix);
-    //state->matrices[(uint32_t)matrix_ids::light_projection_matrix] = shadowmap_projection_matrix;
+    state->matrices[(uint32_t)matrix_ids::light_projection_matrix] = m4mul(shadowmap_projection_matrix, shadowmap_view_matrix);
+
+    auto &light = state->lights[(uint32_t)LightIds::sun];
+    light.shadowmap_matrix_id = (uint32_t)matrix_ids::light_projection_matrix;
+    light.shadowmap_asset_descriptor_id = state->asset_ids.shadowmap_framebuffer;
 
     PushClear(&state->shadowmap_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
-    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1);
+    PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
 
-    PushMeshFromAsset(&state->framebuffer_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.framebuffer, 1);
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, true);
+    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, false);
+
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.another_ground_0, 1, true);
+    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.another_ground_0, 1, false);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

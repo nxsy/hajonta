@@ -170,6 +170,7 @@ struct renderer_state
     uint32_t vao;
     int32_t tex_id;
     int32_t phong_no_normal_map_tex_id;
+    int32_t phong_no_normal_map_shadowmap_tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
 
@@ -545,6 +546,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         phong_no_normal_map_program_struct *program = &state->phong_no_normal_map_program;
         phong_no_normal_map_program(program, ctx, memory);
         state->phong_no_normal_map_tex_id = glGetUniformLocation(program->program, "tex");
+        state->phong_no_normal_map_shadowmap_tex_id = glGetUniformLocation(program->program, "shadowmap_tex");
         glGenBuffers(1, &state->mesh_normals_vbo);
     }
 
@@ -759,6 +761,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "kitchen_texture", "testing/kitchen/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "nature_pack_tree_mesh", "testing/kenney/Nature_Pack_3D/tree.hjm");
         add_asset(state, "nature_pack_tree_texture", "testing/kenney/Nature_Pack_3D/tree.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_asset(state, "another_ground_0", "testing/kenney/rpgTile039.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1275,6 +1278,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     auto &program = state->phong_no_normal_map_program;
     glUseProgram(program.program);
     glUniform1i(state->phong_no_normal_map_tex_id, 0);
+    glUniform1i(state->phong_no_normal_map_shadowmap_tex_id, 1);
     glUniformMatrix4fv(state->phong_no_normal_map_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     glUniformMatrix4fv(state->phong_no_normal_map_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     glUniformMatrix4fv(state->phong_no_normal_map_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
@@ -1283,6 +1287,9 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
     glEnableVertexAttribArray((GLuint)program.a_normal_id);
     glErrorAssert();
+
+    glUniform1i(
+        state->phong_no_normal_map_program.u_lightspace_available_id, 0);
 
     if (mesh_from_asset->lights_mask == 1)
     {
@@ -1306,6 +1313,24 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             } break;
         }
 
+        if (mesh_from_asset->attach_shadowmap)
+        {
+            glActiveTexture(GL_TEXTURE0 + 1);
+            uint32_t shadowmap_texture;
+            get_texture_id_from_asset_descriptor(
+                ctx, memory, state, descriptors,
+                light.shadowmap_asset_descriptor_id,
+                &shadowmap_texture, &st0, &st1);
+            glBindTexture(GL_TEXTURE_2D, shadowmap_texture);
+            glActiveTexture(GL_TEXTURE0);
+
+            m4 shadowmap_matrix = matrices[light.shadowmap_matrix_id];
+            glUniformMatrix4fv(state->phong_no_normal_map_program.u_lightspace_matrix_id, 1, GL_FALSE, (float *)&shadowmap_matrix);
+
+            glUniform1i(
+                state->phong_no_normal_map_program.u_lightspace_available_id, 1);
+            glUniformMatrix4fv(state->phong_no_normal_map_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+        }
         glUniform4fv(
             glGetUniformLocation(program.program, "light.position_or_direction"), 1,
             (float *)&position_or_direction.x);
