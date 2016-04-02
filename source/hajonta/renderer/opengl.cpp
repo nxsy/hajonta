@@ -208,6 +208,13 @@ struct renderer_state
     } vertices_scratch[4 * 2000];
     uint32_t indices_scratch[6 * 2000];
 
+    int32_t shadow_mode;
+    int32_t poisson_spread;
+    float shadowmap_bias;
+    int32_t pcf_distance;
+    int32_t poisson_samples;
+    float poisson_position_granularity;
+
     m4 m4identity;
 
     struct
@@ -762,6 +769,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "nature_pack_tree_mesh", "testing/kenney/Nature_Pack_3D/tree.hjm");
         add_asset(state, "nature_pack_tree_texture", "testing/kenney/Nature_Pack_3D/tree.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "another_ground_0", "testing/kenney/rpgTile039.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "cube_mesh", "testing/cube.hjm");
+        add_asset(state, "cube_texture", "testing/wood-tex2a.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -780,6 +789,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
             state->indices_scratch,
             GL_STATIC_DRAW);
         state->m4identity = m4identity();
+        state->poisson_spread = 700;
+        state->pcf_distance = 1;
+        state->poisson_samples = 4;
+        state->poisson_position_granularity = 1000.0f;
     }
 
     _GlobalRendererState.input = input;
@@ -1259,6 +1272,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     glErrorAssert();
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
     glDepthFunc(GL_LESS);
     m4 projection = matrices[mesh_from_asset->projection_matrix_id];
     m4 model = matrices[mesh_from_asset->model_matrix_id];
@@ -1291,6 +1305,8 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     glUniform1i(
         state->phong_no_normal_map_program.u_lightspace_available_id, 0);
 
+    uint32_t shadowmap_texture = 0;
+
     if (mesh_from_asset->lights_mask == 1)
     {
         auto &light = light_descriptors[0];
@@ -1313,15 +1329,25 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             } break;
         }
 
-        if (mesh_from_asset->attach_shadowmap)
+        if (mesh_from_asset->flags.cull_front)
+        {
+            glCullFace(GL_FRONT);
+        }
+        else
+        {
+            glCullFace(GL_BACK);
+        }
+
+        if (mesh_from_asset->flags.attach_shadowmap)
         {
             glActiveTexture(GL_TEXTURE0 + 1);
-            uint32_t shadowmap_texture;
             get_texture_id_from_asset_descriptor(
                 ctx, memory, state, descriptors,
                 light.shadowmap_asset_descriptor_id,
                 &shadowmap_texture, &st0, &st1);
             glBindTexture(GL_TEXTURE_2D, shadowmap_texture);
+            glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
             glActiveTexture(GL_TEXTURE0);
 
             m4 shadowmap_matrix = matrices[light.shadowmap_matrix_id];
@@ -1329,6 +1355,18 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
             glUniform1i(
                 state->phong_no_normal_map_program.u_lightspace_available_id, 1);
+            glUniform1i(
+                state->phong_no_normal_map_program.u_shadow_mode_id, state->shadow_mode);
+            glUniform1i(
+                state->phong_no_normal_map_program.u_poisson_spread_id, state->poisson_spread);
+            glUniform1f(
+                state->phong_no_normal_map_program.u_bias_id, state->shadowmap_bias);
+            glUniform1i(
+                state->phong_no_normal_map_program.u_pcf_distance_id, state->pcf_distance);
+            glUniform1i(
+                state->phong_no_normal_map_program.u_poisson_samples_id, state->poisson_samples);
+            glUniform1f(
+                state->phong_no_normal_map_program.u_poisson_position_granularity_id, state->poisson_position_granularity);
             glUniformMatrix4fv(state->phong_no_normal_map_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
         }
         glUniform4fv(
@@ -1407,6 +1445,11 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t num_faces = end_face - start_face;
     glDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
     glErrorAssert();
+    if (mesh_from_asset->flags.attach_shadowmap)
+    {
+        glBindTexture(GL_TEXTURE_2D, shadowmap_texture);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+    }
 
     glBindVertexArray(0);
     glDisable(GL_DEPTH_TEST);
@@ -1430,10 +1473,13 @@ extern "C" RENDERER_RENDER(renderer_render)
     uint32_t quads_drawn = 0;
     for (uint32_t i = 0; i < memory->render_lists_count; ++i)
     {
-        glViewport(0, 0, (GLsizei)window->width, (GLsizei)window->height);
+        v2i size = {window->width, window->height};
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glEnable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_DEPTH_TEST);
+        glDepthFunc(GL_ALWAYS);
         glBlendEquation(GL_FUNC_ADD);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glScissor(0, 0, window->width, window->height);
@@ -1525,7 +1571,10 @@ extern "C" RENDERER_RENDER(renderer_render)
             glViewport(0, 0, framebuffer->size.x, framebuffer->size.y);
             GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             hassert(framebuffer_status == GL_FRAMEBUFFER_COMPLETE);
+            size = framebuffer->size;
         }
+        glViewport(0, 0, (GLsizei)size.x, (GLsizei)size.y);
+        glScissor(0, 0, size.x, size.y);
 
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
         {
@@ -1538,7 +1587,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(clear, item, header, element_size);
                     v4 *color = &item->color;
-                    glScissor(0, 0, state->input->window.width, state->input->window.height);
+                    glScissor(0, 0, size.x, size.y);
                     glClearColor(color->r, color->g, color->b, color->a);
                     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 } break;
@@ -1610,6 +1659,21 @@ extern "C" RENDERER_RENDER(renderer_render)
     ImGui::Text("Generations updated: %d", generations_updated_this_frame);
     ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
     ImGui::Text("This frame: %.3f ms", 1000.0f * io.DeltaTime);
+
+    const char *shadow_modes[] =
+    {
+        "none",
+        "sampler2dshadow",
+        "static poisson",
+        "random poisson",
+        "pcf",
+    };
+    ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
+    ImGui::DragInt("Poisson spread", &state->poisson_spread);
+    ImGui::DragFloat("Shadowmap bias", &state->shadowmap_bias, 0.00001f, -0.1f, 0.1f);
+    ImGui::DragInt("PCF distance", &state->pcf_distance);
+    ImGui::DragInt("Poisson Samples", &state->poisson_samples);
+    ImGui::DragFloat("Poisson Position Granularity", &state->poisson_position_granularity);
 
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();

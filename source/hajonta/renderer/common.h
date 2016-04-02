@@ -145,6 +145,12 @@ render_entry_type_mesh
     int32_t texture_asset_descriptor_id;
 };
 
+struct MeshFromAssetFlags
+{
+    unsigned int attach_shadowmap:1;
+    unsigned int cull_front:1;
+};
+
 struct
 render_entry_type_mesh_from_asset
 {
@@ -154,7 +160,8 @@ render_entry_type_mesh_from_asset
     int32_t mesh_asset_descriptor_id;
     int32_t texture_asset_descriptor_id;
     int32_t lights_mask;
-    bool attach_shadowmap;
+    MeshFromAssetFlags flags;
+
 };
 
 struct FramebufferFlags
@@ -502,7 +509,7 @@ PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_ma
 }
 
 inline void
-PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask, bool attach_shadowmap)
+PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask, MeshFromAssetFlags flags)
 {
      render_entry_type_mesh_from_asset *entry = PushRenderElement(list, mesh_from_asset);
      if (entry)
@@ -512,7 +519,7 @@ PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t
          entry->mesh_asset_descriptor_id = mesh_asset_descriptor_id;
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
          entry->lights_mask = lights_mask;
-         entry->attach_shadowmap = attach_shadowmap;
+         entry->flags = flags;
      }
 }
 

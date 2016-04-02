@@ -79,6 +79,8 @@ _asset_ids
     int32_t nature_pack_tree_mesh;
     int32_t nature_pack_tree_texture;
     int32_t another_ground_0;
+    int32_t cube_mesh;
+    int32_t cube_texture;
 };
 
 struct
@@ -1640,6 +1642,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.nature_pack_tree_mesh = add_asset(state, "nature_pack_tree_mesh");
         state->asset_ids.nature_pack_tree_texture = add_asset(state, "nature_pack_tree_texture");
         state->asset_ids.another_ground_0 = add_asset(state, "another_ground_0");
+        state->asset_ids.cube_mesh = add_asset(state, "cube_mesh");
+        state->asset_ids.cube_texture = add_asset(state, "cube_texture");
         state->asset_ids.familiar = add_asset(state, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -1692,7 +1696,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     RenderListReset(&state->framebuffer_renderer.list);
     FramebufferReset(&state->framebuffer);
     state->framebuffer.size = {input->window.width, input->window.height};
-    state->shadowmap_framebuffer.size = {input->window.width, input->window.height};
+    state->shadowmap_framebuffer.size = {4096, 4096};
 
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
@@ -1745,11 +1749,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float plane_rotation = 0.0f;
     ImGui::DragFloat("Plane rotation", &plane_rotation, 0.01f, 0, 3.0f);
-    rotate = m4rotation({1,0,0}, 3.14f / 2.0f);
-    translate.cols[3] = {0, -2.0f, -5.0f, 1.0f};
-    scale.cols[0].E[0] = 10.0f;
-    scale.cols[1].E[1] = 10.0f;
-    scale.cols[2].E[2] = 10.0f;
+    rotate = m4identity();
+
+    float _scale = 5.0f;
+    translate.cols[3] = {0, -3.0f, -5.0f, 1.0f};
+    scale.cols[0].E[0] = _scale;
+    scale.cols[1].E[1] = 1.0f;
+    scale.cols[2].E[2] = _scale;
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
 
@@ -2099,7 +2105,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushQuad(&state->main_renderer.list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1, false);
+    MeshFromAssetFlags mesh_flags = {};
+    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1, mesh_flags);
 
     m4 shadowmap_projection_matrix = m4orthographicprojection(0.0f, 20.0f, {-ratio * 5.0f, -5.0f}, {ratio * 5.0f, 5.0f});
 
@@ -2122,25 +2129,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     PushClear(&state->shadowmap_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
     PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
+    PushClear(&state->framebuffer_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
 
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, true);
-    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, false);
+    MeshFromAssetFlags shadowmap_mesh_flags = {};
+    shadowmap_mesh_flags.cull_front = 1;
+    MeshFromAssetFlags three_dee_mesh_flags = {};
+    three_dee_mesh_flags.attach_shadowmap = 1;
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, three_dee_mesh_flags);
+    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, shadowmap_mesh_flags);
 
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.another_ground_0, 1, true);
-    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.plane_mesh, state->asset_ids.another_ground_0, 1, false);
+    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.cube_mesh, state->asset_ids.cube_texture, 1, three_dee_mesh_flags);
+    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.cube_mesh, state->asset_ids.cube_texture, 1, shadowmap_mesh_flags);
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->main_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
-    AddRenderList(memory, &state->main_renderer.list);
+    //AddRenderList(memory, &state->main_renderer.list);
     if (state->debug.rendering)
     {
         AddRenderList(memory, &state->debug_renderer.list);
     }
-    AddRenderList(memory, &state->three_dee_renderer.list);
-    AddRenderList(memory, &state->framebuffer_renderer.list);
     AddRenderList(memory, &state->shadowmap_renderer.list);
+    AddRenderList(memory, &state->three_dee_renderer.list);
+
+    PushQuad(&state->framebuffer_renderer.list, {0,0}, {(float)input->window.width, (float)input->window.height}, {1,1,1,1}, 0, state->asset_ids.framebuffer);
+    PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+    AddRenderList(memory, &state->framebuffer_renderer.list);
 
     ImGui::Image(
         (void *)(intptr_t)state->framebuffer._texture,

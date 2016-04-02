@@ -6,6 +6,12 @@ uniform mat4 u_model_matrix;
 uniform mat4 u_lightspace_matrix;
 
 uniform int u_lightspace_available;
+uniform int u_shadow_mode;
+uniform int u_poisson_spread;
+uniform float u_bias;
+uniform int u_pcf_distance;
+uniform int u_poisson_samples;
+uniform float u_poisson_position_granularity;
 
 in vec3 a_position;
 in vec2 a_texcoord;
