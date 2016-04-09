@@ -101,6 +101,7 @@ LightDescriptor
     float attenuation_exponential;
 
     int32_t shadowmap_asset_descriptor_id;
+    int32_t shadowmap_color_asset_descriptor_id;
     uint32_t shadowmap_matrix_id;
 };
 
@@ -116,6 +117,15 @@ render_entry_type_descriptors
 {
     render_entry_header header;
     LightDescriptors lights;
+};
+
+enum struct
+ShaderType
+{
+    standard,
+    variance_shadow_map,
+
+    MAX = variance_shadow_map,
 };
 
 struct
@@ -149,6 +159,7 @@ struct MeshFromAssetFlags
 {
     unsigned int attach_shadowmap:1;
     unsigned int cull_front:1;
+    unsigned int attach_shadowmap_color:1;
 };
 
 struct
@@ -161,7 +172,7 @@ render_entry_type_mesh_from_asset
     int32_t texture_asset_descriptor_id;
     int32_t lights_mask;
     MeshFromAssetFlags flags;
-
+    ShaderType shader_type;
 };
 
 struct FramebufferFlags
@@ -170,6 +181,7 @@ struct FramebufferFlags
     unsigned int frame_initialized:1;
     unsigned int no_color_buffer:1;
     unsigned int use_depth_texture:1;
+    unsigned int use_rg32f_buffer:1;
 };
 
 struct
@@ -509,7 +521,7 @@ PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_ma
 }
 
 inline void
-PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask, MeshFromAssetFlags flags)
+PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask, MeshFromAssetFlags flags, ShaderType shader_type)
 {
      render_entry_type_mesh_from_asset *entry = PushRenderElement(list, mesh_from_asset);
      if (entry)
@@ -520,6 +532,7 @@ PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
          entry->lights_mask = lights_mask;
          entry->flags = flags;
+         entry->shader_type = shader_type;
      }
 }
 

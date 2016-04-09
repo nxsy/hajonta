@@ -27,6 +27,7 @@ extern "C" {
 #include "hajonta/programs/imgui.h"
 #include "hajonta/programs/ui2d.h"
 #include "hajonta/programs/phong_no_normal_map.h"
+#include "hajonta/programs/variance_shadow_map.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -161,6 +162,7 @@ struct renderer_state
 
     imgui_program_struct imgui_program;
     phong_no_normal_map_program_struct phong_no_normal_map_program;
+    variance_shadow_map_program_struct variance_shadow_map_program;
     uint32_t vbo;
     uint32_t ibo;
     uint32_t QUADS_ibo;
@@ -171,6 +173,8 @@ struct renderer_state
     int32_t tex_id;
     int32_t phong_no_normal_map_tex_id;
     int32_t phong_no_normal_map_shadowmap_tex_id;
+    int32_t phong_no_normal_map_shadowmap_color_tex_id;
+    int32_t variance_shadow_map_tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
 
@@ -554,7 +558,14 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         phong_no_normal_map_program(program, ctx, memory);
         state->phong_no_normal_map_tex_id = glGetUniformLocation(program->program, "tex");
         state->phong_no_normal_map_shadowmap_tex_id = glGetUniformLocation(program->program, "shadowmap_tex");
+        state->phong_no_normal_map_shadowmap_color_tex_id = glGetUniformLocation(program->program, "shadowmap_color_tex");
         glGenBuffers(1, &state->mesh_normals_vbo);
+    }
+
+    {
+        variance_shadow_map_program_struct *program = &state->variance_shadow_map_program;
+        variance_shadow_map_program(program, ctx, memory);
+        state->variance_shadow_map_tex_id = glGetUniformLocation(program->program, "tex");
     }
 
     return true;
@@ -1289,27 +1300,61 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
     auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
 
-    auto &program = state->phong_no_normal_map_program;
-    glUseProgram(program.program);
-    glUniform1i(state->phong_no_normal_map_tex_id, 0);
-    glUniform1i(state->phong_no_normal_map_shadowmap_tex_id, 1);
-    glUniformMatrix4fv(state->phong_no_normal_map_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-    glUniformMatrix4fv(state->phong_no_normal_map_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-    glUniformMatrix4fv(state->phong_no_normal_map_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
-    glEnableVertexAttribArray((GLuint)program.a_position_id);
-    glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
-    glEnableVertexAttribArray((GLuint)program.a_normal_id);
-    glErrorAssert();
+    int32_t a_position_id = -1;
+    int32_t a_texcoord_id = -1;
+    int32_t a_normal_id = -1;
 
-    glUniform1i(
-        state->phong_no_normal_map_program.u_lightspace_available_id, 0);
+    switch (mesh_from_asset->shader_type)
+    {
+        case ShaderType::standard:
+        {
+            auto &program = state->phong_no_normal_map_program;
+            glUseProgram(program.program);
+            glUniform1i(state->phong_no_normal_map_tex_id, 0);
+            glUniform1i(state->phong_no_normal_map_shadowmap_tex_id, 1);
+            glUniform1i(state->phong_no_normal_map_shadowmap_color_tex_id, 2);
+            glUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+
+            glEnableVertexAttribArray((GLuint)program.a_position_id);
+            glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
+            glEnableVertexAttribArray((GLuint)program.a_normal_id);
+            glErrorAssert();
+
+            glUniform1i(
+                state->phong_no_normal_map_program.u_lightspace_available_id, 0);
+            glErrorAssert();
+
+            a_position_id = program.a_position_id;
+            a_texcoord_id = program.a_texcoord_id;
+            a_normal_id = program.a_normal_id;
+        } break;
+        case ShaderType::variance_shadow_map:
+        {
+            auto &program = state->variance_shadow_map_program;
+            glUseProgram(program.program);
+            glUniform1i(state->variance_shadow_map_tex_id, 0);
+            glUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&projection);
+            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+
+            glEnableVertexAttribArray((GLuint)program.a_position_id);
+            glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
+            glErrorAssert();
+
+            a_position_id = program.a_position_id;
+            a_texcoord_id = program.a_texcoord_id;
+        } break;
+    }
 
     uint32_t shadowmap_texture = 0;
 
     if (mesh_from_asset->lights_mask == 1)
     {
         auto &light = light_descriptors[0];
+        auto &program = state->phong_no_normal_map_program;
 
         v4 position_or_direction;
 
@@ -1329,46 +1374,6 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             } break;
         }
 
-        if (mesh_from_asset->flags.cull_front)
-        {
-            glCullFace(GL_FRONT);
-        }
-        else
-        {
-            glCullFace(GL_BACK);
-        }
-
-        if (mesh_from_asset->flags.attach_shadowmap)
-        {
-            glActiveTexture(GL_TEXTURE0 + 1);
-            get_texture_id_from_asset_descriptor(
-                ctx, memory, state, descriptors,
-                light.shadowmap_asset_descriptor_id,
-                &shadowmap_texture, &st0, &st1);
-            glBindTexture(GL_TEXTURE_2D, shadowmap_texture);
-            glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-            glActiveTexture(GL_TEXTURE0);
-
-            m4 shadowmap_matrix = matrices[light.shadowmap_matrix_id];
-            glUniformMatrix4fv(state->phong_no_normal_map_program.u_lightspace_matrix_id, 1, GL_FALSE, (float *)&shadowmap_matrix);
-
-            glUniform1i(
-                state->phong_no_normal_map_program.u_lightspace_available_id, 1);
-            glUniform1i(
-                state->phong_no_normal_map_program.u_shadow_mode_id, state->shadow_mode);
-            glUniform1i(
-                state->phong_no_normal_map_program.u_poisson_spread_id, state->poisson_spread);
-            glUniform1f(
-                state->phong_no_normal_map_program.u_bias_id, state->shadowmap_bias);
-            glUniform1i(
-                state->phong_no_normal_map_program.u_pcf_distance_id, state->pcf_distance);
-            glUniform1i(
-                state->phong_no_normal_map_program.u_poisson_samples_id, state->poisson_samples);
-            glUniform1f(
-                state->phong_no_normal_map_program.u_poisson_position_granularity_id, state->poisson_position_granularity);
-            glUniformMatrix4fv(state->phong_no_normal_map_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-        }
         glUniform4fv(
             glGetUniformLocation(program.program, "light.position_or_direction"), 1,
             (float *)&position_or_direction.x);
@@ -1381,6 +1386,57 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
         glUniform1f(
             glGetUniformLocation(program.program, "light.diffuse_intensity"),
             light.diffuse_intensity);
+        glErrorAssert();
+    }
+
+    if (mesh_from_asset->flags.cull_front)
+    {
+        glCullFace(GL_FRONT);
+    }
+    else
+    {
+        glCullFace(GL_BACK);
+    }
+
+    if (mesh_from_asset->flags.attach_shadowmap)
+    {
+        auto &light = light_descriptors[0];
+        glActiveTexture(GL_TEXTURE0 + 1);
+        get_texture_id_from_asset_descriptor(
+            ctx, memory, state, descriptors,
+            light.shadowmap_asset_descriptor_id,
+            &shadowmap_texture, &st0, &st1);
+        glBindTexture(GL_TEXTURE_2D, shadowmap_texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        glActiveTexture(GL_TEXTURE0);
+
+        if (mesh_from_asset->flags.attach_shadowmap_color)
+        {
+            uint32_t shadowmap_color_texture = 0;
+            glActiveTexture(GL_TEXTURE0 + 2);
+            get_texture_id_from_asset_descriptor(
+                ctx, memory, state, descriptors,
+                light.shadowmap_color_asset_descriptor_id,
+                &shadowmap_color_texture, &st0, &st1);
+            glBindTexture(GL_TEXTURE_2D, shadowmap_color_texture);
+            glActiveTexture(GL_TEXTURE0);
+        }
+
+        m4 shadowmap_matrix = matrices[light.shadowmap_matrix_id];
+
+        auto &program = state->phong_no_normal_map_program;
+
+        glUniformMatrix4fv(program.u_lightspace_matrix_id, 1, GL_FALSE, (float *)&shadowmap_matrix);
+
+        glUniform1i(program.u_lightspace_available_id, 1);
+        glUniform1i(program.u_shadow_mode_id, state->shadow_mode);
+        glUniform1i(program.u_poisson_spread_id, state->poisson_spread);
+        glUniform1f(program.u_bias_id, state->shadowmap_bias);
+        glUniform1i(program.u_pcf_distance_id, state->pcf_distance);
+        glUniform1i(program.u_poisson_samples_id, state->poisson_samples);
+        glUniform1f(program.u_poisson_position_granularity_id, state->poisson_position_granularity);
+        glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     }
 
     glBindVertexArray(state->vao);
@@ -1390,7 +1446,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             mesh.vertices.size,
             mesh.vertices.data,
             GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint)state->phong_no_normal_map_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer((GLuint)a_position_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glErrorAssert();
 
     glBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
@@ -1398,16 +1454,19 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             mesh.uvs.size,
             mesh.uvs.data,
             GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint)state->phong_no_normal_map_program.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer((GLuint)a_texcoord_id, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glErrorAssert();
 
-    glBindBuffer(GL_ARRAY_BUFFER, state->mesh_normals_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-            mesh.normals.size,
-            mesh.normals.data,
-            GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint)state->phong_no_normal_map_program.a_normal_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glErrorAssert();
+    if (a_normal_id >= 0)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, state->mesh_normals_vbo);
+        glBufferData(GL_ARRAY_BUFFER,
+                mesh.normals.size,
+                mesh.normals.data,
+                GL_STATIC_DRAW);
+        glVertexAttribPointer((GLuint)a_normal_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glErrorAssert();
+    }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
@@ -1514,7 +1573,14 @@ extern "C" RENDERER_RENDER(renderer_render)
                     glBindTexture(GL_TEXTURE_2D, framebuffer->_texture);
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                    if (framebuffer->_flags.use_rg32f_buffer)
+                    {
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                    }
+                    else
+                    {
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                    }
 
                     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -1667,6 +1733,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         "static poisson",
         "random poisson",
         "pcf",
+        "vsm_color",
     };
     ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
     ImGui::DragInt("Poisson spread", &state->poisson_spread);

@@ -2,6 +2,7 @@
 
 uniform sampler2D tex;
 uniform sampler2DShadow shadowmap_tex;
+uniform sampler2D shadowmap_color_tex;
 
 uniform int u_lightspace_available;
 uniform int u_shadow_mode;
@@ -150,26 +151,38 @@ void main()
     {
         switch (u_shadow_mode)
         {
-            case 0: break;
+            case 0:
+            {
+                o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
+            } break;
             case 1:
             {
                 visibility = shadow_visibility(v_l_position, w_normal, w_surface_to_light_direction);
+                o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
             } break;
             case 2:
             {
                 visibility = shadow_visibility_poisson(v_l_position, w_normal, w_surface_to_light_direction);
+                o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
             } break;
             case 3:
             {
                 visibility = shadow_visibility_poisson_random(v_l_position, w_normal, w_surface_to_light_direction);
+                o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
             } break;
             case 4:
             {
                 visibility = shadow_visibility_pcf(v_l_position, w_normal, w_surface_to_light_direction);
+                o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
+            } break;
+            case 5:
+            {
+                vec3 lightspace_coords = v_l_position.xyz / v_l_position.w;
+                lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
+                o_color = texture(shadowmap_color_tex, lightspace_coords.xy);
             } break;
         }
     }
-    o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
     o_color.a = material_color.a;
     if (o_color.a < 0.001)
     {

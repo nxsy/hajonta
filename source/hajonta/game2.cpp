@@ -76,6 +76,7 @@ _asset_ids
     int32_t kitchen_texture;
     int32_t framebuffer;
     int32_t shadowmap_framebuffer;
+    int32_t shadowmap_framebuffer_color;
     int32_t nature_pack_tree_mesh;
     int32_t nature_pack_tree_texture;
     int32_t another_ground_0;
@@ -1607,6 +1608,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         memory->initialized = 1;
         state->asset_ids.framebuffer = add_framebuffer_asset(state, &state->framebuffer);
+        state->asset_ids.shadowmap_framebuffer_color = add_framebuffer_asset(state, &state->shadowmap_framebuffer);
         state->asset_ids.shadowmap_framebuffer = add_framebuffer_depth_asset(state, &state->shadowmap_framebuffer);
         state->asset_ids.mouse_cursor = add_asset(state, "mouse_cursor");
         state->asset_ids.sea_0 = add_asset(state, "sea_0");
@@ -1660,6 +1662,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->three_dee_renderer.list.framebuffer = &state->framebuffer;
         //state->shadowmap_framebuffer._flags.no_color_buffer = 1;
         state->shadowmap_framebuffer._flags.use_depth_texture = 1;
+        state->shadowmap_framebuffer._flags.use_rg32f_buffer = 1;
         state->shadowmap_renderer.list.framebuffer = &state->shadowmap_framebuffer;
         state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
@@ -2106,9 +2109,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     MeshFromAssetFlags mesh_flags = {};
-    PushMeshFromAsset(&state->main_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::chest_model_matrix, state->asset_ids.cactus_mesh, state->asset_ids.cactus_texture, 1, mesh_flags);
+    PushMeshFromAsset(
+        &state->main_renderer.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::chest_model_matrix,
+        state->asset_ids.cactus_mesh,
+        state->asset_ids.cactus_texture,
+        1,
+        mesh_flags,
+        ShaderType::standard
+    );
 
-    m4 shadowmap_projection_matrix = m4orthographicprojection(0.0f, 20.0f, {-ratio * 5.0f, -5.0f}, {ratio * 5.0f, 5.0f});
+    m4 shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f, {-ratio * 5.0f, -5.0f}, {ratio * 5.0f, 5.0f});
 
     m4 shadowmap_view_matrix;
     {
@@ -2126,8 +2138,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     auto &light = state->lights[(uint32_t)LightIds::sun];
     light.shadowmap_matrix_id = (uint32_t)matrix_ids::light_projection_matrix;
     light.shadowmap_asset_descriptor_id = state->asset_ids.shadowmap_framebuffer;
+    light.shadowmap_color_asset_descriptor_id = state->asset_ids.shadowmap_framebuffer_color;
 
-    PushClear(&state->shadowmap_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
+    PushClear(&state->shadowmap_renderer.list, {1.0f, 1.0f, 0.0f, 1.0f});
     PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
     PushClear(&state->framebuffer_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
 
@@ -2135,11 +2148,48 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     shadowmap_mesh_flags.cull_front = 1;
     MeshFromAssetFlags three_dee_mesh_flags = {};
     three_dee_mesh_flags.attach_shadowmap = 1;
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, three_dee_mesh_flags);
-    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::tree_model_matrix, state->asset_ids.nature_pack_tree_mesh, state->asset_ids.nature_pack_tree_texture, 1, shadowmap_mesh_flags);
+    three_dee_mesh_flags.attach_shadowmap_color = 1;
 
-    PushMeshFromAsset(&state->three_dee_renderer.list, (uint32_t)matrix_ids::mesh_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.cube_mesh, state->asset_ids.cube_texture, 1, three_dee_mesh_flags);
-    PushMeshFromAsset(&state->shadowmap_renderer.list, (uint32_t)matrix_ids::light_projection_matrix, (uint32_t)matrix_ids::plane_model_matrix, state->asset_ids.cube_mesh, state->asset_ids.cube_texture, 1, shadowmap_mesh_flags);
+    PushMeshFromAsset(
+        &state->three_dee_renderer.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::tree_model_matrix,
+        state->asset_ids.nature_pack_tree_mesh,
+        state->asset_ids.nature_pack_tree_texture,
+        1,
+        three_dee_mesh_flags,
+        ShaderType::standard
+    );
+
+    PushMeshFromAsset(
+        &state->shadowmap_renderer.list,
+        (uint32_t)matrix_ids::light_projection_matrix,
+        (uint32_t)matrix_ids::tree_model_matrix,
+        state->asset_ids.nature_pack_tree_mesh,
+        state->asset_ids.nature_pack_tree_texture,
+        0,
+        shadowmap_mesh_flags,
+        ShaderType::variance_shadow_map
+    );
+
+    PushMeshFromAsset(&state->three_dee_renderer.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::plane_model_matrix,
+        state->asset_ids.cube_mesh,
+        state->asset_ids.cube_texture,
+        1,
+        three_dee_mesh_flags,
+        ShaderType::standard
+    );
+    PushMeshFromAsset(&state->shadowmap_renderer.list,
+        (uint32_t)matrix_ids::light_projection_matrix,
+        (uint32_t)matrix_ids::plane_model_matrix,
+        state->asset_ids.cube_mesh,
+        state->asset_ids.cube_texture,
+        0,
+        shadowmap_mesh_flags,
+        ShaderType::variance_shadow_map
+    );
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
