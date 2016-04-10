@@ -1677,7 +1677,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->shadowmap_framebuffer._flags.use_rg32f_buffer = 1;
         state->shadowmap_renderer.list.framebuffer = &state->shadowmap_framebuffer;
         state->blur_x_framebuffer_renderer.list.framebuffer = &state->blur_x_framebuffer;
+        state->blur_x_framebuffer._flags.use_rg32f_buffer = 1;
         state->blur_xy_framebuffer_renderer.list.framebuffer = &state->blur_xy_framebuffer;
+        state->blur_xy_framebuffer._flags.use_rg32f_buffer = 1;
         state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
 
@@ -1721,9 +1723,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     FramebufferReset(&state->blur_x_framebuffer);
     FramebufferReset(&state->blur_xy_framebuffer);
     state->framebuffer.size = {input->window.width, input->window.height};
-    state->shadowmap_framebuffer.size = {512, 512};
-    state->blur_x_framebuffer.size = {512, 512};
-    state->blur_xy_framebuffer.size = {512, 512};
+    state->shadowmap_framebuffer.size = {4096, 4096};
+    state->blur_x_framebuffer.size = {4096, 4096};
+    state->blur_xy_framebuffer.size = {4096, 4096};
 
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
@@ -2187,8 +2189,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::tree_model_matrix,
-        state->asset_ids.nature_pack_tree_mesh,
-        state->asset_ids.nature_pack_tree_texture,
+        state->asset_ids.tree_mesh,
+        state->asset_ids.tree_texture,
         1,
         three_dee_mesh_flags,
         ShaderType::standard
@@ -2198,8 +2200,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
         (uint32_t)matrix_ids::tree_model_matrix,
-        state->asset_ids.nature_pack_tree_mesh,
-        state->asset_ids.nature_pack_tree_texture,
+        state->asset_ids.tree_mesh,
+        state->asset_ids.tree_texture,
         0,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map

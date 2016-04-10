@@ -221,6 +221,9 @@ struct renderer_state
     int32_t pcf_distance;
     int32_t poisson_samples;
     float poisson_position_granularity;
+    float vsm_minimum_variance;
+    float vsm_lightbleed_compensation;
+    float blur_scale_divisor;
 
     m4 m4identity;
 
@@ -813,6 +816,9 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->pcf_distance = 1;
         state->poisson_samples = 4;
         state->poisson_position_granularity = 1000.0f;
+        state->vsm_minimum_variance = 0.0000002f;
+        state->vsm_lightbleed_compensation = 0.001f;
+        state->blur_scale_divisor = 4096.0f;
     }
 
     _GlobalRendererState.input = input;
@@ -1445,6 +1451,8 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
         glUniform1i(program.u_pcf_distance_id, state->pcf_distance);
         glUniform1i(program.u_poisson_samples_id, state->poisson_samples);
         glUniform1f(program.u_poisson_position_granularity_id, state->poisson_position_granularity);
+        glUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
+        glUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
         glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     }
 
@@ -1554,10 +1562,10 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             a_position_id = program.a_position_id;
             a_texcoord_id = program.a_texcoord_id;
-            v2 blur_scale = { 1.0f / 512.0f, 0 };
+            v2 blur_scale = { 1.0f / state->blur_scale_divisor, 0 };
             if (filter->type == ApplyFilterType::gaussian_7x1_y)
             {
-                blur_scale = { 0, 1.0f / 512.0f };
+                blur_scale = { 0, 1.0f / state->blur_scale_divisor };
             }
             glUniform2fv(program.u_blur_scale_id, 1, (float *)&blur_scale);
         } break;
@@ -1848,13 +1856,17 @@ extern "C" RENDERER_RENDER(renderer_render)
         "random poisson",
         "pcf",
         "vsm_color",
+        "vsm",
     };
     ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
     ImGui::DragInt("Poisson spread", &state->poisson_spread);
-    ImGui::DragFloat("Shadowmap bias", &state->shadowmap_bias, 0.00001f, -0.1f, 0.1f);
+    ImGui::DragFloat("Shadowmap bias", &state->shadowmap_bias, 0.00001f, -0.1f, 0.1f, "%.9f");
     ImGui::DragInt("PCF distance", &state->pcf_distance);
     ImGui::DragInt("Poisson Samples", &state->poisson_samples);
     ImGui::DragFloat("Poisson Position Granularity", &state->poisson_position_granularity);
+    ImGui::DragFloat("VSM Minimum Variance", &state->vsm_minimum_variance, 0.0000001f, 0.0f, 0.002f, "%.9f");
+    ImGui::DragFloat("VSM Lightbleed Compensation", &state->vsm_lightbleed_compensation, 0.001f, 0.0f, 0.5f, "%.9f");
+    ImGui::DragFloat("Blur Scale Divisor", &state->blur_scale_divisor, 1.0f, 1.0f, 8192.0f);
 
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();

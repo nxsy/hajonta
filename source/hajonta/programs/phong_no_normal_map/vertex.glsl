@@ -12,6 +12,8 @@ uniform float u_bias;
 uniform int u_pcf_distance;
 uniform int u_poisson_samples;
 uniform float u_poisson_position_granularity;
+uniform float u_minimum_variance;
+uniform float u_lightbleed_compensation;
 
 in vec3 a_position;
 in vec2 a_texcoord;

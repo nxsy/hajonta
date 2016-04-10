@@ -11,6 +11,8 @@ uniform float u_bias;
 uniform int u_pcf_distance;
 uniform int u_poisson_samples;
 uniform float u_poisson_position_granularity;
+uniform float u_minimum_variance;
+uniform float u_lightbleed_compensation;
 
 struct Light {
     vec4 position_or_direction;
@@ -52,6 +54,35 @@ vec2 poissonDisk[16] = vec2[](
    vec2( 0.14383161,-0.14100790)
 );
 
+float linstep(float low, float high, float v)
+{
+    return clamp((v-low)/(high-low), 0.0, 1.0);
+}
+
+float shadow_visibility_vsm(vec4 lightspace_position, vec3 normal, vec3 light_dir)
+{
+    vec3 lightspace_coords = lightspace_position.xyz / lightspace_position.w;
+    lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
+    vec2 moments = texture(shadowmap_color_tex, lightspace_coords.xy).xy;
+    float moment1 = moments.r;
+    float moment2 = moments.g;
+
+    float variance = max(moment2 - moment1 * moment1, u_minimum_variance);
+    float fragment_depth = lightspace_coords.z + u_bias;
+    float diff = fragment_depth - moment1;
+    if(diff > 0.0)
+    {
+        float visibility = variance / (variance + diff * diff);
+        visibility = linstep(u_lightbleed_compensation, 1.0f, visibility);
+        visibility = clamp(visibility, 0.0f, 1.0f);
+        return visibility;
+    }
+    else
+    {
+        return 1.0;
+    }
+}
+
 float shadow_visibility(vec4 lightspace_position, vec3 normal, vec3 light_dir)
 {
     vec3 lightspace_coords = lightspace_position.xyz / lightspace_position.w;
@@ -65,8 +96,8 @@ float shadow_visibility_pcf(vec4 lightspace_position, vec3 normal, vec3 light_di
     vec3 lightspace_coords = lightspace_position.xyz / lightspace_position.w;
     lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
 
-    float x_offset = 1.0 / 512.0f;
-    float y_offset = 1.0 / 512.0f;
+    float x_offset = 1.0 / 4096.0f;
+    float y_offset = 1.0 / 4096.0f;
 
     float accumulator = 0.0;
     float weight_accumulator = 0.0f;
@@ -180,6 +211,11 @@ void main()
                 vec3 lightspace_coords = v_l_position.xyz / v_l_position.w;
                 lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
                 o_color = texture(shadowmap_color_tex, lightspace_coords.xy);
+            } break;
+            case 6:
+            {
+                visibility = shadow_visibility_vsm(v_l_position, w_normal, w_surface_to_light_direction);
+                o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
             } break;
         }
     }
