@@ -77,6 +77,8 @@ _asset_ids
     int32_t framebuffer;
     int32_t shadowmap_framebuffer;
     int32_t shadowmap_framebuffer_color;
+    int32_t blur_x_framebuffer;
+    int32_t blur_xy_framebuffer;
     int32_t nature_pack_tree_mesh;
     int32_t nature_pack_tree_texture;
     int32_t another_ground_0;
@@ -198,6 +200,7 @@ debug_state
         bool single_step;
     } familiar_path;
     bool show_lights;
+    bool show_textures;
 };
 
 enum struct
@@ -365,9 +368,13 @@ struct game_state
     _render_list<4*1024*1024> three_dee_renderer;
     _render_list<4*1024*1024> shadowmap_renderer;
     _render_list<4*1024*1024> framebuffer_renderer;
+    _render_list<1024*1024> blur_x_framebuffer_renderer;
+    _render_list<1024*1024> blur_xy_framebuffer_renderer;
 
     FramebufferDescriptor framebuffer;
     FramebufferDescriptor shadowmap_framebuffer;
+    FramebufferDescriptor blur_x_framebuffer;
+    FramebufferDescriptor blur_xy_framebuffer;
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
@@ -1093,6 +1100,7 @@ show_debug_main_menu(game_state *state)
                 ImGui::EndMenu();
             }
             ImGui::MenuItem("Show lights", "", &state->debug.show_lights);
+            ImGui::MenuItem("Show textures", "", &state->debug.show_textures);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -1608,6 +1616,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         memory->initialized = 1;
         state->asset_ids.framebuffer = add_framebuffer_asset(state, &state->framebuffer);
+        state->asset_ids.blur_x_framebuffer = add_framebuffer_asset(state, &state->blur_x_framebuffer);
+        state->asset_ids.blur_xy_framebuffer = add_framebuffer_asset(state, &state->blur_xy_framebuffer);
         state->asset_ids.shadowmap_framebuffer_color = add_framebuffer_asset(state, &state->shadowmap_framebuffer);
         state->asset_ids.shadowmap_framebuffer = add_framebuffer_depth_asset(state, &state->shadowmap_framebuffer);
         state->asset_ids.mouse_cursor = add_asset(state, "mouse_cursor");
@@ -1659,11 +1669,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         RenderListBuffer(state->three_dee_renderer.list, state->three_dee_renderer.buffer);
         RenderListBuffer(state->shadowmap_renderer.list, state->shadowmap_renderer.buffer);
         RenderListBuffer(state->framebuffer_renderer.list, state->framebuffer_renderer.buffer);
+        RenderListBuffer(state->blur_x_framebuffer_renderer.list, state->blur_x_framebuffer_renderer.buffer);
+        RenderListBuffer(state->blur_xy_framebuffer_renderer.list, state->blur_xy_framebuffer_renderer.buffer);
         state->three_dee_renderer.list.framebuffer = &state->framebuffer;
         //state->shadowmap_framebuffer._flags.no_color_buffer = 1;
         state->shadowmap_framebuffer._flags.use_depth_texture = 1;
         state->shadowmap_framebuffer._flags.use_rg32f_buffer = 1;
         state->shadowmap_renderer.list.framebuffer = &state->shadowmap_framebuffer;
+        state->blur_x_framebuffer_renderer.list.framebuffer = &state->blur_x_framebuffer;
+        state->blur_xy_framebuffer_renderer.list.framebuffer = &state->blur_xy_framebuffer;
         state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
 
@@ -1690,6 +1704,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         light.ambient_intensity = 0.2f;
         light.diffuse_intensity = 1.0f;
         light.attenuation_constant = 1.0f;
+
+        state->debug.show_textures = 1;
+        state->debug.show_lights = 1;
     }
 
     RenderListReset(&state->main_renderer.list);
@@ -1697,9 +1714,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     RenderListReset(&state->three_dee_renderer.list);
     RenderListReset(&state->shadowmap_renderer.list);
     RenderListReset(&state->framebuffer_renderer.list);
+    RenderListReset(&state->blur_x_framebuffer_renderer.list);
+    RenderListReset(&state->blur_xy_framebuffer_renderer.list);
     FramebufferReset(&state->framebuffer);
+    FramebufferReset(&state->shadowmap_framebuffer);
+    FramebufferReset(&state->blur_x_framebuffer);
+    FramebufferReset(&state->blur_xy_framebuffer);
     state->framebuffer.size = {input->window.width, input->window.height};
-    state->shadowmap_framebuffer.size = {4096, 4096};
+    state->shadowmap_framebuffer.size = {512, 512};
+    state->blur_x_framebuffer.size = {512, 512};
+    state->blur_xy_framebuffer.size = {512, 512};
 
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
@@ -1804,11 +1828,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMatrices(&state->three_dee_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->shadowmap_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->blur_x_framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->blur_xy_framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
+
     PushAssetDescriptors(&state->main_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->debug_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->three_dee_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->shadowmap_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->framebuffer_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->blur_x_framebuffer_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->blur_xy_framebuffer_renderer.list, harray_count(state->assets), state->assets);
 
     LightDescriptors l = {harray_count(state->lights), state->lights};
     PushDescriptors(&state->main_renderer.list, l);
@@ -1816,6 +1845,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushDescriptors(&state->three_dee_renderer.list, l);
     PushDescriptors(&state->shadowmap_renderer.list, l);
     PushDescriptors(&state->framebuffer_renderer.list, l);
+    PushDescriptors(&state->blur_x_framebuffer_renderer.list, l);
+    PushDescriptors(&state->blur_xy_framebuffer_renderer.list, l);
 
     int32_t previous_demo = state->active_demo;
     for (int32_t i = 0; i < harray_count(demoes); ++i)
@@ -2138,11 +2169,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     auto &light = state->lights[(uint32_t)LightIds::sun];
     light.shadowmap_matrix_id = (uint32_t)matrix_ids::light_projection_matrix;
     light.shadowmap_asset_descriptor_id = state->asset_ids.shadowmap_framebuffer;
-    light.shadowmap_color_asset_descriptor_id = state->asset_ids.shadowmap_framebuffer_color;
+    light.shadowmap_color_asset_descriptor_id = state->asset_ids.blur_xy_framebuffer;
 
     PushClear(&state->shadowmap_renderer.list, {1.0f, 1.0f, 0.0f, 1.0f});
     PushClear(&state->three_dee_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
     PushClear(&state->framebuffer_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
+    PushClear(&state->blur_x_framebuffer_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
+    PushClear(&state->blur_xy_framebuffer_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
 
     MeshFromAssetFlags shadowmap_mesh_flags = {};
     shadowmap_mesh_flags.cull_front = 1;
@@ -2195,33 +2228,57 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->main_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
+    PushApplyFilter(&state->blur_x_framebuffer_renderer.list,
+        ApplyFilterType::gaussian_7x1_x, state->asset_ids.shadowmap_framebuffer_color);
+
+    PushApplyFilter(&state->blur_xy_framebuffer_renderer.list,
+        ApplyFilterType::gaussian_7x1_y, state->asset_ids.blur_x_framebuffer);
+
     //AddRenderList(memory, &state->main_renderer.list);
     if (state->debug.rendering)
     {
         AddRenderList(memory, &state->debug_renderer.list);
     }
     AddRenderList(memory, &state->shadowmap_renderer.list);
+    AddRenderList(memory, &state->blur_x_framebuffer_renderer.list);
+    AddRenderList(memory, &state->blur_xy_framebuffer_renderer.list);
     AddRenderList(memory, &state->three_dee_renderer.list);
 
     PushQuad(&state->framebuffer_renderer.list, {0,0}, {(float)input->window.width, (float)input->window.height}, {1,1,1,1}, 0, state->asset_ids.framebuffer);
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
     AddRenderList(memory, &state->framebuffer_renderer.list);
 
-    ImGui::Image(
-        (void *)(intptr_t)state->framebuffer._texture,
-        {512, 512.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
-        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
-    );
+    if (state->debug.show_textures) {
+        ImGui::Begin("Textures", &state->debug.show_textures);
 
-    ImGui::Image(
-        (void *)(intptr_t)state->shadowmap_framebuffer._texture,
-        {512, 512.0f * (float)state->shadowmap_framebuffer.size.y / (float)state->shadowmap_framebuffer.size.x},
-        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
-    );
-    ImGui::SameLine();
-    ImGui::Image(
-        (void *)(intptr_t)state->shadowmap_framebuffer._renderbuffer,
-        {512, 512.0f * (float)state->shadowmap_framebuffer.size.y / (float)state->shadowmap_framebuffer.size.x},
-        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
-    );
+        ImGui::Image(
+            (void *)(intptr_t)state->framebuffer._texture,
+            {256, 256.0f * (float)state->framebuffer.size.y / (float)state->framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+
+        ImGui::Image(
+            (void *)(intptr_t)state->shadowmap_framebuffer._texture,
+            {256, 256.0f * (float)state->shadowmap_framebuffer.size.y / (float)state->shadowmap_framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+        ImGui::SameLine();
+        ImGui::Image(
+            (void *)(intptr_t)state->shadowmap_framebuffer._renderbuffer,
+            {256, 256.0f * (float)state->shadowmap_framebuffer.size.y / (float)state->shadowmap_framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+        ImGui::Image(
+            (void *)(intptr_t)state->blur_x_framebuffer._texture,
+            {256, 256.0f * (float)state->blur_x_framebuffer.size.y / (float)state->blur_x_framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+        ImGui::SameLine();
+        ImGui::Image(
+            (void *)(intptr_t)state->blur_xy_framebuffer._texture,
+            {256, 256.0f * (float)state->blur_xy_framebuffer.size.y / (float)state->blur_xy_framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+        ImGui::End();
+    }
 }

@@ -16,6 +16,8 @@ render_entry_type
     QUADS,
     QUADS_lookup,
 
+    apply_filter,
+
     mesh,
     mesh_from_asset,
 
@@ -173,6 +175,24 @@ render_entry_type_mesh_from_asset
     int32_t lights_mask;
     MeshFromAssetFlags flags;
     ShaderType shader_type;
+};
+
+enum struct
+ApplyFilterType
+{
+    none,
+    gaussian_7x1_x,
+    gaussian_7x1_y,
+
+    MAX = gaussian_7x1_y,
+};
+
+struct
+render_entry_type_apply_filter
+{
+    render_entry_header header;
+    ApplyFilterType type;
+    int32_t source_asset_descriptor_id;
 };
 
 struct FramebufferFlags
@@ -534,6 +554,17 @@ PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t
          entry->flags = flags;
          entry->shader_type = shader_type;
      }
+}
+
+inline void
+PushApplyFilter(render_entry_list *list, ApplyFilterType type, int32_t source_asset_descriptor_id)
+{
+    render_entry_type_apply_filter *entry = PushRenderElement(list, apply_filter);
+    if (entry)
+    {
+       entry->type = type;
+       entry->source_asset_descriptor_id = source_asset_descriptor_id;
+    }
 }
 
 inline void

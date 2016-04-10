@@ -28,6 +28,7 @@ extern "C" {
 #include "hajonta/programs/ui2d.h"
 #include "hajonta/programs/phong_no_normal_map.h"
 #include "hajonta/programs/variance_shadow_map.h"
+#include "hajonta/programs/filters/filter_gaussian_7x1.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -163,6 +164,7 @@ struct renderer_state
     imgui_program_struct imgui_program;
     phong_no_normal_map_program_struct phong_no_normal_map_program;
     variance_shadow_map_program_struct variance_shadow_map_program;
+    filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
     uint32_t vbo;
     uint32_t ibo;
     uint32_t QUADS_ibo;
@@ -175,6 +177,7 @@ struct renderer_state
     int32_t phong_no_normal_map_shadowmap_tex_id;
     int32_t phong_no_normal_map_shadowmap_color_tex_id;
     int32_t variance_shadow_map_tex_id;
+    int32_t filter_gaussian_7x1_tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
 
@@ -566,6 +569,12 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         variance_shadow_map_program_struct *program = &state->variance_shadow_map_program;
         variance_shadow_map_program(program, ctx, memory);
         state->variance_shadow_map_tex_id = glGetUniformLocation(program->program, "tex");
+    }
+
+    {
+        filter_gaussian_7x1_program_struct *program = &state->filter_gaussian_7x1_program;
+        filter_gaussian_7x1_program(program, ctx, memory);
+        state->filter_gaussian_7x1_tex_id = glGetUniformLocation(program->program, "tex");
     }
 
     return true;
@@ -1517,6 +1526,106 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     glErrorAssert();
 }
 
+void
+apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, asset_descriptor *descriptors, render_entry_type_apply_filter *filter)
+{
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    int32_t a_position_id = 0;
+    int32_t a_texcoord_id = 0;
+
+    switch (filter->type)
+    {
+        case ApplyFilterType::none:
+        {
+            auto &program = state->filter_gaussian_7x1_program;
+            glUseProgram(program.program);
+            glUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+        } break;
+        case ApplyFilterType::gaussian_7x1_x:
+        case ApplyFilterType::gaussian_7x1_y:
+        {
+            auto &program = state->filter_gaussian_7x1_program;
+            glUseProgram(program.program);
+            glUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            a_position_id = program.a_position_id;
+            a_texcoord_id = program.a_texcoord_id;
+            v2 blur_scale = { 1.0f / 512.0f, 0 };
+            if (filter->type == ApplyFilterType::gaussian_7x1_y)
+            {
+                blur_scale = { 0, 1.0f / 512.0f };
+            }
+            glUniform2fv(program.u_blur_scale_id, 1, (float *)&blur_scale);
+        } break;
+    }
+
+    v2 st0 = {0, 0};
+    v2 st1 = {1, 1};
+    uint32_t texture;
+    get_texture_id_from_asset_descriptor(
+        ctx, memory, state, descriptors, filter->source_asset_descriptor_id,
+        &texture, &st0, &st1);
+
+    glErrorAssert();
+    glBindVertexArray(state->vao);
+    glErrorAssert();
+    glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    struct vertex_format
+    {
+        v3 pos;
+        v2 uv;
+    } vertices[] = {
+        {
+            {-1.0f,-1.0f },
+            { 0.0f, 0.0f },
+        },
+        {
+            { 1.0f,-1.0f },
+            { 1.0f, 0.0f },
+        },
+        {
+            { 1.0f, 1.0f },
+            { 1.0f, 1.0f },
+        },
+        {
+            {-1.0f, 1.0f },
+            { 0.0f, 1.0f },
+        },
+    };
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+    glVertexAttribPointer(
+            (GLuint)a_position_id, 3, GL_FLOAT, GL_FALSE,
+            sizeof(vertex_format), (void *)offsetof(vertex_format, pos));
+    glVertexAttribPointer((GLuint)a_texcoord_id, 2, GL_FLOAT, GL_FALSE,
+            sizeof(vertex_format), (void *)offsetof(vertex_format, uv));
+
+    uint32_t indices[] = {
+        0, 1, 2,
+        2, 3, 0,
+    };
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
+
+    glUniform1i(state->filter_gaussian_7x1_tex_id, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glErrorAssert();
+
+    glBindVertexArray(0);
+    glDisable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glEnable(GL_BLEND);
+    glErrorAssert();
+
+    return;
+}
+
 extern "C" RENDERER_RENDER(renderer_render)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -1582,8 +1691,8 @@ extern "C" RENDERER_RENDER(renderer_render)
                         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
                     }
 
-                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                 }
@@ -1705,6 +1814,11 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
                     draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, lights.descriptors, item);
+                } break;
+                case render_entry_type::apply_filter:
+                {
+                    ExtractRenderElementWithSize(apply_filter, item, header, element_size);
+                    apply_filter(ctx, memory, state, asset_descriptors, item);
                 } break;
                 default:
                 {

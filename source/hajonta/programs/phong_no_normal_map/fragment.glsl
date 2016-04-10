@@ -65,8 +65,8 @@ float shadow_visibility_pcf(vec4 lightspace_position, vec3 normal, vec3 light_di
     vec3 lightspace_coords = lightspace_position.xyz / lightspace_position.w;
     lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
 
-    float x_offset = 1.0 / 4096.0f;
-    float y_offset = 1.0 / 4096.0f;
+    float x_offset = 1.0 / 512.0f;
+    float y_offset = 1.0 / 512.0f;
 
     float accumulator = 0.0;
     float weight_accumulator = 0.0f;
