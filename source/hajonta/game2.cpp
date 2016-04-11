@@ -201,6 +201,7 @@ debug_state
     } familiar_path;
     bool show_lights;
     bool show_textures;
+    bool cull_front;
 };
 
 enum struct
@@ -1709,6 +1710,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         state->debug.show_textures = 1;
         state->debug.show_lights = 1;
+        state->debug.cull_front = 1;
     }
 
     RenderListReset(&state->main_renderer.list);
@@ -2180,7 +2182,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushClear(&state->blur_xy_framebuffer_renderer.list, {0.0f, 0.0f, 0.0f, 0.0f});
 
     MeshFromAssetFlags shadowmap_mesh_flags = {};
-    shadowmap_mesh_flags.cull_front = 1;
+    ImGui::Checkbox("Cull front", &state->debug.cull_front);
+    shadowmap_mesh_flags.cull_front = state->debug.cull_front ? (uint32_t)1 : (uint32_t)0;
     MeshFromAssetFlags three_dee_mesh_flags = {};
     three_dee_mesh_flags.attach_shadowmap = 1;
     three_dee_mesh_flags.attach_shadowmap_color = 1;

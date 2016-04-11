@@ -70,7 +70,7 @@ float shadow_visibility_vsm(vec4 lightspace_position, vec3 normal, vec3 light_di
     float variance = max(moment2 - moment1 * moment1, u_minimum_variance);
     float fragment_depth = lightspace_coords.z + u_bias;
     float diff = fragment_depth - moment1;
-    if(diff > 0.0)
+    if(diff > 0.0 && lightspace_coords.z > moment1)
     {
         float visibility = variance / (variance + diff * diff);
         visibility = linstep(u_lightbleed_compensation, 1.0f, visibility);
