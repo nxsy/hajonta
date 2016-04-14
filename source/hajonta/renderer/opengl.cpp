@@ -35,6 +35,9 @@ extern "C" {
 #include "hajonta/image.cpp"
 #include "hajonta/math.cpp"
 
+static platform_memory *_platform_memory;
+static hajonta_thread_context *_ctx;
+
 inline void
 load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
 {
@@ -46,6 +49,32 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
 inline void
 glErrorAssert(bool skip = false)
 {
+    uint32_t remaining_messages;
+    do
+    {
+
+        char message_log[4096];
+        GLenum source;
+        GLenum type;
+        uint32_t id;
+        GLenum severity;
+        GLsizei length;
+        remaining_messages = glGetDebugMessageLog(1,
+            sizeof(message_log) ,
+            &source,
+            &type,
+            &id,
+            &severity,
+            &length,
+            message_log);
+
+        if (remaining_messages)
+        {
+            _platform_memory->platform_debug_message(_ctx, message_log);
+
+        }
+    } while (remaining_messages);
+
     GLenum error = glGetError();
     if (skip)
     {
@@ -1634,8 +1663,23 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     return;
 }
 
+void
+framebuffer_blit(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, asset_descriptor *descriptors, render_entry_type_framebuffer_blit *item, v2i size)
+{
+
+    asset_descriptor *descriptor = descriptors + item->fbo_asset_descriptor_id;
+    FramebufferDescriptor *f = descriptor->framebuffer;
+    uint32_t fbo = f->_fbo;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glBlitFramebuffer(0, 0, size.x, size.y, 0, 0, size.x, size.y, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+}
+
 extern "C" RENDERER_RENDER(renderer_render)
 {
+    _platform_memory = memory;
+    _ctx = ctx;
+
     ImGuiIO& io = ImGui::GetIO();
     generations_updated_this_frame = 0;
     glErrorAssert(true);
@@ -1679,37 +1723,69 @@ extern "C" RENDERER_RENDER(renderer_render)
         FramebufferDescriptor *framebuffer = render_list->framebuffer;
         if (framebuffer)
         {
+            GLenum texture_target = GL_TEXTURE_2D;
+            uint32_t texture_id = framebuffer->_texture;
+            if (framebuffer->_flags.use_multisample_buffer)
+            {
+                texture_target = GL_TEXTURE_2D_MULTISAMPLE;
+            }
             if (!FramebufferInitialized(framebuffer))
             {
                 glGenFramebuffers(1, &framebuffer->_fbo);
-                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
 
                 if (!framebuffer->_flags.no_color_buffer)
                 {
                     glGenTextures(1, &framebuffer->_texture);
-                    glBindTexture(GL_TEXTURE_2D, framebuffer->_texture);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-                    if (framebuffer->_flags.use_rg32f_buffer)
+                    texture_id = framebuffer->_texture;
+                    if (framebuffer->_flags.use_multisample_buffer)
                     {
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                        glBindTexture(texture_target, framebuffer->_texture);
                     }
                     else
                     {
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                        glBindTexture(texture_target, framebuffer->_texture);
+                    }
+                    glTexParameteri(texture_target, GL_TEXTURE_BASE_LEVEL, 0);
+                    glTexParameteri(texture_target, GL_TEXTURE_MAX_LEVEL, 0);
+                    if (framebuffer->_flags.use_rg32f_buffer)
+                    {
+                        glTexImage2D(texture_target, 0, GL_RGBA32F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                    }
+                    else
+                    {
+                        if (framebuffer->_flags.use_multisample_buffer)
+                        {
+                            glTexImage2DMultisample(texture_target, 16, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, true);
+                        }
+                        else
+                        {
+                            glTexImage2D(texture_target, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
+                            glTexParameterf(texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameterf(texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                            glTexParameterf(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                            glTexParameterf(texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                        }
                     }
 
-                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    glErrorAssert();
                 }
+
+                glErrorAssert();
 
                 if (!framebuffer->_flags.use_depth_texture)
                 {
                     glGenRenderbuffers(1, &framebuffer->_renderbuffer);
                     glBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
-                    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer->size.x, framebuffer->size.y);
+                    if (framebuffer->_flags.use_multisample_buffer)
+                    {
+                        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 16, GL_DEPTH24_STENCIL8, framebuffer->size.x, framebuffer->size.y);
+                    }
+                    else
+                    {
+                        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer->size.x, framebuffer->size.y);
+                    }
+                    glErrorAssert();
                 }
                 else
                 {
@@ -1721,15 +1797,15 @@ extern "C" RENDERER_RENDER(renderer_render)
                     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                 }
+                glErrorAssert();
 
                 FramebufferMakeInitialized(framebuffer);
             }
-            glErrorAssert();
 
-            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
             if (!framebuffer->_flags.no_color_buffer)
             {
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer->_texture, 0);
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_target, texture_id, 0);
                 GLenum draw_buffers[] =
                 {
                     GL_COLOR_ATTACHMENT0,
@@ -1740,6 +1816,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             {
                 glDrawBuffer(GL_NONE);
             }
+            glErrorAssert();
 
             if (!framebuffer->_flags.use_depth_texture)
             {
@@ -1750,6 +1827,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
 
             }
+            glErrorAssert();
 
             glViewport(0, 0, framebuffer->size.x, framebuffer->size.y);
             GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -1828,6 +1906,11 @@ extern "C" RENDERER_RENDER(renderer_render)
                     ExtractRenderElementWithSize(apply_filter, item, header, element_size);
                     apply_filter(ctx, memory, state, asset_descriptors, item);
                 } break;
+                case render_entry_type::framebuffer_blit:
+                {
+                    ExtractRenderElementWithSize(framebuffer_blit, item, header, element_size);
+                    framebuffer_blit(ctx, memory, state, asset_descriptors, item, size);
+                } break;
                 default:
                 {
                     hassert(!"Unhandled render entry type")
@@ -1840,7 +1923,7 @@ extern "C" RENDERER_RENDER(renderer_render)
 
         if (framebuffer)
         {
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
     }
     ImGui::Text("Quads drawn: %d", quads_drawn);

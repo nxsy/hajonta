@@ -75,6 +75,7 @@ _asset_ids
     int32_t kitchen_mesh;
     int32_t kitchen_texture;
     int32_t framebuffer;
+    int32_t multisample_framebuffer;
     int32_t shadowmap_framebuffer;
     int32_t shadowmap_framebuffer_color;
     int32_t blur_x_framebuffer;
@@ -369,10 +370,12 @@ struct game_state
     _render_list<4*1024*1024> three_dee_renderer;
     _render_list<4*1024*1024> shadowmap_renderer;
     _render_list<4*1024*1024> framebuffer_renderer;
+    _render_list<1024*1024> multisample_renderer;
     _render_list<1024*1024> blur_x_framebuffer_renderer;
     _render_list<1024*1024> blur_xy_framebuffer_renderer;
 
     FramebufferDescriptor framebuffer;
+    FramebufferDescriptor multisample_framebuffer;
     FramebufferDescriptor shadowmap_framebuffer;
     FramebufferDescriptor blur_x_framebuffer;
     FramebufferDescriptor blur_xy_framebuffer;
@@ -1617,6 +1620,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         memory->initialized = 1;
         state->asset_ids.framebuffer = add_framebuffer_asset(state, &state->framebuffer);
+        state->asset_ids.multisample_framebuffer = add_framebuffer_asset(state, &state->multisample_framebuffer);
         state->asset_ids.blur_x_framebuffer = add_framebuffer_asset(state, &state->blur_x_framebuffer);
         state->asset_ids.blur_xy_framebuffer = add_framebuffer_asset(state, &state->blur_xy_framebuffer);
         state->asset_ids.shadowmap_framebuffer_color = add_framebuffer_asset(state, &state->shadowmap_framebuffer);
@@ -1670,9 +1674,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         RenderListBuffer(state->three_dee_renderer.list, state->three_dee_renderer.buffer);
         RenderListBuffer(state->shadowmap_renderer.list, state->shadowmap_renderer.buffer);
         RenderListBuffer(state->framebuffer_renderer.list, state->framebuffer_renderer.buffer);
+        RenderListBuffer(state->multisample_renderer.list, state->multisample_renderer.buffer);
         RenderListBuffer(state->blur_x_framebuffer_renderer.list, state->blur_x_framebuffer_renderer.buffer);
         RenderListBuffer(state->blur_xy_framebuffer_renderer.list, state->blur_xy_framebuffer_renderer.buffer);
-        state->three_dee_renderer.list.framebuffer = &state->framebuffer;
+        state->three_dee_renderer.list.framebuffer = &state->multisample_framebuffer;
+        state->multisample_renderer.list.framebuffer = &state->framebuffer;
+        state->multisample_framebuffer._flags.use_multisample_buffer = 1;
         //state->shadowmap_framebuffer._flags.no_color_buffer = 1;
         state->shadowmap_framebuffer._flags.use_depth_texture = 1;
         state->shadowmap_framebuffer._flags.use_rg32f_buffer = 1;
@@ -1718,6 +1725,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     RenderListReset(&state->three_dee_renderer.list);
     RenderListReset(&state->shadowmap_renderer.list);
     RenderListReset(&state->framebuffer_renderer.list);
+    RenderListReset(&state->multisample_renderer.list);
     RenderListReset(&state->blur_x_framebuffer_renderer.list);
     RenderListReset(&state->blur_xy_framebuffer_renderer.list);
     FramebufferReset(&state->framebuffer);
@@ -1725,6 +1733,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     FramebufferReset(&state->blur_x_framebuffer);
     FramebufferReset(&state->blur_xy_framebuffer);
     state->framebuffer.size = {input->window.width, input->window.height};
+    state->multisample_framebuffer.size = {input->window.width, input->window.height};
     state->shadowmap_framebuffer.size = {4096, 4096};
     state->blur_x_framebuffer.size = {4096, 4096};
     state->blur_xy_framebuffer.size = {4096, 4096};
@@ -1834,6 +1843,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMatrices(&state->framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->blur_x_framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
     PushMatrices(&state->blur_xy_framebuffer_renderer.list, harray_count(state->matrices), state->matrices);
+    PushMatrices(&state->multisample_renderer.list, harray_count(state->matrices), state->matrices);
 
     PushAssetDescriptors(&state->main_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->debug_renderer.list, harray_count(state->assets), state->assets);
@@ -1842,6 +1852,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushAssetDescriptors(&state->framebuffer_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->blur_x_framebuffer_renderer.list, harray_count(state->assets), state->assets);
     PushAssetDescriptors(&state->blur_xy_framebuffer_renderer.list, harray_count(state->assets), state->assets);
+    PushAssetDescriptors(&state->multisample_renderer.list, harray_count(state->assets), state->assets);
 
     LightDescriptors l = {harray_count(state->lights), state->lights};
     PushDescriptors(&state->main_renderer.list, l);
@@ -1851,6 +1862,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushDescriptors(&state->framebuffer_renderer.list, l);
     PushDescriptors(&state->blur_x_framebuffer_renderer.list, l);
     PushDescriptors(&state->blur_xy_framebuffer_renderer.list, l);
+    PushDescriptors(&state->multisample_renderer.list, l);
 
     int32_t previous_demo = state->active_demo;
     for (int32_t i = 0; i < harray_count(demoes); ++i)
@@ -2248,6 +2260,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     AddRenderList(memory, &state->blur_x_framebuffer_renderer.list);
     AddRenderList(memory, &state->blur_xy_framebuffer_renderer.list);
     AddRenderList(memory, &state->three_dee_renderer.list);
+    PushFramebufferBlit(&state->multisample_renderer.list, state->asset_ids.multisample_framebuffer);
+    AddRenderList(memory, &state->multisample_renderer.list);
 
     PushQuad(&state->framebuffer_renderer.list, {0,0}, {(float)input->window.width, (float)input->window.height}, {1,1,1,1}, 0, state->asset_ids.framebuffer);
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);

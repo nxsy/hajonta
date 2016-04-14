@@ -17,6 +17,7 @@ render_entry_type
     QUADS_lookup,
 
     apply_filter,
+    framebuffer_blit,
 
     mesh,
     mesh_from_asset,
@@ -177,6 +178,13 @@ render_entry_type_mesh_from_asset
     ShaderType shader_type;
 };
 
+struct
+render_entry_type_framebuffer_blit
+{
+    render_entry_header header;
+    int32_t fbo_asset_descriptor_id;
+};
+
 enum struct
 ApplyFilterType
 {
@@ -202,6 +210,7 @@ struct FramebufferFlags
     unsigned int no_color_buffer:1;
     unsigned int use_depth_texture:1;
     unsigned int use_rg32f_buffer:1;
+    unsigned int use_multisample_buffer:1;
 };
 
 struct
@@ -564,6 +573,16 @@ PushApplyFilter(render_entry_list *list, ApplyFilterType type, int32_t source_as
     {
        entry->type = type;
        entry->source_asset_descriptor_id = source_asset_descriptor_id;
+    }
+}
+
+inline void
+PushFramebufferBlit(render_entry_list *list, int32_t fbo_asset_descriptor_id)
+{
+    render_entry_type_framebuffer_blit *entry = PushRenderElement(list, framebuffer_blit);
+    if (entry)
+    {
+       entry->fbo_asset_descriptor_id = fbo_asset_descriptor_id;
     }
 }
 
