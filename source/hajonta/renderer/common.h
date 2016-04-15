@@ -301,6 +301,8 @@ render_entry_list
 };
 
 #define RenderListBuffer(r, b) { r.max_size = sizeof(b); r.base = b; }
+#define RenderListBufferSize(r, b, s) { r.max_size = s; r.base = b; }
+
 inline void
 RenderListReset(render_entry_list *list)
 {

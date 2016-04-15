@@ -351,6 +351,41 @@ LightIds
     MAX = sun,
 };
 
+struct
+RenderPipelineEntry
+{
+    render_entry_list *list;
+    uint8_t *buffer;
+    uint32_t buffer_size;
+
+    int32_t target_framebuffer_id;
+    int32_t source_framebuffer_id;
+
+    RenderPipelineEntry *children;
+    RenderPipelineEntry *next;
+};
+
+struct
+RenderPipelineFramebuffer
+{
+    FramebufferDescriptor framebuffer;
+    int32_t asset_descriptor;
+    int32_t depth_asset_descriptor;
+    v2i size;
+    struct {
+        uint32_t fixed_size:1;
+        uint32_t multisample:1;
+    };
+};
+
+struct
+RenderPipeline
+{
+    RenderPipelineEntry *first;
+    uint32_t framebuffer_count;
+    RenderPipelineFramebuffer framebuffers[10];
+};
+
 struct game_state
 {
     bool initialized;
@@ -363,7 +398,11 @@ struct game_state
     {
         float delta_t;
         v2 mouse_position;
+        game_input *input;
+        platform_memory *memory;
     } frame_state;
+
+    RenderPipeline render_pipeline;
 
     _render_list<4*1024*1024> main_renderer;
     _render_list<4*1024*1024> debug_renderer;
@@ -1611,10 +1650,202 @@ furniture_terrain_compatible(map_data *map, FurnitureType furniture_type, v2i ti
     return true;
 }
 
+void
+PipelineEntryInit(RenderPipeline *pipeline, RenderPipelineEntry *entry)
+{
+    while (entry)
+    {
+        PipelineEntryInit(pipeline, entry->children);
+        RenderListBufferSize((*entry->list), entry->buffer, entry->buffer_size);
+        if (entry->target_framebuffer_id >= 0)
+        {
+            entry->list->framebuffer = &pipeline->framebuffers[entry->target_framebuffer_id].framebuffer;
+        }
+        entry = entry->next;
+    }
+}
+
+void
+PipelineFramebufferInit(game_state *state, RenderPipelineFramebuffer *framebuffer)
+{
+    framebuffer->asset_descriptor = add_framebuffer_asset(state, &framebuffer->framebuffer);
+    framebuffer->depth_asset_descriptor = add_framebuffer_depth_asset(state, &framebuffer->framebuffer);
+    if (framebuffer->multisample)
+    {
+        framebuffer->framebuffer._flags.use_multisample_buffer = 1;
+    }
+}
+
+void
+PipelineInit(game_state *state, RenderPipeline *pipeline)
+{
+    RenderListBuffer(state->main_renderer.list, state->main_renderer.buffer);
+    RenderListBuffer(state->debug_renderer.list, state->debug_renderer.buffer);
+    RenderListBuffer(state->shadowmap_renderer.list, state->shadowmap_renderer.buffer);
+    RenderListBuffer(state->blur_x_framebuffer_renderer.list, state->blur_x_framebuffer_renderer.buffer);
+    RenderListBuffer(state->blur_xy_framebuffer_renderer.list, state->blur_xy_framebuffer_renderer.buffer);
+
+    PipelineEntryInit(pipeline, pipeline->first);
+
+    for (uint32_t i = 0; i < pipeline->framebuffer_count; ++i)
+    {
+        PipelineFramebufferInit(state, pipeline->framebuffers + i);
+    }
+
+    state->shadowmap_framebuffer._flags.use_depth_texture = 1;
+    state->shadowmap_framebuffer._flags.use_rg32f_buffer = 1;
+    state->shadowmap_renderer.list.framebuffer = &state->shadowmap_framebuffer;
+    state->blur_x_framebuffer_renderer.list.framebuffer = &state->blur_x_framebuffer;
+    state->blur_x_framebuffer._flags.use_rg32f_buffer = 1;
+    state->blur_xy_framebuffer_renderer.list.framebuffer = &state->blur_xy_framebuffer;
+    state->blur_xy_framebuffer._flags.use_rg32f_buffer = 1;
+}
+
+void
+PipelineEntryReset(RenderPipelineEntry *entry)
+{
+    while (entry)
+    {
+        PipelineEntryReset(entry->children);
+        RenderListReset(entry->list);
+        entry = entry->next;
+    }
+}
+void
+PipelineFramebufferReset(RenderPipelineFramebuffer *framebuffer, v2i window_size)
+{
+    FramebufferReset(&framebuffer->framebuffer);
+    if (framebuffer->fixed_size)
+    {
+    }
+    else
+    {
+        framebuffer->framebuffer.size = window_size;
+    }
+}
+
+void
+PipelineReset(game_state *state, RenderPipeline *pipeline)
+{
+    RenderListReset(&state->main_renderer.list);
+    RenderListReset(&state->debug_renderer.list);
+    RenderListReset(&state->three_dee_renderer.list);
+    RenderListReset(&state->shadowmap_renderer.list);
+    RenderListReset(&state->blur_x_framebuffer_renderer.list);
+    RenderListReset(&state->blur_xy_framebuffer_renderer.list);
+
+    RenderListReset(&state->framebuffer_renderer.list);
+    RenderListReset(&state->multisample_renderer.list);
+
+    v2i window_size = {
+        state->frame_state.input->window.width,
+        state->frame_state.input->window.height,
+    };
+    for (uint32_t i = 0; i < pipeline->framebuffer_count; ++i)
+    {
+        PipelineFramebufferReset(pipeline->framebuffers + i, window_size);
+    }
+
+    FramebufferReset(&state->framebuffer);
+    FramebufferReset(&state->shadowmap_framebuffer);
+    FramebufferReset(&state->blur_x_framebuffer);
+    FramebufferReset(&state->blur_xy_framebuffer);
+
+    state->shadowmap_framebuffer.size = {4096, 4096};
+    state->blur_x_framebuffer.size = {4096, 4096};
+    state->blur_xy_framebuffer.size = {4096, 4096};
+}
+
+void
+PipelineRender(game_state *state, RenderPipeline *pipeline)
+{
+    //AddRenderList(memory, &state->main_renderer.list);
+    if (state->debug.rendering)
+    {
+        AddRenderList(state->frame_state.memory, &state->debug_renderer.list);
+    }
+    AddRenderList(state->frame_state.memory, &state->shadowmap_renderer.list);
+    AddRenderList(state->frame_state.memory, &state->blur_x_framebuffer_renderer.list);
+    AddRenderList(state->frame_state.memory, &state->blur_xy_framebuffer_renderer.list);
+    AddRenderList(state->frame_state.memory, &state->three_dee_renderer.list);
+    AddRenderList(state->frame_state.memory, &state->multisample_renderer.list);
+    AddRenderList(state->frame_state.memory, &state->framebuffer_renderer.list);
+}
+
+inline void
+PipelineEntryAddChild(RenderPipelineEntry *parent, RenderPipelineEntry *child)
+{
+    if (parent->children)
+    {
+        RenderPipelineEntry *last = parent->children;
+        while (last->next)
+        {
+            last = last->next;
+        }
+        last->next = child;
+    }
+    else
+    {
+        parent->children = child;
+    }
+}
+
+enum struct
+RenderPipelineEntryNames
+{
+    framebuffer,
+    multisample,
+    three_dee,
+
+    MAX = three_dee,
+};
+RenderPipelineEntry render_pipeline_entries[(uint32_t)RenderPipelineEntryNames::MAX + 1];
+
+enum struct
+RenderPipelineFramebuffers
+{
+    main,
+    multisample,
+
+    COUNT,
+};
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
     _hidden_state = state;
+
+    {
+        state->render_pipeline.framebuffer_count = (uint32_t)RenderPipelineFramebuffers::COUNT;
+
+        RenderPipelineEntry *framebuffer = render_pipeline_entries + (uint32_t)RenderPipelineEntryNames::framebuffer;
+        *framebuffer = {
+            &state->framebuffer_renderer.list,
+            state->framebuffer_renderer.buffer,
+            sizeof(state->framebuffer_renderer.buffer),
+            -1,
+            -1,
+        };
+        RenderPipelineEntry *multisample = render_pipeline_entries + (uint32_t)RenderPipelineEntryNames::multisample;
+        *multisample = {
+            &state->multisample_renderer.list,
+            state->multisample_renderer.buffer,
+            sizeof(state->multisample_renderer.buffer),
+            (int32_t)RenderPipelineFramebuffers::main,
+            (int32_t)RenderPipelineFramebuffers::multisample,
+        };
+        RenderPipelineEntry *three_dee = render_pipeline_entries + (uint32_t)RenderPipelineEntryNames::three_dee;
+        *three_dee = {
+            &state->three_dee_renderer.list,
+            state->three_dee_renderer.buffer,
+            sizeof(state->three_dee_renderer.buffer),
+            (int32_t)RenderPipelineFramebuffers::multisample,
+            -1,
+        };
+        PipelineEntryAddChild(framebuffer, multisample);
+        PipelineEntryAddChild(multisample, three_dee);
+        state->render_pipeline.first = framebuffer;
+    }
 
     if (!memory->initialized)
     {
@@ -1669,25 +1900,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         hassert(state->asset_ids.familiar > 0);
         build_map(state, &state->map);
-        RenderListBuffer(state->main_renderer.list, state->main_renderer.buffer);
-        RenderListBuffer(state->debug_renderer.list, state->debug_renderer.buffer);
-        RenderListBuffer(state->three_dee_renderer.list, state->three_dee_renderer.buffer);
-        RenderListBuffer(state->shadowmap_renderer.list, state->shadowmap_renderer.buffer);
-        RenderListBuffer(state->framebuffer_renderer.list, state->framebuffer_renderer.buffer);
-        RenderListBuffer(state->multisample_renderer.list, state->multisample_renderer.buffer);
-        RenderListBuffer(state->blur_x_framebuffer_renderer.list, state->blur_x_framebuffer_renderer.buffer);
-        RenderListBuffer(state->blur_xy_framebuffer_renderer.list, state->blur_xy_framebuffer_renderer.buffer);
-        state->three_dee_renderer.list.framebuffer = &state->multisample_framebuffer;
-        state->multisample_renderer.list.framebuffer = &state->framebuffer;
-        state->multisample_framebuffer._flags.use_multisample_buffer = 1;
-        //state->shadowmap_framebuffer._flags.no_color_buffer = 1;
-        state->shadowmap_framebuffer._flags.use_depth_texture = 1;
-        state->shadowmap_framebuffer._flags.use_rg32f_buffer = 1;
-        state->shadowmap_renderer.list.framebuffer = &state->shadowmap_framebuffer;
-        state->blur_x_framebuffer_renderer.list.framebuffer = &state->blur_x_framebuffer;
-        state->blur_x_framebuffer._flags.use_rg32f_buffer = 1;
-        state->blur_xy_framebuffer_renderer.list.framebuffer = &state->blur_xy_framebuffer;
-        state->blur_xy_framebuffer._flags.use_rg32f_buffer = 1;
+
+        PipelineInit(state, &state->render_pipeline);
+
         state->pixel_size = 64;
         state->familiar_movement.position = {-2, 2};
 
@@ -1720,26 +1935,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.cull_front = 1;
     }
 
-    RenderListReset(&state->main_renderer.list);
-    RenderListReset(&state->debug_renderer.list);
-    RenderListReset(&state->three_dee_renderer.list);
-    RenderListReset(&state->shadowmap_renderer.list);
-    RenderListReset(&state->framebuffer_renderer.list);
-    RenderListReset(&state->multisample_renderer.list);
-    RenderListReset(&state->blur_x_framebuffer_renderer.list);
-    RenderListReset(&state->blur_xy_framebuffer_renderer.list);
-    FramebufferReset(&state->framebuffer);
-    FramebufferReset(&state->shadowmap_framebuffer);
-    FramebufferReset(&state->blur_x_framebuffer);
-    FramebufferReset(&state->blur_xy_framebuffer);
-    state->framebuffer.size = {input->window.width, input->window.height};
-    state->multisample_framebuffer.size = {input->window.width, input->window.height};
-    state->shadowmap_framebuffer.size = {4096, 4096};
-    state->blur_x_framebuffer.size = {4096, 4096};
-    state->blur_xy_framebuffer.size = {4096, 4096};
-
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
+    state->frame_state.input = input;
+    state->frame_state.memory = memory;
+
+    PipelineReset(state, &state->render_pipeline);
 
     if (memory->imgui_state)
     {
@@ -2251,21 +2452,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushApplyFilter(&state->blur_xy_framebuffer_renderer.list,
         ApplyFilterType::gaussian_7x1_y, state->asset_ids.blur_x_framebuffer);
 
-    //AddRenderList(memory, &state->main_renderer.list);
-    if (state->debug.rendering)
-    {
-        AddRenderList(memory, &state->debug_renderer.list);
-    }
-    AddRenderList(memory, &state->shadowmap_renderer.list);
-    AddRenderList(memory, &state->blur_x_framebuffer_renderer.list);
-    AddRenderList(memory, &state->blur_xy_framebuffer_renderer.list);
-    AddRenderList(memory, &state->three_dee_renderer.list);
-    PushFramebufferBlit(&state->multisample_renderer.list, state->asset_ids.multisample_framebuffer);
-    AddRenderList(memory, &state->multisample_renderer.list);
+    PushFramebufferBlit(&state->multisample_renderer.list,
+        state->render_pipeline.framebuffers[(uint32_t)RenderPipelineFramebuffers::multisample].asset_descriptor);
 
-    PushQuad(&state->framebuffer_renderer.list, {0,0}, {(float)input->window.width, (float)input->window.height}, {1,1,1,1}, 0, state->asset_ids.framebuffer);
+    PushQuad(&state->framebuffer_renderer.list, {0,0},
+            {(float)input->window.width, (float)input->window.height},
+            {1,1,1,1}, 0,
+            state->render_pipeline.framebuffers[(uint32_t)RenderPipelineFramebuffers::main].asset_descriptor
+    );
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
-    AddRenderList(memory, &state->framebuffer_renderer.list);
+
+    PipelineRender(state, &state->render_pipeline);
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);
