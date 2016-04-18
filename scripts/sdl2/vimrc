@@ -6,8 +6,20 @@ function! s:build()
   wincmd p
 endfunction
 
+function! s:build_tools()
+  let &makeprg='build_tools'
+  silent make
+  botright copen
+  wincmd p
+endfunction
+
 command! Build call s:build()
 map <Leader>b :Build<cr>
+
+command! BuildTools call s:build_tools()
+map <Leader>t :BuildTools<cr>
+
+map <Leader>R :source $HAJONTA_VIMRC<CR>
 
 function! s:run()
     execute "silent !start /b build\\win32_msvc.exe"
