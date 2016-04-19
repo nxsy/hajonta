@@ -11,13 +11,13 @@ void main()
 {
     vec4 color = vec4(0.0);
 
-    color += texture2D(tex, v_texcoord + (vec2(-3.0) * u_blur_scale.xy)) * (1.0/64.0);
-    color += texture2D(tex, v_texcoord + (vec2(-2.0) * u_blur_scale.xy)) * (6.0/64.0);
-    color += texture2D(tex, v_texcoord + (vec2(-1.0) * u_blur_scale.xy)) * (15.0/64.0);
-    color += texture2D(tex, v_texcoord + (vec2(0.0) * u_blur_scale.xy))  * (20.0/64.0);
-    color += texture2D(tex, v_texcoord + (vec2(1.0) * u_blur_scale.xy))  * (15.0/64.0);
-    color += texture2D(tex, v_texcoord + (vec2(2.0) * u_blur_scale.xy))  * (6.0/64.0);
-    color += texture2D(tex, v_texcoord + (vec2(3.0) * u_blur_scale.xy))  * (1.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(-3.0) * u_blur_scale.xy)) * (1.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(-2.0) * u_blur_scale.xy)) * (6.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(-1.0) * u_blur_scale.xy)) * (15.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(0.0) * u_blur_scale.xy))  * (20.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(1.0) * u_blur_scale.xy))  * (15.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(2.0) * u_blur_scale.xy))  * (6.0/64.0);
+    color += texture(tex, v_texcoord + (vec2(3.0) * u_blur_scale.xy))  * (1.0/64.0);
 
     o_color = color;
 }

@@ -49,6 +49,7 @@ load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_pr
 inline void
 glErrorAssert(bool skip = false)
 {
+    /*
     uint32_t remaining_messages;
     do
     {
@@ -74,6 +75,7 @@ glErrorAssert(bool skip = false)
 
         }
     } while (remaining_messages);
+    */
 
     GLenum error = glGetError();
     if (skip)
@@ -1428,6 +1430,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t a_texcoord_id = -1;
     int32_t a_normal_id = -1;
 
+    glBindVertexArray(state->vao);
     switch (mesh_from_asset->shader_type)
     {
         case ShaderType::standard:
@@ -1564,8 +1567,6 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
         glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     }
 
-    glBindVertexArray(state->vao);
-
     glBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);
     glBufferData(GL_ARRAY_BUFFER,
             mesh.vertices.size,
@@ -1650,6 +1651,7 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     int32_t a_position_id = 0;
     int32_t a_texcoord_id = 0;
 
+    glBindVertexArray(state->vao);
     switch (filter->type)
     {
         case ApplyFilterType::none:
@@ -1686,8 +1688,6 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         ctx, memory, state, descriptors, filter->source_asset_descriptor_id,
         &texture, &st0, &st1);
 
-    glErrorAssert();
-    glBindVertexArray(state->vao);
     glErrorAssert();
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     struct vertex_format
@@ -1824,9 +1824,9 @@ extern "C" RENDERER_RENDER(renderer_render)
                     else
                     {
                         glBindTexture(texture_target, framebuffer->_texture);
+                        glTexParameteri(texture_target, GL_TEXTURE_BASE_LEVEL, 0);
+                        glTexParameteri(texture_target, GL_TEXTURE_MAX_LEVEL, 0);
                     }
-                    glTexParameteri(texture_target, GL_TEXTURE_BASE_LEVEL, 0);
-                    glTexParameteri(texture_target, GL_TEXTURE_MAX_LEVEL, 0);
                     if (framebuffer->_flags.use_rg32f_buffer)
                     {
                         glTexImage2D(texture_target, 0, GL_RGBA32F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, NULL);
@@ -1835,7 +1835,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     {
                         if (framebuffer->_flags.use_multisample_buffer)
                         {
-                            glTexImage2DMultisample(texture_target, 16, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, true);
+                            glTexImage2DMultisample(texture_target, 4, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, true);
                         }
                         else
                         {
@@ -1858,7 +1858,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     glBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
                     if (framebuffer->_flags.use_multisample_buffer)
                     {
-                        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 16, GL_DEPTH24_STENCIL8, framebuffer->size.x, framebuffer->size.y);
+                        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, framebuffer->size.x, framebuffer->size.y);
                     }
                     else
                     {

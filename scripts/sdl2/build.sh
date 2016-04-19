@@ -19,6 +19,9 @@ mkdir -p build/debug
 ${CLANG} ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/program.cpp ${DEBUG_FLAGS} ${INCLUDES}
 ( cd build/debug && ./program ../../source hajonta/programs ui2d )
 ( cd build/debug && ./program ../../source hajonta/programs imgui )
+( cd build/debug && ./program ../../source hajonta/programs phong_no_normal_map )
+( cd build/debug && ./program ../../source hajonta/programs variance_shadow_map )
+( cd build/debug && ./program ../../source hajonta/programs/filters filter_gaussian_7x1 )
 
 # unit tests
 ${CLANG} ${CPPFLAGS} ${WARNFLAGS} -o build/debug/unit source/hajonta/bootstrap/unit.cpp ${DEBUG_FLAGS} ${INCLUDES}
