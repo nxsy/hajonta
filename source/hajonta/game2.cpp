@@ -162,6 +162,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.another_ground_0 = add_asset(asset_descriptors, "another_ground_0");
         state->asset_ids.cube_mesh = add_asset(asset_descriptors, "cube_mesh");
         state->asset_ids.cube_texture = add_asset(asset_descriptors, "cube_texture");
+
+        state->asset_ids.blocky_advanced_mesh = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh");
+        state->asset_ids.blocky_advanced_texture = add_asset(asset_descriptors, "kenney_blocky_advanced_cowboy_texture");
+
         state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -268,10 +272,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
 
-    scale.cols[0].E[0] = 2.0f;
-    scale.cols[1].E[1] = 2.0f;
-    scale.cols[2].E[2] = 2.0f;
-    translate.cols[3] = {0, 0, -5.0f, 1.0f};
+    scale.cols[0].E[0] = 1.0f;
+    scale.cols[1].E[1] = 1.0f;
+    scale.cols[2].E[2] = 1.0f;
+    translate.cols[3] = {0, -1.0f, -5.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
@@ -645,8 +649,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::tree_model_matrix,
-        state->asset_ids.tree_mesh,
-        state->asset_ids.tree_texture,
+        state->asset_ids.blocky_advanced_mesh,
+        state->asset_ids.blocky_advanced_texture,
         1,
         three_dee_mesh_flags,
         ShaderType::standard
@@ -656,8 +660,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
         (uint32_t)matrix_ids::tree_model_matrix,
-        state->asset_ids.tree_mesh,
-        state->asset_ids.tree_texture,
+        state->asset_ids.blocky_advanced_mesh,
+        state->asset_ids.blocky_advanced_texture,
         0,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
