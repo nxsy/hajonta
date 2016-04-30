@@ -456,11 +456,22 @@ load_mesh_asset(
         return false;
     }
 
-    struct binary_format_v1
+    struct _header
     {
         uint32_t format;
-        uint32_t version;
+    } *header = (_header *)mesh_buffer;
 
+    mesh_buffer += 4;
+
+    struct _version
+    {
+        uint32_t version;
+    } *version = (_version *)mesh_buffer;
+
+    mesh_buffer += 4;
+
+    struct format_data
+    {
         uint32_t vertices_offset;
         uint32_t vertices_size;
         uint32_t normals_offset;
@@ -470,41 +481,95 @@ load_mesh_asset(
         uint32_t indices_offset;
         uint32_t indices_size;
         uint32_t num_triangles;
+    } format = {};
 
-    } *format = (binary_format_v1 *)mesh_buffer;
-    uint32_t memory_size = format->vertices_size + format->normals_size + format->texcoords_size + format->indices_size;
+    if (version->version == 1)
+    {
+        struct binary_format_v1
+        {
+            uint32_t vertices_offset;
+            uint32_t vertices_size;
+            uint32_t normals_offset;
+            uint32_t normals_size;
+            uint32_t texcoords_offset;
+            uint32_t texcoords_size;
+            uint32_t indices_offset;
+            uint32_t indices_size;
+            uint32_t num_triangles;
+        } *v1_format = (binary_format_v1 *)mesh_buffer;
+        format.vertices_offset = v1_format->vertices_offset;
+        format.vertices_size = v1_format->vertices_size;
+        format.normals_offset = v1_format->normals_offset;
+        format.normals_size = v1_format->normals_size;
+        format.texcoords_offset = v1_format->texcoords_offset;
+        format.texcoords_size = v1_format->texcoords_size;
+        format.indices_offset = v1_format->indices_offset;
+        format.indices_size = v1_format->indices_size;
+        format.num_triangles = v1_format->num_triangles;
+        mesh_buffer += sizeof(binary_format_v1);
+    }
+    else
+    {
+        struct binary_format_v2
+        {
+            uint32_t header_size;
+            uint32_t vertices_offset;
+            uint32_t vertices_size;
+            uint32_t normals_offset;
+            uint32_t normals_size;
+            uint32_t texcoords_offset;
+            uint32_t texcoords_size;
+            uint32_t indices_offset;
+            uint32_t indices_size;
+            uint32_t num_triangles;
+        } *v2_format = (binary_format_v2 *)mesh_buffer;
+        format.vertices_offset = v2_format->vertices_offset;
+        format.vertices_size = v2_format->vertices_size;
+        format.normals_offset = v2_format->normals_offset;
+        format.normals_size = v2_format->normals_size;
+        format.texcoords_offset = v2_format->texcoords_offset;
+        format.texcoords_size = v2_format->texcoords_size;
+        format.indices_offset = v2_format->indices_offset;
+        format.indices_size = v2_format->indices_size;
+        format.num_triangles = v2_format->num_triangles;
+        mesh_buffer += v2_format->header_size;
+    }
+
+    uint8_t *base_offset = mesh_buffer;
+
+    uint32_t memory_size = format.vertices_size + format.normals_size + format.texcoords_size + format.indices_size;
     uint8_t *m = (uint8_t *)malloc(memory_size);
 
     uint32_t offset = 0;
-    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->vertices_offset, format->vertices_size);
+    memcpy((void *)(m + offset), base_offset + format.vertices_offset, format.vertices_size);
     mesh->vertices = {
         (void *)m,
-        format->vertices_size,
+        format.vertices_size,
     };
-    offset += format->vertices_size;
+    offset += format.vertices_size;
 
-    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->indices_offset, format->indices_size);
+    memcpy((void *)(m + offset), base_offset + format.indices_offset, format.indices_size);
     mesh->indices = {
         (void *)(m + offset),
-        format->indices_size,
+        format.indices_size,
     };
-    offset += format->indices_size;
+    offset += format.indices_size;
 
-    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->texcoords_offset, format->texcoords_size);
+    memcpy((void *)(m + offset), base_offset + format.texcoords_offset, format.texcoords_size);
     mesh->uvs = {
         (void *)(m + offset),
-        format->texcoords_size,
+        format.texcoords_size,
     };
-    offset += format->texcoords_size;
+    offset += format.texcoords_size;
 
-    memcpy((void *)(m + offset), mesh_buffer + sizeof(binary_format_v1) + format->normals_offset, format->normals_size);
+    memcpy((void *)(m + offset), base_offset + format.normals_offset, format.normals_size);
     mesh->normals = {
         (void *)(m + offset),
-        format->normals_size,
+        format.normals_size,
     };
-    offset += format->normals_size;
+    offset += format.normals_size;
 
-    mesh->num_triangles = format->num_triangles;
+    mesh->num_triangles = format.num_triangles;
     return true;
 }
 
@@ -905,7 +970,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Wood_Fence_Broken_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Broken_01.hjm");
         add_mesh_asset(state, "knp_Wood_Fence_Gate_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Gate_01.hjm");
 
-        add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced.hjm");
+        add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced2.hjm");
         add_asset(state, "kenney_blocky_advanced_cowboy_texture", "testing/kenney/skin_exclusiveCowboy.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
