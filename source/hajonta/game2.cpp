@@ -39,7 +39,6 @@ add_asset(AssetDescriptors *asset_descriptors, const char *name, asset_descripto
     {
         asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::name;
         asset_descriptors->descriptors[asset_descriptors->count].asset_name = name;
-        asset_descriptors->descriptors[asset_descriptors->count].debug = debug;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
     }
@@ -60,7 +59,6 @@ add_framebuffer_asset(AssetDescriptors *asset_descriptors, FramebufferDescriptor
     {
         asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::framebuffer;
         asset_descriptors->descriptors[asset_descriptors->count].framebuffer = framebuffer;
-        asset_descriptors->descriptors[asset_descriptors->count].debug = debug;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
     }
@@ -75,7 +73,6 @@ add_framebuffer_depth_asset(AssetDescriptors *asset_descriptors, FramebufferDesc
     {
         asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::framebuffer_depth;
         asset_descriptors->descriptors[asset_descriptors->count].framebuffer = framebuffer;
-        asset_descriptors->descriptors[asset_descriptors->count].debug = debug;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
     }
@@ -645,6 +642,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     three_dee_mesh_flags.attach_shadowmap = 1;
     three_dee_mesh_flags.attach_shadowmap_color = 1;
 
+    MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
+    three_dee_mesh_flags_debug.debug = 1;
+
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
@@ -652,7 +652,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         1,
-        three_dee_mesh_flags,
+        three_dee_mesh_flags_debug,
         ShaderType::standard
     );
 

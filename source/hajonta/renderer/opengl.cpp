@@ -260,6 +260,8 @@ struct renderer_state
 
     m4 m4identity;
 
+    bool show_debug;
+
     struct
     {
         v3 plane_vertices[4];
@@ -1035,7 +1037,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
             GL_STATIC_DRAW);
         state->m4identity = m4identity();
         state->poisson_spread = 700;
-        state->pcf_distance = 1;
+        state->shadow_mode = 4;
+        state->pcf_distance = 3;
         state->poisson_samples = 4;
         state->poisson_position_granularity = 1000.0f;
         state->vsm_minimum_variance = 0.0000002f;
@@ -1760,8 +1763,16 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t max_faces = (int32_t)mesh.num_triangles;
     int32_t start_face = 0;
     int32_t end_face = max_faces;
-    if (mesh_descriptor.debug)
+    if (mesh_from_asset->flags.debug)
     {
+        char label[100];
+        snprintf(label, 100, "Mesh debug##%p", mesh_from_asset);
+        ImGui::Begin(label);
+        if (!mesh_descriptor.mesh_debug.flags.initialized)
+        {
+            mesh_descriptor.mesh_debug.end_face = max_faces;
+            mesh_descriptor.mesh_debug.flags.initialized = 1;
+        }
         if (mesh_descriptor.mesh_debug.start_face > max_faces)
         {
             mesh_descriptor.mesh_debug.start_face = 0;
@@ -1779,6 +1790,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
         }
         start_face = mesh_descriptor.mesh_debug.start_face;
         end_face = mesh_descriptor.mesh_debug.end_face;
+        ImGui::End();
     }
     int32_t num_faces = end_face - start_face;
     glDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
@@ -2158,33 +2170,47 @@ extern "C" RENDERER_RENDER(renderer_render)
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
     }
-    ImGui::Text("Quads drawn: %d", quads_drawn);
-    ImGui::Text("Generations updated: %d", generations_updated_this_frame);
-    ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-    ImGui::Text("This frame: %.3f ms", 1000.0f * io.DeltaTime);
 
-    const char *shadow_modes[] =
+    if (state->show_debug) {
+        ImGui::Begin("Renderer debug", &state->show_debug);
+        ImGui::Text("Quads drawn: %d", quads_drawn);
+        ImGui::Text("Generations updated: %d", generations_updated_this_frame);
+        ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::Text("This frame: %.3f ms", 1000.0f * io.DeltaTime);
+
+        const char *shadow_modes[] =
+        {
+            "none",
+            "sampler2dshadow",
+            "static poisson",
+            "random poisson",
+            "pcf",
+            "vsm_color",
+            "vsm",
+            "bone_weights",
+            "bone_ids",
+        };
+        ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
+        ImGui::DragInt("Poisson spread", &state->poisson_spread);
+        ImGui::DragFloat("Shadowmap bias", &state->shadowmap_bias, 0.00001f, -0.1f, 0.1f, "%.9f");
+        ImGui::DragInt("PCF distance", &state->pcf_distance);
+        ImGui::DragInt("Poisson Samples", &state->poisson_samples);
+        ImGui::DragFloat("Poisson Position Granularity", &state->poisson_position_granularity);
+        ImGui::DragFloat("VSM Minimum Variance", &state->vsm_minimum_variance, 0.0000001f, 0.0f, 0.002f, "%.9f");
+        ImGui::DragFloat("VSM Lightbleed Compensation", &state->vsm_lightbleed_compensation, 0.001f, 0.0f, 0.5f, "%.9f");
+        ImGui::DragFloat("Blur Scale Divisor", &state->blur_scale_divisor, 1.0f, 1.0f, 8192.0f);
+        ImGui::End();
+    }
+
+    if (ImGui::BeginMainMenuBar())
     {
-        "none",
-        "sampler2dshadow",
-        "static poisson",
-        "random poisson",
-        "pcf",
-        "vsm_color",
-        "vsm",
-        "bone_weights",
-        "bone_ids",
-    };
-    ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
-    ImGui::DragInt("Poisson spread", &state->poisson_spread);
-    ImGui::DragFloat("Shadowmap bias", &state->shadowmap_bias, 0.00001f, -0.1f, 0.1f, "%.9f");
-    ImGui::DragInt("PCF distance", &state->pcf_distance);
-    ImGui::DragInt("Poisson Samples", &state->poisson_samples);
-    ImGui::DragFloat("Poisson Position Granularity", &state->poisson_position_granularity);
-    ImGui::DragFloat("VSM Minimum Variance", &state->vsm_minimum_variance, 0.0000001f, 0.0f, 0.002f, "%.9f");
-    ImGui::DragFloat("VSM Lightbleed Compensation", &state->vsm_lightbleed_compensation, 0.001f, 0.0f, 0.5f, "%.9f");
-    ImGui::DragFloat("Blur Scale Divisor", &state->blur_scale_divisor, 1.0f, 1.0f, 8192.0f);
-
+        if (ImGui::BeginMenu("Renderer"))
+        {
+            ImGui::MenuItem("Debug rendering", "", &state->show_debug);
+            ImGui::EndMenu();
+        }
+    }
+    ImGui::EndMainMenuBar();
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
     render_draw_lists(draw_data, state);

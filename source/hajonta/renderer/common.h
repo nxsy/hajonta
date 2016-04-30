@@ -166,6 +166,7 @@ struct MeshFromAssetFlags
     unsigned int attach_shadowmap:1;
     unsigned int cull_front:1;
     unsigned int attach_shadowmap_color:1;
+    unsigned int debug:1;
 };
 
 struct
@@ -237,6 +238,12 @@ asset_descriptor_type
 };
 
 struct
+MeshDebugFlags
+{
+    unsigned int initialized:1;
+};
+
+struct
 asset_descriptor
 {
     asset_descriptor_type type;
@@ -248,11 +255,11 @@ asset_descriptor
     };
     int32_t asset_id;
     uint32_t generation_id;
-    bool debug;
     union
     {
         struct
         {
+            MeshDebugFlags flags;
             int32_t start_face;
             int32_t end_face;
         } mesh_debug;
