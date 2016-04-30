@@ -18,6 +18,7 @@ struct binary_format_v2
     uint32_t indices_offset;
     uint32_t indices_size;
     uint32_t num_triangles;
+    uint32_t num_bones;
     uint32_t bone_names_offset;
     uint32_t bone_names_size;
     uint32_t bone_ids_offset;

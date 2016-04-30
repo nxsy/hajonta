@@ -202,6 +202,8 @@ struct renderer_state
     uint32_t mesh_vertex_vbo;
     uint32_t mesh_uvs_vbo;
     uint32_t mesh_normals_vbo;
+    uint32_t mesh_bone_ids_vbo;
+    uint32_t mesh_bone_weights_vbo;
     uint32_t vao;
     int32_t tex_id;
     int32_t phong_no_normal_map_tex_id;
@@ -456,10 +458,13 @@ load_mesh_asset(
         return false;
     }
 
-    struct _header
+    union _header
     {
         uint32_t format;
+        char format_string[4];
     } *header = (_header *)mesh_buffer;
+
+    hassert(header->format_string[0] == 'H');
 
     mesh_buffer += 4;
 
@@ -481,6 +486,13 @@ load_mesh_asset(
         uint32_t indices_offset;
         uint32_t indices_size;
         uint32_t num_triangles;
+        uint32_t num_bones;
+        uint32_t bone_names_offset;
+        uint32_t bone_names_size;
+        uint32_t bone_ids_offset;
+        uint32_t bone_ids_size;
+        uint32_t bone_weights_offset;
+        uint32_t bone_weights_size;
     } format = {};
 
     if (version->version == 1)
@@ -522,6 +534,13 @@ load_mesh_asset(
             uint32_t indices_offset;
             uint32_t indices_size;
             uint32_t num_triangles;
+            uint32_t num_bones;
+            uint32_t bone_names_offset;
+            uint32_t bone_names_size;
+            uint32_t bone_ids_offset;
+            uint32_t bone_ids_size;
+            uint32_t bone_weights_offset;
+            uint32_t bone_weights_size;
         } *v2_format = (binary_format_v2 *)mesh_buffer;
         format.vertices_offset = v2_format->vertices_offset;
         format.vertices_size = v2_format->vertices_size;
@@ -532,12 +551,20 @@ load_mesh_asset(
         format.indices_offset = v2_format->indices_offset;
         format.indices_size = v2_format->indices_size;
         format.num_triangles = v2_format->num_triangles;
+        format.num_bones = v2_format->num_bones;
+        format.bone_names_offset = v2_format->bone_names_offset;
+        format.bone_names_size = v2_format->bone_names_size;
+        format.bone_ids_offset = v2_format->bone_ids_offset;
+        format.bone_ids_size = v2_format->bone_ids_size;
+        format.bone_weights_offset = v2_format->bone_weights_offset;
+        format.bone_weights_size = v2_format->bone_weights_size;
         mesh_buffer += v2_format->header_size;
     }
 
     uint8_t *base_offset = mesh_buffer;
 
     uint32_t memory_size = format.vertices_size + format.normals_size + format.texcoords_size + format.indices_size;
+    memory_size += format.bone_ids_size + format.bone_weights_size;
     uint8_t *m = (uint8_t *)malloc(memory_size);
 
     uint32_t offset = 0;
@@ -569,7 +596,22 @@ load_mesh_asset(
     };
     offset += format.normals_size;
 
+    memcpy((void *)(m + offset), base_offset + format.bone_ids_offset, format.bone_ids_size);
+    mesh->bone_ids = {
+        (void *)(m + offset),
+        format.bone_ids_size,
+    };
+    offset += format.bone_ids_size;
+
+    memcpy((void *)(m + offset), base_offset + format.bone_weights_offset, format.bone_weights_size);
+    mesh->bone_weights = {
+        (void *)(m + offset),
+        format.bone_weights_size,
+    };
+    offset += format.bone_weights_size;
+
     mesh->num_triangles = format.num_triangles;
+    mesh->num_bones = format.num_bones;
     return true;
 }
 
@@ -624,6 +666,9 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         glGenBuffers(1, &state->QUADS_ibo);
         glGenBuffers(1, &state->mesh_vertex_vbo);
         glGenBuffers(1, &state->mesh_uvs_vbo);
+        glGenBuffers(1, &state->mesh_normals_vbo);
+        glGenBuffers(1, &state->mesh_bone_ids_vbo);
+        glGenBuffers(1, &state->mesh_bone_weights_vbo);
 
         glGenVertexArrays(1, &state->vao);
         glBindVertexArray(state->vao);
@@ -661,7 +706,6 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         state->phong_no_normal_map_tex_id = glGetUniformLocation(program->program, "tex");
         state->phong_no_normal_map_shadowmap_tex_id = glGetUniformLocation(program->program, "shadowmap_tex");
         state->phong_no_normal_map_shadowmap_color_tex_id = glGetUniformLocation(program->program, "shadowmap_color_tex");
-        glGenBuffers(1, &state->mesh_normals_vbo);
     }
 
     {
@@ -1497,6 +1541,8 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t a_position_id = -1;
     int32_t a_texcoord_id = -1;
     int32_t a_normal_id = -1;
+    int32_t a_bone_ids_id = -1;
+    int32_t a_bone_weights_id = -1;
 
     glBindVertexArray(state->vao);
     switch (mesh_from_asset->shader_type)
@@ -1512,9 +1558,18 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
+            m4 bones[50];
+            for (uint32_t i = 0; i < harray_count(bones); ++i)
+            {
+                 bones[i] = m4identity();
+            }
+            glUniformMatrix4fv(program.u_bones_id, 50, GL_FALSE, (float *)&bones);
+
             glEnableVertexAttribArray((GLuint)program.a_position_id);
             glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
             glEnableVertexAttribArray((GLuint)program.a_normal_id);
+            glEnableVertexAttribArray((GLuint)program.a_bone_ids_id);
+            glEnableVertexAttribArray((GLuint)program.a_bone_weights_id);
             glErrorAssert();
 
             glUniform1i(
@@ -1524,6 +1579,8 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             a_position_id = program.a_position_id;
             a_texcoord_id = program.a_texcoord_id;
             a_normal_id = program.a_normal_id;
+            a_bone_ids_id = program.a_bone_ids_id;
+            a_bone_weights_id = program.a_bone_weights_id;
         } break;
         case ShaderType::variance_shadow_map:
         {
@@ -1660,6 +1717,34 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
                 GL_STATIC_DRAW);
         glVertexAttribPointer((GLuint)a_normal_id, 3, GL_FLOAT, GL_FALSE, 0, 0);
         glErrorAssert();
+    }
+
+    if (a_bone_ids_id >= 0)
+    {
+        if (mesh.bone_ids.size)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, state->mesh_bone_ids_vbo);
+            glBufferData(GL_ARRAY_BUFFER,
+                    mesh.bone_ids.size,
+                    mesh.bone_ids.data,
+                    GL_STATIC_DRAW);
+            glVertexAttribIPointer((GLuint)a_bone_ids_id, 4, GL_INT, 0, 0);
+            glErrorAssert();
+        }
+    }
+
+    if (a_bone_weights_id >= 0)
+    {
+        if (mesh.bone_weights.size)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, state->mesh_bone_weights_vbo);
+            glBufferData(GL_ARRAY_BUFFER,
+                    mesh.bone_weights.size,
+                    mesh.bone_weights.data,
+                    GL_STATIC_DRAW);
+            glVertexAttribPointer((GLuint)a_bone_weights_id, 4, GL_FLOAT, GL_FALSE, 0, 0);
+            glErrorAssert();
+        }
     }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
@@ -2087,6 +2172,8 @@ extern "C" RENDERER_RENDER(renderer_render)
         "pcf",
         "vsm_color",
         "vsm",
+        "bone_weights",
+        "bone_ids",
     };
     ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
     ImGui::DragInt("Poisson spread", &state->poisson_spread);

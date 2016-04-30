@@ -127,6 +127,14 @@ main(int argc, char **argv)
                     ++next_space;
                 }
                 char *next_semicolon = strchr(line, ';');
+                char *next_bracket = strchr(line, '[');
+                if (next_bracket)
+                {
+                    if (!next_semicolon || next_bracket < next_semicolon)
+                    {
+                        next_semicolon = next_bracket;
+                    }
+                }
                 if (next_space && next_space < next_line_ending && next_semicolon && next_semicolon < next_line_ending)
                 {
                     strcpy(buffer, "    GLint ");

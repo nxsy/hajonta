@@ -146,6 +146,9 @@ Mesh
     buffer normals;
     buffer indices;
     uint32_t num_triangles;
+    uint32_t num_bones;
+    buffer bone_ids;
+    buffer bone_weights;
 };
 
 struct

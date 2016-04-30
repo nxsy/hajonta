@@ -33,6 +33,9 @@ in vec2 v_texcoord;
 in vec3 v_w_normal;
 in vec4 v_l_position;
 
+flat in ivec4 v_bone_ids;
+in vec4 v_bone_weights;
+
 out vec4 o_color;
 
 vec2 poissonDisk[16] = vec2[](
@@ -216,6 +219,28 @@ void main()
             {
                 visibility = shadow_visibility_vsm(v_l_position, w_normal, w_surface_to_light_direction);
                 o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * material_color.rgb * light.color, 1.0f);
+            } break;
+            case 7:
+            {
+                if (v_bone_weights.x > 0)
+                {
+                    o_color = vec4(v_bone_weights.xyz, 1);
+                }
+                else
+                {
+                    o_color = vec4(1,0,1,1);
+                }
+            } break;
+            case 8:
+            {
+                if (v_bone_weights.x > 0)
+                {
+                    o_color = vec4(v_bone_ids.xyz, 1);
+                }
+                else
+                {
+                    o_color = vec4(1,0,1,1);
+                }
             } break;
         }
     }
