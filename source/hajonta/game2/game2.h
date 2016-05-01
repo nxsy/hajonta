@@ -63,6 +63,8 @@ _asset_ids
     int32_t cube_texture;
     int32_t blocky_advanced_mesh;
     int32_t blocky_advanced_texture;
+    int32_t blockfigureRigged6_mesh;
+    int32_t blockfigureRigged6_texture;
 };
 
 struct

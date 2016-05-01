@@ -25,6 +25,14 @@ struct binary_format_v2
     uint32_t bone_ids_size;
     uint32_t bone_weights_offset;
     uint32_t bone_weights_size;
+    uint32_t bone_parent_offset;
+    uint32_t bone_parent_size;
+};
+
+struct
+BoneParent
+{
+    int32_t bone_id;
 };
 
 struct
@@ -38,6 +46,84 @@ BoneWeights
 {
     float weights[4];
 };
+
+void
+process_nodes(aiNode *node, std::unordered_map<std::string, uint32_t> &bone_id_lookup, std::vector<std::string> &bone_names, std::vector<BoneParent> &bone_parents, binary_format_v2 &format, const char *prefix = 0, uint32_t length = 0, int32_t parent_bone = -1)
+{
+    char new_prefix[250];
+    if (prefix)
+    {
+        snprintf(new_prefix, 250, "%s/%s", prefix, node->mName.C_Str());
+    }
+    else
+    {
+        snprintf(new_prefix, 250, "%s", node->mName.C_Str());
+    }
+    printf("%*s[%s]", length * 2, "", node->mName.C_Str());
+
+    std::string bone_name(node->mName.data);
+    if (!bone_id_lookup.count(bone_name))
+    {
+        char pointer[32];
+        sprintf(pointer, "%p", node);
+        bone_name += pointer;
+        bone_id_lookup[bone_name] = (uint32_t)bone_id_lookup.size();
+        // Bone name = length (1 byte) + name
+        format.bone_names_size += 1 + (uint32_t)bone_name.length();
+        bone_names.push_back(bone_name);
+        format.bone_parent_size += (uint32_t)sizeof(BoneParent);
+        bone_parents.push_back({parent_bone});
+    }
+
+    uint32_t bone_id = bone_id_lookup[bone_name];
+    printf(" bone_id %d", bone_id);
+    bone_parents[bone_id] = {parent_bone};
+    printf(" parent_bone_id %d", parent_bone);
+    printf("\n");
+
+    if (node->mTransformation.IsIdentity())
+    {
+         printf("%*s{identity}\n", length * 2 + 2, "");
+    }
+    else
+    {
+         printf("%*s{"
+            "{%0.2f, %0.2f, %0.2f, %0.2f}"
+            ","
+            "{%0.2f, %0.2f, %0.2f, %0.2f}"
+            ","
+            "{%0.2f, %0.2f, %0.2f, %0.2f}"
+            ","
+            "{%0.2f, %0.2f, %0.2f, %0.2f}"
+            "\n",
+            length * 2 + 2,
+            "",
+            node->mTransformation.a1,
+            node->mTransformation.a2,
+            node->mTransformation.a3,
+            node->mTransformation.a4,
+            node->mTransformation.b1,
+            node->mTransformation.b2,
+            node->mTransformation.b3,
+            node->mTransformation.b4,
+            node->mTransformation.c1,
+            node->mTransformation.c2,
+            node->mTransformation.c3,
+            node->mTransformation.c4,
+            node->mTransformation.d1,
+            node->mTransformation.d2,
+            node->mTransformation.d3,
+            node->mTransformation.d4
+            );
+    }
+
+    printf("%*smeshes: %d\n", length * 2 + 2, "", node->mNumMeshes);
+
+    for (uint32_t i = 0; i < node->mNumChildren; ++i)
+    {
+        process_nodes(node->mChildren[i], bone_id_lookup, bone_names, bone_parents, format, new_prefix, length + 1, bone_id);
+    }
+}
 
 int
 main(int argc, char **argv)
@@ -83,7 +169,6 @@ main(int argc, char **argv)
         printf("Scene incomplete\n");
         return 1;
     }
-
     printf("Scene number of meshes: %d\n", scene->mNumMeshes);
 
     printf("\n");
@@ -97,26 +182,10 @@ main(int argc, char **argv)
 
     printf("\n");
 
-    for (uint32_t i = 0; i < root->mNumChildren; ++i)
-    {
-        aiNode *child = root->mChildren[i];;
-        printf("child[%d] name: %s\n", i, child->mName.C_Str());
-        printf("child[%d] number of children: %d\n", i, child->mNumChildren);
-        printf("child[%d] number of meshes: %d\n", i, child->mNumMeshes);
-        printf("child[%d] transformation is identity: %d\n", i, child->mTransformation.IsIdentity());
-
-        for (uint32_t j = 0; j < child->mNumMeshes; ++j)
-        {
-            aiMesh *mesh = scene->mMeshes[child->mMeshes[j]];
-            printf("child[%d] mesh[%d] number of vertices: %d\n", i, j, mesh->mNumVertices);
-        }
-        printf("\n");
-    }
-
     if (!root->mTransformation.IsIdentity())
     {
         printf("root transformation is not identity\n");
-        return 1;
+        //return 1;
     }
 
     binary_format_v2 format = {};
@@ -151,6 +220,10 @@ main(int argc, char **argv)
         format.bone_weights_size += sizeof(float) * 4 * mesh->mNumVertices;
     }
 
+    std::vector<BoneParent> bone_parents;
+    bone_parents.resize(bone_names.size());
+    process_nodes(scene->mRootNode, bone_id_lookup, bone_names, bone_parents, format);
+
     uint32_t offset = format.vertices_size;
     format.texcoords_offset = offset;
     offset += format.texcoords_size;
@@ -164,7 +237,10 @@ main(int argc, char **argv)
     offset += format.bone_ids_size;
     format.bone_weights_offset = offset;
     offset += format.bone_weights_size;
+    format.bone_parent_offset = offset;
+    offset += format.bone_parent_size;
 
+    format.num_bones = (uint32_t)bone_parents.size();
     FILE *of = fopen(outputfile, "wb");
     char fmt[4] = { 'H', 'J', 'N', 'T' };
     size_t written = 0;
@@ -227,6 +303,12 @@ main(int argc, char **argv)
             bone_weights.push_back(local_weights[i].weights[2]);
             bone_weights.push_back(local_weights[i].weights[3]);
         }
+    }
+
+    printf("Bone parents size: %d\n", (uint32_t)bone_parents.size());
+    for (uint32_t i = 0; i < bone_parents.size(); ++i)
+    {
+        printf("Bone[%s] has parent [%d]\n", bone_names[i].c_str(), bone_parents[i].bone_id);
     }
 
     fwrite(&positions[0], sizeof(float), positions.size(), of);
@@ -297,6 +379,7 @@ main(int argc, char **argv)
             uint8_t length = (uint8_t)it->length();
             fwrite(&length, sizeof(uint8_t), 1, of);
             fwrite(it->c_str(), sizeof(uint8_t), length, of);
+            printf("bone[%s]\n", it->c_str());
         }
     }
 
@@ -304,6 +387,7 @@ main(int argc, char **argv)
     {
         fwrite(&bone_ids[0], sizeof(float), bone_ids.size(), of);
         fwrite(&bone_weights[0], sizeof(float), bone_weights.size(), of);
+        fwrite(&bone_parents[0], sizeof(BoneParent), bone_parents.size(), of);
     }
 
     fclose(of);

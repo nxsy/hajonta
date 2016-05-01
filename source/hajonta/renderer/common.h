@@ -149,6 +149,9 @@ Mesh
     uint32_t num_bones;
     buffer bone_ids;
     buffer bone_weights;
+
+    char bone_names[100][50];
+    int32_t bone_parents[50];
 };
 
 struct

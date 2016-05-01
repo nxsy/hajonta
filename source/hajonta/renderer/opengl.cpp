@@ -495,6 +495,8 @@ load_mesh_asset(
         uint32_t bone_ids_size;
         uint32_t bone_weights_offset;
         uint32_t bone_weights_size;
+        uint32_t bone_parent_offset;
+        uint32_t bone_parent_size;
     } format = {};
 
     if (version->version == 1)
@@ -543,6 +545,8 @@ load_mesh_asset(
             uint32_t bone_ids_size;
             uint32_t bone_weights_offset;
             uint32_t bone_weights_size;
+            uint32_t bone_parent_offset;
+            uint32_t bone_parent_size;
         } *v2_format = (binary_format_v2 *)mesh_buffer;
         format.vertices_offset = v2_format->vertices_offset;
         format.vertices_size = v2_format->vertices_size;
@@ -560,6 +564,8 @@ load_mesh_asset(
         format.bone_ids_size = v2_format->bone_ids_size;
         format.bone_weights_offset = v2_format->bone_weights_offset;
         format.bone_weights_size = v2_format->bone_weights_size;
+        format.bone_parent_offset = v2_format->bone_parent_offset;
+        format.bone_parent_size = v2_format->bone_parent_size;
         mesh_buffer += v2_format->header_size;
     }
 
@@ -611,6 +617,16 @@ load_mesh_asset(
         format.bone_weights_size,
     };
     offset += format.bone_weights_size;
+
+    int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
+    uint8_t *bone_name = base_offset + format.bone_names_offset;
+    for (uint32_t i = 0; i < format.num_bones; ++i)
+    {
+        mesh->bone_parents[i] = bone_parents[i];
+        uint8_t bone_name_length = *bone_name;
+        snprintf(mesh->bone_names[i], bone_name_length, "%*s", bone_name_length, bone_name + 1);
+        bone_name += bone_name_length + 1;
+    }
 
     mesh->num_triangles = format.num_triangles;
     mesh->num_bones = format.num_bones;
@@ -1018,6 +1034,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
 
         add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced2.hjm");
         add_asset(state, "kenney_blocky_advanced_cowboy_texture", "testing/kenney/skin_exclusiveCowboy.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "blockfigureRigged6_mesh", "testing/human_low.hjm");
+        add_asset(state, "blockfigureRigged6_texture", "testing/blockfigureRigged6.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1547,6 +1565,12 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t a_bone_ids_id = -1;
     int32_t a_bone_weights_id = -1;
 
+    m4 bones[50];
+    for (uint32_t i = 0; i < harray_count(bones); ++i)
+    {
+        bones[i] = m4identity();
+    }
+
     glBindVertexArray(state->vao);
     switch (mesh_from_asset->shader_type)
     {
@@ -1561,12 +1585,8 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
-            m4 bones[50];
-            for (uint32_t i = 0; i < harray_count(bones); ++i)
-            {
-                 bones[i] = m4identity();
-            }
             glUniformMatrix4fv(program.u_bones_id, 50, GL_FALSE, (float *)&bones);
+            glUniform1i(program.u_bones_enabled_id, mesh.bone_ids.size > 0);
 
             glEnableVertexAttribArray((GLuint)program.a_position_id);
             glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
@@ -1594,12 +1614,17 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
             glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
+            glUniformMatrix4fv(program.u_bones_id, 50, GL_FALSE, (float *)&bones);
+            glUniform1i(program.u_bones_enabled_id, mesh.bone_ids.size > 0);
+
             glEnableVertexAttribArray((GLuint)program.a_position_id);
             glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
             glErrorAssert();
 
             a_position_id = program.a_position_id;
             a_texcoord_id = program.a_texcoord_id;
+            a_bone_ids_id = program.a_bone_ids_id;
+            a_bone_weights_id = program.a_bone_weights_id;
         } break;
     }
 
@@ -1768,6 +1793,8 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
         char label[100];
         snprintf(label, 100, "Mesh debug##%p", mesh_from_asset);
         ImGui::Begin(label);
+
+        ImGui::Text("%d faces, %d bones", mesh.num_triangles, mesh.num_bones);
         if (!mesh_descriptor.mesh_debug.flags.initialized)
         {
             mesh_descriptor.mesh_debug.end_face = max_faces;
@@ -1790,6 +1817,58 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
         }
         start_face = mesh_descriptor.mesh_debug.start_face;
         end_face = mesh_descriptor.mesh_debug.end_face;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
+        ImGui::Columns(2);
+        ImGui::Separator();
+
+        int32_t first_bone = 0;
+        for (uint32_t i = 0; i < mesh.num_bones; ++i)
+        {
+            if (mesh.bone_parents[i] == -1)
+            {
+                first_bone = (int32_t)i;
+                break;
+            }
+        }
+
+        int32_t stack_location = 0;
+        int32_t stack[50];
+        stack[0] = first_bone;
+        int32_t parent_list[50];
+        int32_t parent_list_location = 0;
+        parent_list[0] = first_bone;
+
+        while (stack_location >= 0)
+        {
+            int32_t bone = stack[stack_location];
+            int32_t parent_bone = mesh.bone_parents[bone];
+            --stack_location;
+            while (parent_list[parent_list_location] != parent_bone && parent_list_location >= 0)
+            {
+                --parent_list_location;
+            }
+            ++parent_list_location;
+
+            ImGui::Text("%*s %s", parent_list_location * 2, "", mesh.bone_names[bone]);
+            ImGui::NextColumn();
+            ImGui::Text("Something here");
+            ImGui::NextColumn();
+            parent_list[parent_list_location] = bone;
+
+            for (uint32_t i = 0; i < mesh.num_bones; ++i)
+            {
+                if (mesh.bone_parents[i] == bone)
+                {
+                    stack_location++;
+                    stack[stack_location] = (int32_t)i;
+                }
+            }
+        }
+
+        ImGui::Columns(1);
+        ImGui::Separator();
+        ImGui::PopStyleVar();
         ImGui::End();
     }
     int32_t num_faces = end_face - start_face;
