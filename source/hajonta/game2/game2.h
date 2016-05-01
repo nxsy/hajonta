@@ -331,6 +331,14 @@ LightIds
     MAX = sun,
 };
 
+enum struct
+ArmatureIds
+{
+    test1,
+
+    MAX = test1,
+};
+
 struct
 AssetDescriptors
 {
@@ -372,6 +380,8 @@ struct game_state
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
+    ArmatureDescriptor armatures[(uint32_t)ArmatureIds::MAX + 1];
+    MeshBoneDescriptor bones[50];
 
     _asset_ids asset_ids;
     AssetDescriptors assets;

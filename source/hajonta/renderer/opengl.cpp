@@ -1536,7 +1536,16 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 }
 
 void
-draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, LightDescriptor *light_descriptors, render_entry_type_mesh_from_asset *mesh_from_asset)
+draw_mesh_from_asset(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    m4 *matrices,
+    asset_descriptor *descriptors,
+    LightDescriptor *light_descriptors,
+    ArmatureDescriptor *armature_descriptors,
+    render_entry_type_mesh_from_asset *mesh_from_asset
+)
 {
     glErrorAssert();
     glDisable(GL_BLEND);
@@ -1558,6 +1567,7 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
     auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
 
+    uint32_t debug = mesh_from_asset->flags.debug;
 
     int32_t a_position_id = -1;
     int32_t a_texcoord_id = -1;
@@ -1565,11 +1575,204 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
     int32_t a_bone_ids_id = -1;
     int32_t a_bone_weights_id = -1;
 
+    int32_t max_faces = (int32_t)mesh.num_triangles;
+    int32_t start_face = 0;
+    int32_t end_face = max_faces;
+
     m4 bones[50];
     for (uint32_t i = 0; i < harray_count(bones); ++i)
     {
         bones[i] = m4identity();
     }
+
+    ArmatureDescriptor *armature = 0;
+    if (mesh_from_asset->armature_descriptor_id >= 0)
+    {
+        armature = armature_descriptors + mesh_from_asset->armature_descriptor_id;
+    }
+
+    if (debug)
+    {
+        {
+            char label[100];
+            if (mesh_from_asset->armature_descriptor_id >= 0)
+            {
+                snprintf(label, 100, "Mesh debug##%d", mesh_from_asset->armature_descriptor_id);
+            }
+            else
+            {
+                snprintf(label, 100, "Mesh debug##%p", mesh_from_asset);
+            }
+            ImGui::Begin(label);
+        }
+
+        ImGui::Text("%d faces, %d bones", mesh.num_triangles, mesh.num_bones);
+        if (!mesh_descriptor.mesh_debug.flags.initialized)
+        {
+            mesh_descriptor.mesh_debug.end_face = max_faces;
+            mesh_descriptor.mesh_debug.flags.initialized = 1;
+        }
+        if (mesh_descriptor.mesh_debug.start_face > max_faces)
+        {
+            mesh_descriptor.mesh_debug.start_face = 0;
+        }
+        if (mesh_descriptor.mesh_debug.end_face > max_faces)
+        {
+            mesh_descriptor.mesh_debug.end_face = max_faces;
+        }
+        ImGui::DragIntRange2("mesh faces", &mesh_descriptor.mesh_debug.start_face, &mesh_descriptor.mesh_debug.end_face, 5.0f, 0, max_faces);
+        if (ImGui::Button("Mesh debug reset"))
+        {
+            mesh_descriptor.mesh_debug.start_face = 0;
+            mesh_descriptor.mesh_debug.end_face = max_faces;
+        }
+        start_face = mesh_descriptor.mesh_debug.start_face;
+        end_face = mesh_descriptor.mesh_debug.end_face;
+    }
+
+    int32_t first_bone = 0;
+    for (uint32_t i = 0; i < mesh.num_bones; ++i)
+    {
+        if (mesh.bone_parents[i] == -1)
+        {
+            first_bone = (int32_t)i;
+            break;
+        }
+    }
+
+    int32_t stack_location = 0;
+
+    int32_t stack[50];
+    stack[0] = first_bone;
+    struct
+    {
+        int32_t bone_id;
+        m4 transform;
+    } parent_list[50];
+    int32_t parent_list_location = 0;
+
+    if (debug)
+    {
+        if (armature)
+        {
+            ImGui::Separator();
+            if (ImGui::Button("Armature reset"))
+            {
+                MeshBoneDescriptor b = {};
+                for (uint32_t i = 0; i < armature->count; ++i)
+                {
+                    armature->bones[i] = b;
+                }
+            }
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
+        ImGui::Columns(3);
+        ImGui::Separator();
+
+    }
+
+    while (stack_location >= 0)
+    {
+        int32_t bone = stack[stack_location];
+
+        int32_t parent_bone = mesh.bone_parents[bone];
+        --stack_location;
+        while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
+        {
+            --parent_list_location;
+        }
+        ++parent_list_location;
+
+        m4 parent_matrix = m4identity();
+        if (parent_list_location)
+        {
+            parent_matrix = parent_list[parent_list_location - 1].transform;
+        }
+
+        m4 local_matrix = m4identity();
+
+        if (debug)
+        {
+            char label[200];
+            sprintf(label, "%*s %s", parent_list_location * 2, "", mesh.bone_names[bone]);
+            auto size = ImGui::CalcTextSize(label);
+            ImGui::PushItemWidth(size.x);
+            ImGui::Text(label);
+            ImGui::PopItemWidth();
+            ImGui::NextColumn();
+        }
+
+        if (armature)
+        {
+            MeshBoneDescriptor &d = armature->bones[bone];
+            if (d.scale == 0)
+            {
+                d.scale = 1.0f;
+            }
+            if (debug)
+            {
+                char label[100];
+                sprintf(label, "Scale##%d", bone);
+                ImGui::DragFloat(label, &d.scale, 0.01f, 0.01f, 100.0f, "%.2f");
+                ImGui::NextColumn();
+                sprintf(label, "Translation##%d", bone);
+                ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.2f");
+                ImGui::NextColumn();
+            }
+
+            m4 scale = m4identity();
+            scale.cols[0].E[0] = d.scale;
+            scale.cols[1].E[1] = d.scale;
+            scale.cols[2].E[2] = d.scale;
+
+            m4 translate = m4identity();
+            translate.cols[3].x = d.translate.x;
+            translate.cols[3].y = d.translate.y;
+            translate.cols[3].z = d.translate.z;
+
+            m4 rotate = m4rotation(d.axis, d.angle);
+
+            local_matrix = m4mul(translate,m4mul(rotate, scale));
+        }
+        else
+        {
+            if (debug)
+            {
+                ImGui::Text("No armature storage");
+                ImGui::NextColumn();
+                ImGui::NextColumn();
+            }
+        }
+
+
+        m4 final_transform = m4mul(parent_matrix, local_matrix);
+
+        parent_list[parent_list_location] = {
+            bone,
+            final_transform,
+        };
+
+        bones[bone] = final_transform;
+
+        for (uint32_t i = 0; i < mesh.num_bones; ++i)
+        {
+            if (mesh.bone_parents[i] == bone)
+            {
+                stack_location++;
+                stack[stack_location] = (int32_t)i;
+            }
+        }
+    }
+
+    if (debug)
+    {
+        ImGui::Columns(1);
+        ImGui::Separator();
+        ImGui::PopStyleVar();
+        ImGui::End();
+    }
+    int32_t num_faces = end_face - start_face;
 
     glBindVertexArray(state->vao);
     switch (mesh_from_asset->shader_type)
@@ -1784,94 +1987,6 @@ draw_mesh_from_asset(hajonta_thread_context *ctx, platform_memory *memory, rende
 
     glBindTexture(GL_TEXTURE_2D, texture);
     glErrorAssert();
-
-    int32_t max_faces = (int32_t)mesh.num_triangles;
-    int32_t start_face = 0;
-    int32_t end_face = max_faces;
-    if (mesh_from_asset->flags.debug)
-    {
-        char label[100];
-        snprintf(label, 100, "Mesh debug##%p", mesh_from_asset);
-        ImGui::Begin(label);
-
-        ImGui::Text("%d faces, %d bones", mesh.num_triangles, mesh.num_bones);
-        if (!mesh_descriptor.mesh_debug.flags.initialized)
-        {
-            mesh_descriptor.mesh_debug.end_face = max_faces;
-            mesh_descriptor.mesh_debug.flags.initialized = 1;
-        }
-        if (mesh_descriptor.mesh_debug.start_face > max_faces)
-        {
-            mesh_descriptor.mesh_debug.start_face = 0;
-        }
-        if (mesh_descriptor.mesh_debug.end_face > max_faces)
-        {
-            mesh_descriptor.mesh_debug.end_face = max_faces;
-        }
-
-        ImGui::DragIntRange2("mesh faces", &mesh_descriptor.mesh_debug.start_face, &mesh_descriptor.mesh_debug.end_face, 5.0f, 0, max_faces);
-        if (ImGui::Button("Mesh debug reset"))
-        {
-            mesh_descriptor.mesh_debug.start_face = 0;
-            mesh_descriptor.mesh_debug.end_face = max_faces;
-        }
-        start_face = mesh_descriptor.mesh_debug.start_face;
-        end_face = mesh_descriptor.mesh_debug.end_face;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
-        ImGui::Columns(2);
-        ImGui::Separator();
-
-        int32_t first_bone = 0;
-        for (uint32_t i = 0; i < mesh.num_bones; ++i)
-        {
-            if (mesh.bone_parents[i] == -1)
-            {
-                first_bone = (int32_t)i;
-                break;
-            }
-        }
-
-        int32_t stack_location = 0;
-        int32_t stack[50];
-        stack[0] = first_bone;
-        int32_t parent_list[50];
-        int32_t parent_list_location = 0;
-        parent_list[0] = first_bone;
-
-        while (stack_location >= 0)
-        {
-            int32_t bone = stack[stack_location];
-            int32_t parent_bone = mesh.bone_parents[bone];
-            --stack_location;
-            while (parent_list[parent_list_location] != parent_bone && parent_list_location >= 0)
-            {
-                --parent_list_location;
-            }
-            ++parent_list_location;
-
-            ImGui::Text("%*s %s", parent_list_location * 2, "", mesh.bone_names[bone]);
-            ImGui::NextColumn();
-            ImGui::Text("Something here");
-            ImGui::NextColumn();
-            parent_list[parent_list_location] = bone;
-
-            for (uint32_t i = 0; i < mesh.num_bones; ++i)
-            {
-                if (mesh.bone_parents[i] == bone)
-                {
-                    stack_location++;
-                    stack[stack_location] = (int32_t)i;
-                }
-            }
-        }
-
-        ImGui::Columns(1);
-        ImGui::Separator();
-        ImGui::PopStyleVar();
-        ImGui::End();
-    }
-    int32_t num_faces = end_face - start_face;
     glDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
     glErrorAssert();
     if (mesh_from_asset->flags.attach_shadowmap)
@@ -2039,6 +2154,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         m4 *matrices = {};
         asset_descriptor *asset_descriptors = {};
         LightDescriptors lights = {};
+        ArmatureDescriptors armatures = {};
 
         uint32_t matrix_count = 0;
         uint32_t asset_descriptor_count = 0;
@@ -2204,6 +2320,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(descriptors, item, header, element_size);
                     lights = item->lights;
+                    armatures = item->armatures;
                 } break;
                 case render_entry_type::QUADS:
                 {
@@ -2222,7 +2339,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::mesh_from_asset:
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
-                    draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, lights.descriptors, item);
+                    draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, item);
                 } break;
                 case render_entry_type::apply_filter:
                 {

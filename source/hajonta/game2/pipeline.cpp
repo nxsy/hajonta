@@ -48,7 +48,7 @@ PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
         RenderListReset(entry->list);
         PushMatrices(entry->list, data->matrix_count, data->matrices);
         PushAssetDescriptors(entry->list, data->asset_count, data->assets);
-        PushDescriptors(entry->list, data->l);
+        PushDescriptors(entry->list, data->l, data->armatures);
         if (!entry->do_not_clear)
         {
             PushClear(entry->list, entry->clear_color);

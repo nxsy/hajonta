@@ -116,10 +116,34 @@ LightDescriptors
 };
 
 struct
+MeshBoneDescriptor
+{
+    float scale;
+    v3 translate;
+    v3 axis;
+    float angle;
+};
+
+struct
+ArmatureDescriptor
+{
+    uint32_t count;
+    MeshBoneDescriptor *bones;
+};
+
+struct
+ArmatureDescriptors
+{
+    uint32_t count;
+    ArmatureDescriptor *descriptors;
+};
+
+struct
 render_entry_type_descriptors
 {
     render_entry_header header;
     LightDescriptors lights;
+    ArmatureDescriptors armatures;
 };
 
 enum struct
@@ -181,6 +205,7 @@ render_entry_type_mesh_from_asset
     int32_t mesh_asset_descriptor_id;
     int32_t texture_asset_descriptor_id;
     int32_t lights_mask;
+    int32_t armature_descriptor_id;
     MeshFromAssetFlags flags;
     ShaderType shader_type;
 };
@@ -542,12 +567,13 @@ PushAssetDescriptors(render_entry_list *list, uint32_t count, asset_descriptor *
 }
 
 inline void
-PushDescriptors(render_entry_list *list, LightDescriptors lights)
+PushDescriptors(render_entry_list *list, LightDescriptors lights, ArmatureDescriptors armatures)
 {
      render_entry_type_descriptors *entry = PushRenderElement(list, descriptors);
      if (entry)
      {
-         entry->lights = lights;
+        entry->lights = lights;
+        entry->armatures = armatures;
      }
 }
 
@@ -565,7 +591,7 @@ PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_ma
 }
 
 inline void
-PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask, MeshFromAssetFlags flags, ShaderType shader_type)
+PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, int32_t mesh_asset_descriptor_id, int32_t texture_asset_descriptor_id, int32_t lights_mask, int32_t armature_descriptor_id, MeshFromAssetFlags flags, ShaderType shader_type)
 {
      render_entry_type_mesh_from_asset *entry = PushRenderElement(list, mesh_from_asset);
      if (entry)
@@ -575,6 +601,7 @@ PushMeshFromAsset(render_entry_list *list, int32_t projection_matrix_id, int32_t
          entry->mesh_asset_descriptor_id = mesh_asset_descriptor_id;
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
          entry->lights_mask = lights_mask;
+         entry->armature_descriptor_id = armature_descriptor_id;
          entry->flags = flags;
          entry->shader_type = shader_type;
      }

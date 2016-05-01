@@ -204,8 +204,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         light.diffuse_intensity = 1.0f;
         light.attenuation_constant = 1.0f;
 
-        state->debug.show_textures = 1;
-        state->debug.show_lights = 1;
+        auto &armature = state->armatures[(uint32_t)ArmatureIds::test1];
+        armature.count = harray_count(state->bones);
+        armature.bones = state->bones;
+
+        state->debug.show_textures = 0;
+        state->debug.show_lights = 0;
         state->debug.cull_front = 1;
     }
 
@@ -272,10 +276,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
     rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
-    scale.cols[0].E[0] = 1.1f;
-    scale.cols[1].E[1] = 1.1f;
-    scale.cols[2].E[2] = 1.1f;
-    translate.cols[3] = {0, 0.0f, -5.0f, 1.0f};
+    scale.cols[0].E[0] = 1.0f;
+    scale.cols[1].E[1] = 1.0f;
+    scale.cols[2].E[2] = 1.0f;
+    translate.cols[3] = {0, -2.0f, -5.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
@@ -300,11 +304,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     };
 
     LightDescriptors l = {harray_count(state->lights), state->lights};
+    ArmatureDescriptors armatures = {
+        harray_count(state->armatures),
+        state->armatures + 0
+    };
+
     PipelineResetData prd = {
         { input->window.width, input->window.height },
         harray_count(state->matrices), state->matrices,
         harray_count(state->assets.descriptors), (asset_descriptor *)&state->assets.descriptors,
         l,
+        armatures,
     };
 
     PipelineReset(
@@ -611,6 +621,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.cactus_mesh,
         state->asset_ids.cactus_texture,
         1,
+        -1,
         mesh_flags,
         ShaderType::standard
     );
@@ -656,6 +667,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         1,
+        -1,
         three_dee_mesh_flags_debug,
         ShaderType::standard
     );
@@ -667,6 +679,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         0,
+        -1,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
@@ -680,6 +693,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         /*state->asset_ids.blockfigureRigged6_texture,*/
         -1,
         1,
+        (int32_t)ArmatureIds::test1,
         three_dee_mesh_flags_debug,
         ShaderType::standard
     );
@@ -692,6 +706,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         /*state->asset_ids.blockfigureRigged6_texture,*/
         -1,
         0,
+        (int32_t)ArmatureIds::test1,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
@@ -703,6 +718,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,
         1,
+        -1,
         three_dee_mesh_flags,
         ShaderType::standard
     );
@@ -712,6 +728,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,
         0,
+        -1,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );

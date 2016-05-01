@@ -82,5 +82,6 @@ PipelineResetData
     uint32_t asset_count;
     asset_descriptor *assets;
     LightDescriptors l;
+    ArmatureDescriptors armatures;
 };
 
