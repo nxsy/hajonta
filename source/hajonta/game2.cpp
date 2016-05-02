@@ -275,10 +275,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[2].E[2] = _scale;
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
-    rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
-    scale.cols[0].E[0] = 1.0f;
-    scale.cols[1].E[1] = 1.0f;
-    scale.cols[2].E[2] = 1.0f;
+    //rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
+    scale.cols[0].E[0] = 0.02f;
+    scale.cols[1].E[1] = 0.02f;
+    scale.cols[2].E[2] = 0.02f;
     translate.cols[3] = {0, -2.0f, -5.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
@@ -712,6 +712,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     );
 #endif
 
+    /*
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::plane_model_matrix,
@@ -732,6 +733,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
+    */
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

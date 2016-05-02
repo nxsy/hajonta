@@ -665,6 +665,39 @@ m4unittests()
     return true;
 }
 
+struct
+AxisAngle
+{
+    v3 axis;
+    float angle;
+};
+
+AxisAngle
+AxisAngleFromQuaternion(Quaternion _q)
+{
+    v4 q = {_q.x, _q.y, _q.z, _q.w};
+    if (q.w > 1.0)
+    {
+        q = v4normalize(q);
+    }
+
+    if (q.w == 1.0f)
+    {
+        return { {0,1,0}, 0 };
+    }
+    float divisor = sqrtf(1.0f - q.w * q.w);
+    v3 axis = {
+        q.x / divisor,
+        q.y / divisor,
+        q.z / divisor,
+    };
+    float angle = -2.0f * acosf(q.w);
+    return {
+        axis,
+        angle,
+    };
+}
+
 m4
 m4rotation(v3 axis, float angle)
 {
@@ -694,6 +727,13 @@ m4rotation(v3 axis, float angle)
     result.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
 
     return result;
+}
+
+m4
+m4rotation(Quaternion q)
+{
+    AxisAngle aa = AxisAngleFromQuaternion(q);
+    return m4rotation(aa.axis, aa.angle);
 }
 
 m4

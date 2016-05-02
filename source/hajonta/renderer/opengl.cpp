@@ -497,6 +497,10 @@ load_mesh_asset(
         uint32_t bone_weights_size;
         uint32_t bone_parent_offset;
         uint32_t bone_parent_size;
+        uint32_t bone_offsets_offset;
+        uint32_t bone_offsets_size;
+        uint32_t bone_default_transform_offset;
+        uint32_t bone_default_transform_size;
     } format = {};
 
     if (version->version == 1)
@@ -547,6 +551,10 @@ load_mesh_asset(
             uint32_t bone_weights_size;
             uint32_t bone_parent_offset;
             uint32_t bone_parent_size;
+            uint32_t bone_offsets_offset;
+            uint32_t bone_offsets_size;
+            uint32_t bone_default_transform_offset;
+            uint32_t bone_default_transform_size;
         } *v2_format = (binary_format_v2 *)mesh_buffer;
         format.vertices_offset = v2_format->vertices_offset;
         format.vertices_size = v2_format->vertices_size;
@@ -566,6 +574,10 @@ load_mesh_asset(
         format.bone_weights_size = v2_format->bone_weights_size;
         format.bone_parent_offset = v2_format->bone_parent_offset;
         format.bone_parent_size = v2_format->bone_parent_size;
+        format.bone_offsets_offset = v2_format->bone_offsets_offset;
+        format.bone_offsets_size = v2_format->bone_offsets_size;
+        format.bone_default_transform_offset = v2_format->bone_default_transform_offset;
+        format.bone_default_transform_size = v2_format->bone_default_transform_size;
         mesh_buffer += v2_format->header_size;
     }
 
@@ -619,10 +631,14 @@ load_mesh_asset(
     offset += format.bone_weights_size;
 
     int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
+    m4 *bone_offsets = (m4 *)(base_offset + format.bone_offsets_offset);
+    MeshBoneDescriptor *default_transforms = (MeshBoneDescriptor *)(base_offset + format.bone_default_transform_offset);
     uint8_t *bone_name = base_offset + format.bone_names_offset;
     for (uint32_t i = 0; i < format.num_bones; ++i)
     {
         mesh->bone_parents[i] = bone_parents[i];
+        mesh->bone_offsets[i] = bone_offsets[i];
+        mesh->default_transforms[i] = default_transforms[i];
         uint8_t bone_name_length = *bone_name;
         snprintf(mesh->bone_names[i], bone_name_length, "%*s", bone_name_length, bone_name + 1);
         bone_name += bone_name_length + 1;
@@ -1658,10 +1674,43 @@ draw_mesh_from_asset(
             ImGui::Separator();
             if (ImGui::Button("Armature reset"))
             {
-                MeshBoneDescriptor b = {};
+                MeshBoneDescriptor b = {
+                    {1,1,1},
+                    {0,0,0},
+                    {0,0,0,0},
+                };
                 for (uint32_t i = 0; i < armature->count; ++i)
                 {
                     armature->bones[i] = b;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Armature to mesh defaults"))
+            {
+                MeshBoneDescriptor b = {
+                    {0,0,0},
+                    {0,0,0},
+                    {0,0,0,0},
+                };
+                for (uint32_t i = 0; i < armature->count; ++i)
+                {
+                    armature->bones[i] = b;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Armature to scale"))
+            {
+                for (uint32_t i = 0; i < armature->count; ++i)
+                {
+                    armature->bones[i].scale = {1,1,1};
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("No rotation"))
+            {
+                for (uint32_t i = 0; i < armature->count; ++i)
+                {
+                    armature->bones[i].q = {0, 0, 0, 0};
                 }
             }
         }
@@ -1706,15 +1755,41 @@ draw_mesh_from_asset(
         if (armature)
         {
             MeshBoneDescriptor &d = armature->bones[bone];
-            if (d.scale == 0)
+            if (d.scale.x == 0)
             {
-                d.scale = 1.0f;
+                d.scale = mesh.default_transforms[bone].scale;
+                d.translate = mesh.default_transforms[bone].translate;
+                d.q = mesh.default_transforms[bone].q;
+                /*
+                if (d.scale.x > 50)
+                {
+                    d.scale.x = 1;
+                    d.scale.y = 1;
+                    d.scale.z = 1;
+                }
+                if (d.translate.y > 50)
+                {
+                    d.translate.y = 0;
+                }
+                if (d.translate.z > 9)
+                {
+                    d.translate.z = 0;
+                }
+                */
+                /*
+                d.q.x = 0;
+                d.q.y = 0;
+                d.q.z = 0;
+                d.q.w = 0;
+                */
             }
             if (debug)
             {
                 char label[100];
                 sprintf(label, "Scale##%d", bone);
-                ImGui::DragFloat(label, &d.scale, 0.01f, 0.01f, 100.0f, "%.2f");
+                ImGui::DragFloat(label, &d.scale.x, 0.01f, 0.01f, 100.0f, "%.2f");
+                d.scale.y = d.scale.x;
+                d.scale.z = d.scale.x;
                 ImGui::NextColumn();
                 sprintf(label, "Translation##%d", bone);
                 ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.2f");
@@ -1722,16 +1797,17 @@ draw_mesh_from_asset(
             }
 
             m4 scale = m4identity();
-            scale.cols[0].E[0] = d.scale;
-            scale.cols[1].E[1] = d.scale;
-            scale.cols[2].E[2] = d.scale;
+
+            scale.cols[0].E[0] = d.scale.x;
+            scale.cols[1].E[1] = d.scale.y;
+            scale.cols[2].E[2] = d.scale.z;
 
             m4 translate = m4identity();
             translate.cols[3].x = d.translate.x;
             translate.cols[3].y = d.translate.y;
             translate.cols[3].z = d.translate.z;
 
-            m4 rotate = m4rotation(d.axis, d.angle);
+            m4 rotate = m4rotation(d.q);
 
             local_matrix = m4mul(translate,m4mul(rotate, scale));
         }
@@ -1746,14 +1822,14 @@ draw_mesh_from_asset(
         }
 
 
-        m4 final_transform = m4mul(parent_matrix, local_matrix);
+        m4 global_transform = m4mul(parent_matrix, local_matrix);
 
         parent_list[parent_list_location] = {
             bone,
-            final_transform,
+            global_transform,
         };
 
-        bones[bone] = final_transform;
+        bones[bone] = m4mul(global_transform, mesh.bone_offsets[bone]);
 
         for (uint32_t i = 0; i < mesh.num_bones; ++i)
         {

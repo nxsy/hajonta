@@ -1,6 +1,13 @@
+#if defined(_MSC_VER)
+#pragma warning(push, 4)
+#pragma warning(disable: 4458)
+#endif
 #include "assimp/Importer.hpp"
 #include "assimp/scene.h"
 #include "assimp/postprocess.h"
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #include <string>
 #include <unordered_map>
@@ -27,6 +34,10 @@ struct binary_format_v2
     uint32_t bone_weights_size;
     uint32_t bone_parent_offset;
     uint32_t bone_parent_size;
+    uint32_t bone_offsets_offset;
+    uint32_t bone_offsets_size;
+    uint32_t bone_default_transform_offset;
+    uint32_t bone_default_transform_size;
 };
 
 struct
@@ -47,81 +58,88 @@ BoneWeights
     float weights[4];
 };
 
-void
-process_nodes(aiNode *node, std::unordered_map<std::string, uint32_t> &bone_id_lookup, std::vector<std::string> &bone_names, std::vector<BoneParent> &bone_parents, binary_format_v2 &format, const char *prefix = 0, uint32_t length = 0, int32_t parent_bone = -1)
+struct v3
 {
-    char new_prefix[250];
-    if (prefix)
-    {
-        snprintf(new_prefix, 250, "%s/%s", prefix, node->mName.C_Str());
-    }
-    else
-    {
-        snprintf(new_prefix, 250, "%s", node->mName.C_Str());
-    }
-    printf("%*s[%s]", length * 2, "", node->mName.C_Str());
+    float x;
+    float y;
+    float z;
+};
 
+struct
+Quaternion
+{
+    float x;
+    float y;
+    float z;
+    float w;
+};
+
+struct
+MeshBoneDescriptor
+{
+    v3 scale;
+    v3 translate;
+    Quaternion q;
+};
+
+struct
+OffsetMatrix
+{
+    float matrix[16];
+};
+
+void
+process_nodes(
+    aiNode *node,
+    std::unordered_map<std::string, uint32_t> &bone_id_lookup,
+    std::vector<std::string> &bone_names,
+    std::vector<BoneParent> &bone_parents,
+    std::vector<MeshBoneDescriptor> &bone_default_transforms,
+    binary_format_v2 &format,
+    uint32_t length = 0,
+    int32_t parent_bone = -1
+)
+{
     std::string bone_name(node->mName.data);
+    uint32_t bone_id;
     if (!bone_id_lookup.count(bone_name))
     {
         char pointer[32];
         sprintf(pointer, "%p", node);
         bone_name += pointer;
-        bone_id_lookup[bone_name] = (uint32_t)bone_id_lookup.size();
+        bone_id = (uint32_t)bone_id_lookup.size();
+        bone_id_lookup[bone_name] = bone_id;
         // Bone name = length (1 byte) + name
         format.bone_names_size += 1 + (uint32_t)bone_name.length();
         bone_names.push_back(bone_name);
-        format.bone_parent_size += (uint32_t)sizeof(BoneParent);
-        bone_parents.push_back({parent_bone});
-    }
-
-    uint32_t bone_id = bone_id_lookup[bone_name];
-    printf(" bone_id %d", bone_id);
-    bone_parents[bone_id] = {parent_bone};
-    printf(" parent_bone_id %d", parent_bone);
-    printf("\n");
-
-    if (node->mTransformation.IsIdentity())
-    {
-         printf("%*s{identity}\n", length * 2 + 2, "");
+        bone_parents.resize(bone_id + 1);
+        bone_default_transforms.resize(bone_id + 1);
     }
     else
     {
-         printf("%*s{"
-            "{%0.2f, %0.2f, %0.2f, %0.2f}"
-            ","
-            "{%0.2f, %0.2f, %0.2f, %0.2f}"
-            ","
-            "{%0.2f, %0.2f, %0.2f, %0.2f}"
-            ","
-            "{%0.2f, %0.2f, %0.2f, %0.2f}"
-            "\n",
-            length * 2 + 2,
-            "",
-            node->mTransformation.a1,
-            node->mTransformation.a2,
-            node->mTransformation.a3,
-            node->mTransformation.a4,
-            node->mTransformation.b1,
-            node->mTransformation.b2,
-            node->mTransformation.b3,
-            node->mTransformation.b4,
-            node->mTransformation.c1,
-            node->mTransformation.c2,
-            node->mTransformation.c3,
-            node->mTransformation.c4,
-            node->mTransformation.d1,
-            node->mTransformation.d2,
-            node->mTransformation.d3,
-            node->mTransformation.d4
-            );
+        bone_id = bone_id_lookup[bone_name];
     }
 
-    printf("%*smeshes: %d\n", length * 2 + 2, "", node->mNumMeshes);
+    bone_parents[bone_id] = {parent_bone};
+    auto &t = node->mTransformation;
+    aiVector3D scaling;
+    aiVector3D position;
+    aiQuaternion quat;
+    t.Decompose(scaling, quat, position);
+
+    v3 scale = {scaling.x, scaling.y, scaling.z};
+    v3 translate = {position.x, position.y, position.z};
+    Quaternion q = {quat.x, quat.y, quat.z, quat.w};
+    MeshBoneDescriptor d = {
+        scale,
+        translate,
+        q
+    };
+    bone_default_transforms[bone_id] = d;
 
     for (uint32_t i = 0; i < node->mNumChildren; ++i)
     {
-        process_nodes(node->mChildren[i], bone_id_lookup, bone_names, bone_parents, format, new_prefix, length + 1, bone_id);
+        process_nodes(node->mChildren[i], bone_id_lookup, bone_names, bone_parents, bone_default_transforms, format, length + 1, bone_id);
     }
 }
 
@@ -196,18 +214,92 @@ main(int argc, char **argv)
     std::unordered_map<std::string, uint32_t> bone_id_lookup;
     std::vector<std::string> bone_names;
 
+    std::vector<OffsetMatrix> bone_offsets;
+    std::vector<MeshBoneDescriptor> bone_default_transforms;
+
     for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
     {
         aiMesh *mesh = scene->mMeshes[i];
         for (uint32_t j = 0; j < mesh->mNumBones; ++j)
         {
-            std::string bone_name(mesh->mBones[j]->mName.data);
+            auto &bone = mesh->mBones[j];
+            std::string bone_name(bone->mName.data);
             if (!bone_id_lookup.count(bone_name))
             {
                 bone_id_lookup[bone_name] = (uint32_t)bone_id_lookup.size();
                 // Bone name = length (1 byte) + name
                 format.bone_names_size += 1 + (uint32_t)bone_name.length();
                 bone_names.push_back(bone_name);
+
+                auto mOffsetMatrix = bone->mOffsetMatrix;
+                /*
+                printf("%s {"
+                    "{%0.2f, %0.2f, %0.2f, %0.2f}"
+                    ","
+                    "{%0.2f, %0.2f, %0.2f, %0.2f}"
+                    ","
+                    "{%0.2f, %0.2f, %0.2f, %0.2f}"
+                    ","
+                    "{%0.2f, %0.2f, %0.2f, %0.2f}"
+                    "\n",
+                    bone_name.c_str(),
+                    mOffsetMatrix.a1,
+                    mOffsetMatrix.a2,
+                    mOffsetMatrix.a3,
+                    mOffsetMatrix.a4,
+                    mOffsetMatrix.b1,
+                    mOffsetMatrix.b2,
+                    mOffsetMatrix.b3,
+                    mOffsetMatrix.b4,
+                    mOffsetMatrix.c1,
+                    mOffsetMatrix.c2,
+                    mOffsetMatrix.c3,
+                    mOffsetMatrix.c4,
+                    mOffsetMatrix.d1,
+                    mOffsetMatrix.d2,
+                    mOffsetMatrix.d3,
+                    mOffsetMatrix.d4
+                    );
+                */
+                auto &t = bone->mOffsetMatrix;
+                aiVector3D scaling;
+                aiVector3D position;
+                aiQuaternion quat;
+                t.Decompose(scaling, quat, position);
+
+                printf("%s"
+                    " scale {%0.2f, %0.2f, %0.2f}"
+                    " position {%0.2f, %0.2f, %0.2f}"
+                    " rotation {%0.2f, %0.2f, %0.2f, %0.2f}"
+                    "\n",
+                    bone_name.c_str(),
+                    scaling.x, scaling.y, scaling.z,
+                    position.x, position.y, position.z,
+                    quat.x, quat.y, quat.z, quat.w);
+
+
+                OffsetMatrix m = {
+                    {
+                        mOffsetMatrix.a1,
+                        mOffsetMatrix.b1,
+                        mOffsetMatrix.c1,
+                        mOffsetMatrix.d1,
+                        mOffsetMatrix.a2,
+                        mOffsetMatrix.b2,
+                        mOffsetMatrix.c2,
+                        mOffsetMatrix.d2,
+                        mOffsetMatrix.a3,
+                        mOffsetMatrix.b3,
+                        mOffsetMatrix.c3,
+                        mOffsetMatrix.d3,
+                        mOffsetMatrix.a4,
+                        mOffsetMatrix.b4,
+                        mOffsetMatrix.c4,
+                        mOffsetMatrix.d4,
+                    },
+                };
+
+                bone_offsets.push_back(m);
             }
         }
         format.vertices_size += sizeof(float) * 3 * mesh->mNumVertices;
@@ -222,7 +314,12 @@ main(int argc, char **argv)
 
     std::vector<BoneParent> bone_parents;
     bone_parents.resize(bone_names.size());
-    process_nodes(scene->mRootNode, bone_id_lookup, bone_names, bone_parents, format);
+    bone_default_transforms.resize(bone_names.size());
+    process_nodes(scene->mRootNode, bone_id_lookup, bone_names, bone_parents, bone_default_transforms, format);
+    bone_offsets.resize(bone_names.size());
+    format.bone_offsets_size = (uint32_t)(sizeof(bone_offsets[0]) * bone_offsets.size());
+    format.bone_parent_size = (uint32_t)(sizeof(BoneParent) * bone_parents.size());
+    format.bone_default_transform_size = (uint32_t)(sizeof(MeshBoneDescriptor) * bone_default_transforms.size());
 
     uint32_t offset = format.vertices_size;
     format.texcoords_offset = offset;
@@ -239,6 +336,10 @@ main(int argc, char **argv)
     offset += format.bone_weights_size;
     format.bone_parent_offset = offset;
     offset += format.bone_parent_size;
+    format.bone_offsets_offset = offset;
+    offset += format.bone_offsets_size;
+    format.bone_default_transform_offset = offset;
+    offset += format.bone_default_transform_size;
 
     format.num_bones = (uint32_t)bone_parents.size();
     FILE *of = fopen(outputfile, "wb");
@@ -305,11 +406,13 @@ main(int argc, char **argv)
         }
     }
 
+    /*
     printf("Bone parents size: %d\n", (uint32_t)bone_parents.size());
     for (uint32_t i = 0; i < bone_parents.size(); ++i)
     {
         printf("Bone[%s] has parent [%d]\n", bone_names[i].c_str(), bone_parents[i].bone_id);
     }
+    */
 
     fwrite(&positions[0], sizeof(float), positions.size(), of);
 
@@ -379,7 +482,6 @@ main(int argc, char **argv)
             uint8_t length = (uint8_t)it->length();
             fwrite(&length, sizeof(uint8_t), 1, of);
             fwrite(it->c_str(), sizeof(uint8_t), length, of);
-            printf("bone[%s]\n", it->c_str());
         }
     }
 
@@ -388,6 +490,8 @@ main(int argc, char **argv)
         fwrite(&bone_ids[0], sizeof(float), bone_ids.size(), of);
         fwrite(&bone_weights[0], sizeof(float), bone_weights.size(), of);
         fwrite(&bone_parents[0], sizeof(BoneParent), bone_parents.size(), of);
+        fwrite(&bone_offsets[0], sizeof(OffsetMatrix), bone_offsets.size(), of);
+        fwrite(&bone_default_transforms[0], sizeof(MeshBoneDescriptor), bone_default_transforms.size(), of);
     }
 
     fclose(of);

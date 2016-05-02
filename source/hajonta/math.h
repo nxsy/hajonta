@@ -68,6 +68,15 @@ union v4
     float E[4];
 };
 
+struct
+Quaternion
+{
+    float x;
+    float y;
+    float z;
+    float w;
+};
+
 struct m4
 {
     v4 cols[4];

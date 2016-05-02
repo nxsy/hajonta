@@ -118,10 +118,9 @@ LightDescriptors
 struct
 MeshBoneDescriptor
 {
-    float scale;
+    v3 scale;
     v3 translate;
-    v3 axis;
-    float angle;
+    Quaternion q;
 };
 
 struct
@@ -176,6 +175,8 @@ Mesh
 
     char bone_names[100][50];
     int32_t bone_parents[50];
+    m4 bone_offsets[50];
+    MeshBoneDescriptor default_transforms[50];
 };
 
 struct
