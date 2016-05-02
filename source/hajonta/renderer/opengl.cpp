@@ -1595,7 +1595,7 @@ draw_mesh_from_asset(
     int32_t start_face = 0;
     int32_t end_face = max_faces;
 
-    m4 bones[50];
+    m4 bones[100];
     for (uint32_t i = 0; i < harray_count(bones); ++i)
     {
         bones[i] = m4identity();
@@ -1658,13 +1658,13 @@ draw_mesh_from_asset(
 
     int32_t stack_location = 0;
 
-    int32_t stack[50];
+    int32_t stack[100];
     stack[0] = first_bone;
     struct
     {
         int32_t bone_id;
         m4 transform;
-    } parent_list[50];
+    } parent_list[100];
     int32_t parent_list_location = 0;
 
     if (debug)
@@ -1716,7 +1716,7 @@ draw_mesh_from_asset(
         }
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
-        ImGui::Columns(3);
+        ImGui::Columns(4);
         ImGui::Separator();
 
     }
@@ -1794,6 +1794,9 @@ draw_mesh_from_asset(
                 sprintf(label, "Translation##%d", bone);
                 ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.2f");
                 ImGui::NextColumn();
+                sprintf(label, "Rotation##%d", bone);
+                ImGui::DragFloat4(label, &d.q.x, 0.01f, -100.0f, 100.0f, "%.2f");
+                ImGui::NextColumn();
             }
 
             m4 scale = m4identity();
@@ -1864,7 +1867,7 @@ draw_mesh_from_asset(
             glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
-            glUniformMatrix4fv(program.u_bones_id, 50, GL_FALSE, (float *)&bones);
+            glUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
             glUniform1i(program.u_bones_enabled_id, mesh.bone_ids.size > 0);
 
             glEnableVertexAttribArray((GLuint)program.a_position_id);
@@ -1893,7 +1896,7 @@ draw_mesh_from_asset(
             glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
-            glUniformMatrix4fv(program.u_bones_id, 50, GL_FALSE, (float *)&bones);
+            glUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
             glUniform1i(program.u_bones_enabled_id, mesh.bone_ids.size > 0);
 
             glEnableVertexAttribArray((GLuint)program.a_position_id);

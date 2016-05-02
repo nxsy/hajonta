@@ -3,7 +3,7 @@ uniform mat4 u_projection;
 uniform mat4 u_view_matrix;
 uniform mat4 u_model_matrix;
 
-uniform mat4 u_bones[50];
+uniform mat4 u_bones[100];
 uniform int u_bones_enabled;
 
 in vec3 a_position;

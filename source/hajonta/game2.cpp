@@ -659,7 +659,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
     three_dee_mesh_flags_debug.debug = 1;
 
-#if 0
+#if 1
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
@@ -667,7 +667,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         1,
-        -1,
+        (int32_t)ArmatureIds::test1,
         three_dee_mesh_flags_debug,
         ShaderType::standard
     );
@@ -679,7 +679,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         0,
-        -1,
+        (int32_t)ArmatureIds::test1,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );

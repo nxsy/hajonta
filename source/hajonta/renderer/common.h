@@ -173,10 +173,10 @@ Mesh
     buffer bone_ids;
     buffer bone_weights;
 
-    char bone_names[100][50];
-    int32_t bone_parents[50];
-    m4 bone_offsets[50];
-    MeshBoneDescriptor default_transforms[50];
+    char bone_names[100][100];
+    int32_t bone_parents[100];
+    m4 bone_offsets[100];
+    MeshBoneDescriptor default_transforms[100];
 };
 
 struct

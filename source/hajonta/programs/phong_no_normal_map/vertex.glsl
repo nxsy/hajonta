@@ -5,7 +5,7 @@ uniform mat4 u_view_matrix;
 uniform mat4 u_model_matrix;
 uniform mat4 u_lightspace_matrix;
 
-uniform mat4 u_bones[50];
+uniform mat4 u_bones[100];
 
 uniform int u_lightspace_available;
 uniform int u_shadow_mode;
@@ -49,7 +49,7 @@ void main()
     vec4 post_bone_normal = bone_transform * vec4(a_normal, 1.0);
     vec4 post_bone_position = bone_transform * vec4(a_position, 1.0);
 
-    v_w_normal = mat3(transpose(inverse(u_model_matrix))) * post_bone_normal.xyz;
+    v_w_normal = mat3(transpose(inverse(u_model_matrix))) * (post_bone_normal.xyz / post_bone_normal.w);
     vec4 w_position = u_model_matrix * post_bone_position;
     v_w_position = w_position.xyz / w_position.w;
     if (u_lightspace_available == 1)
