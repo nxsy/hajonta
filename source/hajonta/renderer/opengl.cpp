@@ -501,6 +501,8 @@ load_mesh_asset(
         uint32_t bone_offsets_size;
         uint32_t bone_default_transform_offset;
         uint32_t bone_default_transform_size;
+        uint32_t animation_offset;
+        uint32_t animation_size;
     } format = {};
 
     if (version->version == 1)
@@ -555,6 +557,8 @@ load_mesh_asset(
             uint32_t bone_offsets_size;
             uint32_t bone_default_transform_offset;
             uint32_t bone_default_transform_size;
+            uint32_t animation_offset;
+            uint32_t animation_size;
         } *v2_format = (binary_format_v2 *)mesh_buffer;
         format.vertices_offset = v2_format->vertices_offset;
         format.vertices_size = v2_format->vertices_size;
@@ -578,6 +582,8 @@ load_mesh_asset(
         format.bone_offsets_size = v2_format->bone_offsets_size;
         format.bone_default_transform_offset = v2_format->bone_default_transform_offset;
         format.bone_default_transform_size = v2_format->bone_default_transform_size;
+        format.animation_offset = v2_format->animation_offset;
+        format.animation_size = v2_format->animation_size;
         mesh_buffer += v2_format->header_size;
     }
 
@@ -644,7 +650,18 @@ load_mesh_asset(
         bone_name += bone_name_length + 1;
     }
 
+    BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
+    AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
+    for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
+    {
+        for (uint32_t j = 0; j < format.num_bones; ++j)
+        {
+            mesh->animation_ticks[i][j].transform = anim_tick->transform;
+            ++anim_tick;
+        }
+    }
     mesh->num_triangles = format.num_triangles;
+    mesh->num_ticks = (uint32_t)bone_animation_header->num_ticks;
     mesh->num_bones = format.num_bones;
     return true;
 }
@@ -1721,6 +1738,26 @@ draw_mesh_from_asset(
 
     }
 
+    static float tick = 0;
+    static bool proceed_time = true;
+    static float playback_speed = 1.0f;
+
+    if (debug)
+    {
+        ImGui::Begin("Animation");
+        ImGui::Checkbox("Animation proceed", &proceed_time);
+        ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
+        if (ImGui::Button("Reset to start"))
+        {
+            tick = 0;
+        }
+        ImGui::End();
+    }
+    if (proceed_time)
+    {
+        tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
+    }
+
     while (stack_location >= 0)
     {
         int32_t bone = stack[stack_location];
@@ -1755,6 +1792,11 @@ draw_mesh_from_asset(
         if (armature)
         {
             MeshBoneDescriptor &d = armature->bones[bone];
+
+            if (mesh.num_ticks)
+            {
+                d = mesh.animation_ticks[(uint32_t)tick % mesh.num_ticks][bone].transform;
+            }
             if (d.scale.x == 0)
             {
                 d.scale = mesh.default_transforms[bone].scale;

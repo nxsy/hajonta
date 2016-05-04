@@ -162,6 +162,20 @@ buffer
 };
 
 struct
+AnimTick
+{
+    MeshBoneDescriptor transform;
+};
+
+struct
+BoneAnimationHeader
+{
+    uint32_t version;
+    float num_ticks;
+    float ticks_per_second;
+};
+
+struct
 Mesh
 {
     buffer vertices;
@@ -177,6 +191,8 @@ Mesh
     int32_t bone_parents[100];
     m4 bone_offsets[100];
     MeshBoneDescriptor default_transforms[100];
+    uint32_t num_ticks;
+    AnimTick animation_ticks[100][100];
 };
 
 struct

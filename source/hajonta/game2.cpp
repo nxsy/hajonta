@@ -276,10 +276,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
     //rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
-    scale.cols[0].E[0] = 0.02f;
-    scale.cols[1].E[1] = 0.02f;
-    scale.cols[2].E[2] = 0.02f;
-    translate.cols[3] = {0, -2.0f, -5.0f, 1.0f};
+    scale.cols[0].E[0] = 3.0f;
+    scale.cols[1].E[1] = 3.0f;
+    scale.cols[2].E[2] = 3.0f;
+    translate.cols[3] = {0, -1.0f, -5.0f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);

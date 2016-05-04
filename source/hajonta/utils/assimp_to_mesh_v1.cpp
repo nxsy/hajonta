@@ -38,6 +38,16 @@ struct binary_format_v2
     uint32_t bone_offsets_size;
     uint32_t bone_default_transform_offset;
     uint32_t bone_default_transform_size;
+    uint32_t animation_offset;
+    uint32_t animation_size;
+};
+
+struct
+BoneAnimationHeader
+{
+    uint32_t version;
+    float num_ticks;
+    float ticks_per_second;
 };
 
 struct
@@ -86,6 +96,12 @@ struct
 OffsetMatrix
 {
     float matrix[16];
+};
+
+struct
+AnimTick
+{
+    MeshBoneDescriptor transform;
 };
 
 void
@@ -317,6 +333,107 @@ main(int argc, char **argv)
     bone_default_transforms.resize(bone_names.size());
     process_nodes(scene->mRootNode, bone_id_lookup, bone_names, bone_parents, bone_default_transforms, format);
     bone_offsets.resize(bone_names.size());
+
+    BoneAnimationHeader bone_animation_header;
+    std::vector<std::vector<AnimTick>> all_anim_ticks;
+    if (scene->mNumAnimations)
+    {
+        format.animation_size += sizeof(BoneAnimationHeader);
+        bone_animation_header.version = 1;
+        printf("Scene has %d animations\n", scene->mNumAnimations);
+
+        //for (uint32_t i = 0; i < scene->mNumAnimations; ++i)
+        uint32_t i = 0;
+        {
+            auto &animation = scene->mAnimations[i];
+            std::string animation_name(animation->mName.data);
+            printf("animation[%d|%s]\n", i, animation_name.c_str());
+            printf("  duration %0.2f ticks at %0.2f ticks/sec\n", animation->mDuration, animation->mTicksPerSecond);
+            bone_animation_header.num_ticks = (float)animation->mDuration;
+            bone_animation_header.ticks_per_second = (float)animation->mTicksPerSecond;
+            all_anim_ticks.resize((int32_t)animation->mDuration);
+            for (int32_t j = 0; j < (int32_t)animation->mDuration; ++j)
+            {
+                all_anim_ticks[j].resize(bone_names.size());
+            }
+            format.animation_size += (uint32_t)(animation->mDuration * bone_names.size() * sizeof(AnimTick));
+            printf("  bone channels: %d, mesh channels: %d\n", animation->mNumChannels, animation->mNumMeshChannels);
+
+            for (uint32_t j = 0; j < animation->mNumChannels; ++j)
+            {
+                auto &anim = animation->mChannels[j];
+                std::string channel_name(anim->mNodeName.data);
+                if (!bone_id_lookup.count(channel_name))
+                {
+                    continue;
+                }
+                int32_t bone = bone_id_lookup[channel_name];
+
+                printf("  Channel %s: %d position, %d rotation, %d scaling keys\n",
+                    channel_name.c_str(), anim->mNumPositionKeys, anim->mNumRotationKeys, anim->mNumScalingKeys);
+                /*
+                printf("    Positions: ");
+                printf("%0.2f", anim->mPositionKeys[0].mTime);
+                */
+                uint32_t position_key_number = 0;
+                uint32_t scaling_key_number = 0;
+                uint32_t rotation_key_number = 0;
+                for (uint32_t frame = 0; frame < bone_animation_header.num_ticks; ++frame)
+                {
+                    auto &initial_position_key = anim->mPositionKeys[position_key_number];
+                    if (frame > initial_position_key.mTime)
+                    {
+                        if (position_key_number < anim->mNumPositionKeys - 1)
+                        {
+                            ++position_key_number;
+                        }
+                    }
+                    auto &initial_scaling_key = anim->mScalingKeys[scaling_key_number];
+                    if (frame > initial_scaling_key.mTime)
+                    {
+                        if (scaling_key_number < anim->mNumScalingKeys - 1)
+                        {
+                            ++scaling_key_number;
+                        }
+                    }
+
+                    auto &initial_rotation_key = anim->mRotationKeys[rotation_key_number];
+                    if (frame > initial_rotation_key.mTime)
+                    {
+                        if (rotation_key_number < anim->mNumRotationKeys - 1)
+                        {
+                            ++rotation_key_number;
+                        }
+                    }
+
+                    auto &position_key = anim->mPositionKeys[position_key_number];
+                    auto &scaling_key = anim->mScalingKeys[scaling_key_number];
+                    auto &rotation_key = anim->mRotationKeys[rotation_key_number];
+                    std::vector<AnimTick> &anim_ticks = all_anim_ticks[frame];
+
+                    anim_ticks[bone].transform.translate = {
+                        position_key.mValue.x,
+                        position_key.mValue.y,
+                        position_key.mValue.z,
+                    };
+
+                    anim_ticks[bone].transform.scale = {
+                        scaling_key.mValue.x,
+                        scaling_key.mValue.y,
+                        scaling_key.mValue.z,
+                    };
+
+                    anim_ticks[bone].transform.q = {
+                        rotation_key.mValue.x,
+                        rotation_key.mValue.y,
+                        rotation_key.mValue.z,
+                        rotation_key.mValue.w,
+                    };
+                }
+            }
+        }
+    }
+
     format.bone_offsets_size = (uint32_t)(sizeof(bone_offsets[0]) * bone_offsets.size());
     format.bone_parent_size = (uint32_t)(sizeof(BoneParent) * bone_parents.size());
     format.bone_default_transform_size = (uint32_t)(sizeof(MeshBoneDescriptor) * bone_default_transforms.size());
@@ -340,19 +457,10 @@ main(int argc, char **argv)
     offset += format.bone_offsets_size;
     format.bone_default_transform_offset = offset;
     offset += format.bone_default_transform_size;
+    format.animation_offset = offset;
+    offset += format.animation_size;
 
     format.num_bones = (uint32_t)bone_parents.size();
-    FILE *of = fopen(outputfile, "wb");
-    char fmt[4] = { 'H', 'J', 'N', 'T' };
-    size_t written = 0;
-    written = fwrite(&fmt, sizeof(fmt), 1, of);
-    assert(written == 1);
-    uint32_t version = 2;
-    written = fwrite(&version, sizeof(uint32_t), 1, of);
-    assert(written == 1);
-    written = fwrite(&format, sizeof(binary_format_v2), 1, of);
-    assert(written == 1);
-
     std::vector<float> positions;
     positions.reserve(3 * num_vertices);
     std::vector<uint32_t> bone_ids;
@@ -406,13 +514,16 @@ main(int argc, char **argv)
         }
     }
 
-    /*
-    printf("Bone parents size: %d\n", (uint32_t)bone_parents.size());
-    for (uint32_t i = 0; i < bone_parents.size(); ++i)
-    {
-        printf("Bone[%s] has parent [%d]\n", bone_names[i].c_str(), bone_parents[i].bone_id);
-    }
-    */
+    FILE *of = fopen(outputfile, "wb");
+    char fmt[4] = { 'H', 'J', 'N', 'T' };
+    size_t written = 0;
+    written = fwrite(&fmt, sizeof(fmt), 1, of);
+    assert(written == 1);
+    uint32_t version = 2;
+    written = fwrite(&version, sizeof(uint32_t), 1, of);
+    assert(written == 1);
+    written = fwrite(&format, sizeof(binary_format_v2), 1, of);
+    assert(written == 1);
 
     fwrite(&positions[0], sizeof(float), positions.size(), of);
 
@@ -492,6 +603,13 @@ main(int argc, char **argv)
         fwrite(&bone_parents[0], sizeof(BoneParent), bone_parents.size(), of);
         fwrite(&bone_offsets[0], sizeof(OffsetMatrix), bone_offsets.size(), of);
         fwrite(&bone_default_transforms[0], sizeof(MeshBoneDescriptor), bone_default_transforms.size(), of);
+
+        fwrite(&bone_animation_header, sizeof(BoneAnimationHeader), 1, of);
+        for (uint32_t i = 0; i < (uint32_t)bone_animation_header.num_ticks; ++i)
+        {
+            std::vector<AnimTick> &anim_ticks = all_anim_ticks[i];
+            fwrite(&anim_ticks[0], sizeof(AnimTick), format.num_bones, of);
+        }
     }
 
     fclose(of);
