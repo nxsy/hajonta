@@ -94,8 +94,8 @@ main(int argc, char **argv)
 
     char structbuffer[2048] = {};
     char *start_of_next_write = structbuffer;
-    char uniforms[16][128] = {};
-    char attribs[16][128] = {};
+    char uniforms[32][128] = {};
+    char attribs[32][128] = {};
     uint32_t num_uniforms = sizeof(uniforms) / sizeof(uniforms[0]);
     uint32_t num_attribs = sizeof(uniforms) / sizeof(uniforms[0]);
 

@@ -13,6 +13,7 @@ uniform int u_poisson_samples;
 uniform float u_poisson_position_granularity;
 uniform float u_minimum_variance;
 uniform float u_lightbleed_compensation;
+uniform vec3 u_camera_position;
 
 struct Light {
     vec4 position_or_direction;
@@ -169,7 +170,7 @@ void main()
     float direction_similarity = max(dot(w_normal, w_surface_to_light_direction), 0.0);
     float diffuse = light.diffuse_intensity * direction_similarity;
 
-    vec3 w_surface_to_eye = normalize(-v_w_position);
+    vec3 w_surface_to_eye = normalize(-u_camera_position - v_w_position);
     vec3 w_reflection_direction = reflect(-w_surface_to_light_direction.xyz, w_normal);
     float specular = pow(max(dot(w_surface_to_eye, w_reflection_direction), 0.0), 10.0f);
 

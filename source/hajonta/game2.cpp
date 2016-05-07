@@ -294,11 +294,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::DragFloat("Distance", &state->camera.distance);
         ImGui::DragFloat("Near", &state->camera.near_);
         ImGui::DragFloat("Far", &state->camera.far_);
+        ImGui::Text("Camera location: %.2f, %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
         ImGui::End();
     }
     update_camera(&state->camera, ratio);
     state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = state->camera.projection;
-    state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4mul(state->camera.projection, state->camera.view);
+    state->matrices[(uint32_t)matrix_ids::mesh_view_matrix] = state->camera.view;
 
     static float rotation = 0;
     rotation += state->frame_state.delta_t;
@@ -664,19 +665,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushQuad(&state->two_dee_renderer.list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    MeshFromAssetFlags mesh_flags = {};
-    PushMeshFromAsset(
-        &state->two_dee_renderer.list,
-        (uint32_t)matrix_ids::mesh_projection_matrix,
-        (uint32_t)matrix_ids::chest_model_matrix,
-        state->asset_ids.cactus_mesh,
-        state->asset_ids.cactus_texture,
-        1,
-        -1,
-        mesh_flags,
-        ShaderType::standard
-    );
-
     m4 shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f, {-ratio * 5.0f, -5.0f}, {ratio * 5.0f, 5.0f});
 
     m4 shadowmap_view_matrix;
@@ -714,6 +702,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
         (uint32_t)matrix_ids::tree_model_matrix,
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
@@ -726,6 +715,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(
         &state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
+        -1,
         (uint32_t)matrix_ids::tree_model_matrix,
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
@@ -739,6 +729,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
         (uint32_t)matrix_ids::tree_model_matrix,
         state->asset_ids.blockfigureRigged6_mesh,
         /*state->asset_ids.blockfigureRigged6_texture,*/
@@ -752,6 +743,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(
         &state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
+        -1,
         (uint32_t)matrix_ids::tree_model_matrix,
         state->asset_ids.blockfigureRigged6_mesh,
         /*state->asset_ids.blockfigureRigged6_texture,*/
@@ -765,6 +757,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
         (uint32_t)matrix_ids::plane_model_matrix,
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,
@@ -775,6 +768,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     );
     PushMeshFromAsset(&state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
+        -1,
         (uint32_t)matrix_ids::plane_model_matrix,
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,

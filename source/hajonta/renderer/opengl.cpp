@@ -1568,6 +1568,47 @@ draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     glEnable(GL_BLEND);
 }
 
+v3
+calculate_camera_position(m4 view)
+{
+    m4 view_transposed = m4transposed(view);
+
+    v3 n1 = {
+        view_transposed.cols[0].x,
+        view_transposed.cols[0].y,
+        view_transposed.cols[0].z,
+    };
+    v3 n2 = {
+        view_transposed.cols[1].x,
+        view_transposed.cols[1].y,
+        view_transposed.cols[1].z,
+    };
+    v3 n3 = {
+        view_transposed.cols[2].x,
+        view_transposed.cols[2].y,
+        view_transposed.cols[2].z,
+    };
+
+    float d1 = view_transposed.cols[0].w;
+    float d2 = view_transposed.cols[1].w;
+    float d3 = view_transposed.cols[2].w;
+
+    v3 n1n2 = v3cross(n1, n2);
+    v3 n2n3 = v3cross(n2, n3);
+    v3 n3n1 = v3cross(n3, n1);
+
+    v3 top = v3add(
+        v3mul(n2n3, d1),
+        v3add(
+            v3mul(n3n1, d2),
+            v3mul(n1n2, d3)
+        )
+    );
+    float denom = 1.0f / v3dot(n1, n2n3);
+
+    return v3mul(top, denom);
+}
+
 void
 draw_mesh_from_asset(
     hajonta_thread_context *ctx,
@@ -1586,7 +1627,35 @@ draw_mesh_from_asset(
     glEnable(GL_CULL_FACE);
     glDepthFunc(GL_LESS);
     m4 projection = matrices[mesh_from_asset->projection_matrix_id];
+    m4 view;
+    if (mesh_from_asset->view_matrix_id >= 0)
+    {
+        view = matrices[mesh_from_asset->view_matrix_id];
+    }
+    else
+    {
+        view = m4identity();
+    }
     m4 model = matrices[mesh_from_asset->model_matrix_id];
+
+    /*
+    v4 camera_translate = {
+        view.cols[3].x,
+        view.cols[3].y,
+        view.cols[3].z,
+        1.0f,
+    };
+
+    m4 camera_rotation = view;
+    camera_rotation.cols[3] = {0,0,0,1};
+    camera_rotation.cols[0].E[3] = 0;
+    camera_rotation.cols[1].E[3] = 0;
+    camera_rotation.cols[2].E[3] = 0;
+
+    v4 camera_position = m4mul(camera_rotation, camera_translate);
+    */
+    v3 camera_position = calculate_camera_position(view);
+    ImGui::Text("Camera location: %.2f, %.2f, %.2f, %.2f", camera_position.x, camera_position.y, camera_position.z);
 
     v2 st0 = {};
     v2 st1 = {};
@@ -1906,8 +1975,9 @@ draw_mesh_from_asset(
             glUniform1i(state->phong_no_normal_map_shadowmap_tex_id, 1);
             glUniform1i(state->phong_no_normal_map_shadowmap_color_tex_id, 2);
             glUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
+            glUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
 
             glUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
             glUniform1i(program.u_bones_enabled_id, mesh.bone_ids.size > 0);
@@ -1935,7 +2005,7 @@ draw_mesh_from_asset(
             glUseProgram(program.program);
             glUniform1i(state->variance_shadow_map_tex_id, 0);
             glUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view);
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
             glUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
@@ -2041,7 +2111,7 @@ draw_mesh_from_asset(
         glUniform1f(program.u_poisson_position_granularity_id, state->poisson_position_granularity);
         glUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
         glUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
-        glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+        //glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);

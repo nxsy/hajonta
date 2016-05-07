@@ -17,6 +17,7 @@ uniform int u_bones_enabled;
 uniform float u_poisson_position_granularity;
 uniform float u_minimum_variance;
 uniform float u_lightbleed_compensation;
+uniform vec3 u_camera_position;
 
 in vec3 a_position;
 in vec2 a_texcoord;

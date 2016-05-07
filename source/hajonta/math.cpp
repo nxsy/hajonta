@@ -152,6 +152,27 @@ v3cross(v3 p, v3 q)
 }
 
 static bool
+assertEqual(v4 left, v4 right, const char *msg, const char *file, int line)
+{
+    if (!(
+        (left.x == right.x) &&
+        (left.y == right.y) &&
+        (left.z == right.z) &&
+        (left.w == right.w) &&
+        1))
+    {
+#define _P(x, ...) printf("%s(%d) : " x "\n", file, line, __VA_ARGS__)
+        _P("TEST FAILED: %s", msg);
+        _P("EQUAL: x: %d, y: %d, z: %d, w: %d", left.x == right.x, left.y == right.y, left.z == right.z, left.w == right.w);
+        _P("EXPECT: x: %.8f, y: %.8f, z: %.8f, w: %.8f", left.x, left.y, left.z, left.w);
+        _P("GOT: x: %.8f, y: %.8f, z: %.8f, w: %.8f", right.x, right.y, right.z, right.w);
+#undef _P
+        return false;
+    }
+    return true;
+}
+
+static bool
 assertEqual(v3 left, v3 right, const char *msg, const char *file, int line)
 {
     if (!(
@@ -545,6 +566,20 @@ m4mul(const m4 left, const m4 right)
     return result;
 }
 
+v4
+m4mul(const m4 left, const v4 right)
+{
+    v4 ret = {};
+    for (uint32_t row = 0; row < 4; ++row)
+    {
+        for (uint32_t col = 0; col < 4; ++col)
+        {
+            ret.E[row]  += left.cols[col].E[row] * right.E[col];
+        }
+    }
+    return ret;
+}
+
 void
 m4sprint(char *msg, uint32_t msg_size, const m4 left)
 {
@@ -661,6 +696,42 @@ m4unittests()
 
     m4 m4mul1xi = m4mul(m4mul1, i);
     T ( m4mul1, m4mul1xi );
+
+    {
+        v4 m4mulv4et = { 1, -3, 0, 0 };
+        m4 m4mulv4m4 = {};
+        m4mulv4m4.cols[0] = {  1,  0,  0,  0 };
+        m4mulv4m4.cols[1] = { -1, -3,  0,  0 };
+        m4mulv4m4.cols[2] = {  2,  1,  0,  0 };
+        m4mulv4m4.cols[3] = {  0,  0,  0,  0 };
+        v4 m4mulv4v4 = { 2, 1, 0, 0 };
+        v4 m4mulv4got = m4mul(m4mulv4m4, m4mulv4v4);
+        T( m4mulv4et, m4mulv4got );
+    }
+
+    {
+        v4 m4mulv4et = { 0, -3, -6, -9 };
+        m4 m4mulv4m4 = {};
+        m4mulv4m4.cols[0] = {  1,  4,  7, 10 };
+        m4mulv4m4.cols[1] = {  2,  5,  8, 11 };
+        m4mulv4m4.cols[2] = {  3,  6,  9, 12 };
+        m4mulv4m4.cols[3] = {  0,  0,  0,  0 };
+        v4 m4mulv4v4 = { -2, 1, 0, 0 };
+        v4 m4mulv4got = m4mul(m4mulv4m4, m4mulv4v4);
+        T( m4mulv4et, m4mulv4got );
+    }
+
+    {
+        v4 m4mulv4et = { 13, 31, 49,  0 };
+        m4 m4mulv4m4 = {};
+        m4mulv4m4.cols[0] = {  1,  4,  7, 0 };
+        m4mulv4m4.cols[1] = {  2,  5,  8, 0 };
+        m4mulv4m4.cols[2] = {  3,  6,  9, 0 };
+        m4mulv4m4.cols[3] = {  0,  0,  0, 0 };
+        v4 m4mulv4v4 = { 2, 1, 3, 0 };
+        v4 m4mulv4got = m4mul(m4mulv4m4, m4mulv4v4);
+        T( m4mulv4et, m4mulv4got );
+    }
 
     return true;
 }

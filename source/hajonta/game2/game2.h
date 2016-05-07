@@ -306,6 +306,7 @@ enum struct matrix_ids
     pixel_projection_matrix,
     quad_projection_matrix,
     mesh_projection_matrix,
+    mesh_view_matrix,
     horse_model_matrix,
     chest_model_matrix,
     plane_model_matrix,
