@@ -24,6 +24,10 @@ game_state *_hidden_state;
 
 #include "hajonta/game2/two_dee.cpp"
 
+static float h_pi = 3.14159265358979f;
+static float h_halfpi = h_pi / 2.0f;
+static float h_twopi = h_pi * 2.0f;
+
 DEMO(demo_b)
 {
     game_state *state = (game_state *)memory->memory;
@@ -107,10 +111,39 @@ show_debug_main_menu(game_state *state)
             }
             ImGui::MenuItem("Show lights", "", &state->debug.show_lights);
             ImGui::MenuItem("Show textures", "", &state->debug.show_textures);
+            ImGui::MenuItem("Show camera", "", &state->debug.show_camera);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
     }
+}
+
+void
+update_camera(CameraState *camera, float aspect_ratio)
+{
+    float rho = camera->distance;
+    float theta = camera->rotation.y;
+    float phi = camera->rotation.x;
+
+    camera->location = {
+        sinf(theta) * cosf(phi) * rho,
+        sinf(phi) * rho,
+        cosf(theta) * cosf(phi) * rho,
+    };
+
+    v3 eye = v3add(camera->target, camera->location);
+    v3 up;
+    if (camera->rotation.x < h_halfpi && camera->rotation.x > -h_halfpi)
+    {
+        up = {0, 1, 0};
+    }
+    else
+    {
+        up = {0, -1, 0};
+    }
+
+    camera->view = m4lookat(eye, camera->target, up);
+    camera->projection = m4frustumprojection(camera->near_, camera->far_, {-aspect_ratio, -1.0f}, {aspect_ratio, 1.0f});
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -211,6 +244,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_textures = 0;
         state->debug.show_lights = 0;
         state->debug.cull_front = 1;
+
+        state->camera.distance = 10.0f;
+        state->camera.near_ = 1.0f;
+        state->camera.far_ = 100.0f;
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -249,6 +286,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     float ratio = (float)input->window.width / (float)input->window.height;
     state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+
+    if (state->debug.show_camera) {
+        ImGui::Begin("Camera", &state->debug.show_camera);
+        ImGui::DragFloat3("Rotation", &state->camera.rotation.x, 0.1f);
+        ImGui::DragFloat3("Target", &state->camera.target.x);
+        ImGui::DragFloat("Distance", &state->camera.distance);
+        ImGui::DragFloat("Near", &state->camera.near_);
+        ImGui::DragFloat("Far", &state->camera.far_);
+        ImGui::End();
+    }
+    update_camera(&state->camera, ratio);
+    state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = state->camera.projection;
+    state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4mul(state->camera.projection, state->camera.view);
+
     static float rotation = 0;
     rotation += state->frame_state.delta_t;
     m4 translate = m4identity();
@@ -268,8 +319,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     ImGui::DragFloat("Plane rotation", &plane_rotation, 0.01f, 0, 3.0f);
     rotate = m4identity();
 
-    float _scale = 5.0f;
-    translate.cols[3] = {0, -3.0f, -5.0f, 1.0f};
+    float _scale = 10.0f;
+    translate.cols[3] = {0, -3.0f, 0, 1.0f};
     scale.cols[0].E[0] = _scale;
     scale.cols[1].E[1] = 1.0f;
     scale.cols[2].E[2] = _scale;
@@ -279,7 +330,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[0].E[0] = 3.0f;
     scale.cols[1].E[1] = 3.0f;
     scale.cols[2].E[2] = 3.0f;
-    translate.cols[3] = {0, -1.0f, -5.0f, 1.0f};
+    translate.cols[3] = {0, -1.0f, 0, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_z = -5.0f;
     ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
@@ -712,7 +763,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     );
 #endif
 
-    /*
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::plane_model_matrix,
@@ -733,7 +783,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
-    */
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

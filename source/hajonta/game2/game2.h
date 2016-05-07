@@ -183,6 +183,7 @@ debug_state
     bool show_lights;
     bool show_textures;
     bool cull_front;
+    bool show_camera;
 };
 
 enum struct
@@ -355,6 +356,20 @@ FrameState
     platform_memory *memory;
 };
 
+struct
+CameraState
+{
+    float distance;
+    v3 rotation;
+    v3 target;
+    float near_;
+    float far_;
+
+    v3 location;
+    m4 view;
+    m4 projection;
+};
+
 struct game_state
 {
     bool initialized;
@@ -418,5 +433,7 @@ struct game_state
     uint32_t job_count;
     job jobs[10];
     int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
+
+    CameraState camera;
 };
 
