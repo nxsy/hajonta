@@ -1,3 +1,11 @@
+template<uint32_t BUFFER_SIZE>
+struct
+_render_list
+{
+    render_entry_list list;
+    uint8_t buffer[BUFFER_SIZE];
+};
+
 #include "hajonta/game2/pipeline.h"
 
 struct demo_context
@@ -65,6 +73,8 @@ _asset_ids
     int32_t blocky_advanced_texture;
     int32_t blockfigureRigged6_mesh;
     int32_t blockfigureRigged6_texture;
+    int32_t knp_palette;
+    int32_t cube_bounds_mesh;
 };
 
 struct
@@ -184,6 +194,7 @@ debug_state
     bool show_textures;
     bool cull_front;
     bool show_camera;
+    bool show_nature_pack;
 };
 
 enum struct
@@ -317,14 +328,6 @@ enum struct matrix_ids
     MAX = mesh_model_matrix,
 };
 
-template<uint32_t BUFFER_SIZE>
-struct
-_render_list
-{
-    render_entry_list list;
-    uint8_t buffer[BUFFER_SIZE];
-};
-
 enum struct
 LightIds
 {
@@ -345,7 +348,7 @@ struct
 AssetDescriptors
 {
     uint32_t count;
-    asset_descriptor descriptors[64];
+    asset_descriptor descriptors[128];
 };
 
 struct
@@ -355,6 +358,22 @@ FrameState
     v2 mouse_position;
     game_input *input;
     platform_memory *memory;
+};
+
+struct
+AssetListEntry
+{
+    const char *pretty_name;
+    const char *asset_name;
+    int32_t asset_id;
+};
+
+struct
+AssetClassEntry
+{
+    const char *name;
+    uint32_t asset_start;
+    uint32_t count;
 };
 
 struct
@@ -436,5 +455,12 @@ struct game_state
     int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
 
     CameraState camera;
+
+    uint32_t blocks[20*20*10];
+
+    uint32_t num_assets;
+    AssetListEntry asset_lists[100];
+    uint32_t num_asset_classes;
+    AssetClassEntry asset_classes[10];
 };
 

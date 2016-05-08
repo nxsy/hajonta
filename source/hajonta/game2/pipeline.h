@@ -62,6 +62,7 @@ GamePipelineElements
     RenderPipelineFramebufferId fb_shadowmap;
     RenderPipelineFramebufferId fb_sm_blur_x;
     RenderPipelineFramebufferId fb_sm_blur_xy;
+    RenderPipelineFramebufferId fb_nature_pack_debug;
 
     RenderPipelineRendererId r_framebuffer;
     RenderPipelineRendererId r_multisample;
@@ -71,6 +72,9 @@ GamePipelineElements
     RenderPipelineRendererId r_sm_blur_xy;
     RenderPipelineRendererId r_two_dee;
     RenderPipelineRendererId r_two_dee_debug;
+    RenderPipelineRendererId r_nature_pack_debug;
+
+    _render_list<1024 * 100> rl_nature_pack_debug;
 };
 
 struct

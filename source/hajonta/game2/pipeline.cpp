@@ -82,6 +82,7 @@ PipelineRender(game_state *state, RenderPipeline *pipeline)
     AddRenderList(state->frame_state.memory, &state->three_dee_renderer.list);
     AddRenderList(state->frame_state.memory, &state->multisample_renderer.list);
     AddRenderList(state->frame_state.memory, &state->framebuffer_renderer.list);
+    AddRenderList(state->frame_state.memory, &state->pipeline_elements.rl_nature_pack_debug.list);
 }
 
 RenderPipelineFramebufferId
@@ -125,6 +126,11 @@ CreatePipeline(game_state *state)
     fb_sm_blur_xy.use_rg32f_buffer = 1;
     fb_sm_blur_xy.size = fb_shadowmap.size;
     fb_sm_blur_xy.fixed_size = 1;
+
+    pipeline_elements.fb_nature_pack_debug = RenderPipelineAddFramebuffer(pipeline);
+    auto &fb_nature_pack_debug = pipeline->framebuffers[pipeline_elements.fb_nature_pack_debug];
+    fb_nature_pack_debug.size = { 512, 512 };
+    fb_nature_pack_debug.fixed_size = 1;
 
     pipeline_elements.r_framebuffer = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *framebuffer = pipeline->entries + pipeline_elements.r_framebuffer;
@@ -205,6 +211,16 @@ CreatePipeline(game_state *state)
         state->two_dee_debug_renderer.buffer,
         sizeof(state->two_dee_debug_renderer.buffer),
         -1,
+        -1,
+    };
+
+    pipeline_elements.r_nature_pack_debug = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *nature_pack_debug = pipeline->entries + pipeline_elements.r_nature_pack_debug;
+    *nature_pack_debug = {
+        &pipeline_elements.rl_nature_pack_debug.list,
+        pipeline_elements.rl_nature_pack_debug.buffer,
+        sizeof(pipeline_elements.rl_nature_pack_debug.buffer),
+        pipeline_elements.fb_nature_pack_debug,
         -1,
     };
 }

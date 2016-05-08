@@ -112,6 +112,7 @@ show_debug_main_menu(game_state *state)
             ImGui::MenuItem("Show lights", "", &state->debug.show_lights);
             ImGui::MenuItem("Show textures", "", &state->debug.show_textures);
             ImGui::MenuItem("Show camera", "", &state->debug.show_camera);
+            ImGui::MenuItem("Show nature pack", "", &state->debug.show_nature_pack);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -199,6 +200,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blockfigureRigged6_mesh = add_asset(asset_descriptors, "blockfigureRigged6_mesh");
         state->asset_ids.blockfigureRigged6_texture = add_asset(asset_descriptors, "blockfigureRigged6_texture");
 
+        state->asset_ids.knp_palette = add_asset(asset_descriptors, "knp_palette");
+        state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
+
         state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
 
         state->furniture_to_asset[0] = -1;
@@ -244,10 +248,111 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_textures = 0;
         state->debug.show_lights = 0;
         state->debug.cull_front = 1;
+        state->debug.show_nature_pack = 1;
 
         state->camera.distance = 10.0f;
         state->camera.near_ = 1.0f;
         state->camera.far_ = 100.0f;
+
+        {
+            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+            f.name = "Brown Cliff";
+            struct
+            {
+                const char *pretty_name;
+                const char *asset_name;
+            } _assets[] =
+            {
+                { "01", "knp_Brown_Cliff_01" },
+                { "Bottom_01", "knp_Brown_Cliff_Bottom_01" },
+                { "Bottom_Corner_01", "knp_Brown_Cliff_Bottom_Corner_01" },
+                { "Bottom_Corner_Green_Top_01", "knp_Brown_Cliff_Bottom_Corner_Green_Top_01" },
+                { "Bottom_Green_Top_01", "knp_Brown_Cliff_Bottom_Green_Top_01" },
+                { "Corner_01", "knp_Brown_Cliff_Corner_01" },
+                { "Corner_Green_Top_01", "knp_Brown_Cliff_Corner_Green_Top_01" },
+                { "End_01", "knp_Brown_Cliff_End_01" },
+                { "End_Green_Top_01", "knp_Brown_Cliff_End_Green_Top_01" },
+                { "Green_Top_01", "knp_Brown_Cliff_Green_Top_01" },
+                { "Top_01", "knp_Brown_Cliff_Top_01" },
+                { "Top_Corner_01", "knp_Brown_Cliff_Top_Corner_01" },
+                { "Waterfall_01", "knp_Brown_Waterfall_01" },
+                { "Waterfall_Top_01", "knp_Brown_Waterfall_Top_01" },
+            };
+            f.asset_start = state->num_assets;
+            f.count = harray_count(_assets);
+            for (uint32_t i = 0; i < harray_count(_assets); ++i)
+            {
+                auto &a = _assets[i];
+                AssetListEntry &l = state->asset_lists[state->num_assets++];
+                l.pretty_name = a.pretty_name;
+                l.asset_name = a.asset_name;
+                l.asset_id = add_asset(asset_descriptors, l.asset_name);
+            }
+        }
+
+        {
+            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+            f.name = "Grey Cliff";
+            struct
+            {
+                const char *pretty_name;
+                const char *asset_name;
+            } _assets[] =
+            {
+                { "01", "knp_Grey_Cliff_01" },
+                { "Bottom_01", "knp_Grey_Cliff_Bottom_01" },
+                { "Bottom_Corner_01", "knp_Grey_Cliff_Bottom_Corner_01" },
+                { "Bottom_Corner_Green_Top_01", "knp_Grey_Cliff_Bottom_Corner_Green_Top_01" },
+                { "Bottom_Green_Top_01", "knp_Grey_Cliff_Bottom_Green_Top_01" },
+                { "Corner_01", "knp_Grey_Cliff_Corner_01" },
+                { "Corner_Green_Top_01", "knp_Grey_Cliff_Corner_Green_Top_01" },
+                { "End_01", "knp_Grey_Cliff_End_01" },
+                { "End_Green_Top_01", "knp_Grey_Cliff_End_Green_Top_01" },
+                { "Green_Top_01", "knp_Grey_Cliff_Green_Top_01" },
+                { "Top_01", "knp_Grey_Cliff_Top_01" },
+                { "Top_Corner_01", "knp_Grey_Cliff_Top_Corner_01" },
+                { "Waterfall_01", "knp_Grey_Waterfall_01" },
+                { "Waterfall_Top_01", "knp_Grey_Waterfall_Top_01" },
+            };
+            f.asset_start = state->num_assets;
+            f.count = harray_count(_assets);
+            for (uint32_t i = 0; i < harray_count(_assets); ++i)
+            {
+                auto &a = _assets[i];
+                AssetListEntry &l = state->asset_lists[state->num_assets++];
+                l.pretty_name = a.pretty_name;
+                l.asset_name = a.asset_name;
+                l.asset_id = add_asset(asset_descriptors, l.asset_name);
+            }
+        }
+
+        {
+            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+            f.name = "Ground";
+            struct
+            {
+                const char *pretty_name;
+                const char *asset_name;
+            } _assets[] =
+            {
+                { "Grass", "knp_Plate_Grass_01" },
+                { "Grass Dirt", "knp_Plate_Grass_Dirt_01" },
+                { "River", "knp_Plate_River_01" },
+                { "River_Corner", "knp_Plate_River_Corner_01" },
+                { "River Corner Dirt", "knp_Plate_River_Corner_Dirt_01" },
+                { "River Dirt", "knp_Plate_River_Dirt_01" },
+            };
+            f.asset_start = state->num_assets;
+            f.count = harray_count(_assets);
+            for (uint32_t i = 0; i < harray_count(_assets); ++i)
+            {
+                auto &a = _assets[i];
+                AssetListEntry &l = state->asset_lists[state->num_assets++];
+                l.pretty_name = a.pretty_name;
+                l.asset_name = a.asset_name;
+                l.asset_id = add_asset(asset_descriptors, l.asset_name);
+            }
+        }
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -328,20 +433,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
     //rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
-    scale.cols[0].E[0] = 3.0f;
-    scale.cols[1].E[1] = 3.0f;
-    scale.cols[2].E[2] = 3.0f;
-    translate.cols[3] = {0, -1.0f, 0, 1.0f};
+    scale.cols[0].E[0] = 1.0f;
+    scale.cols[1].E[1] = 1.0f;
+    scale.cols[2].E[2] = 1.0f;
+    translate.cols[3] = {0, -2.0f, 0, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    static float horse_z = -5.0f;
-    ImGui::DragFloat("Horse Z", (float *)&horse_z, -0.1f, -50.0f);
-    translate.cols[3] = {-1.0f, 0, horse_z, 1.0f};
-    rotate = m4rotation({0,1,0}, rotation / 2.0f);
-    rotate = m4identity();
-    local_translate.cols[3] = {0, -2.0f, 0.0f, 1.0f};
+    static float horse_scale = 1.0f;
+    ImGui::DragFloat("Horse Scale", (float *)&horse_scale, 0.01f, 0.01f, 10.0f);
+    translate.cols[3] = {0,0,0,1};
+    scale.cols[0].E[0] = horse_scale;
+    scale.cols[1].E[1] = horse_scale;
+    scale.cols[2].E[2] = horse_scale;
     state->matrices[(uint32_t)matrix_ids::horse_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
 
-    translate.cols[3] = {-5.0f, 0, horse_z, 1.0f};
     state->matrices[(uint32_t)matrix_ids::chest_model_matrix] = m4mul(translate, m4mul(rotate, local_translate));
 
     demo_data demoes[] = {
@@ -695,10 +799,38 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     three_dee_mesh_flags.attach_shadowmap = 1;
     three_dee_mesh_flags.attach_shadowmap_color = 1;
 
+    if (state->debug.show_nature_pack) {
+        ImGui::Begin("Nature Pack", &state->debug.show_nature_pack);
+        MeshFromAssetFlags nature_pack_flags = {};
+        PushMeshFromAsset(
+            &state->pipeline_elements.rl_nature_pack_debug.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            (uint32_t)matrix_ids::tree_model_matrix,
+            state->asset_lists[0].asset_id,
+            state->asset_ids.knp_palette,
+            0,
+            -1,
+            nature_pack_flags,
+            ShaderType::standard
+        );
+
+        v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
+        v3 mouse_size = {16.0f, -16.0f, 0.0f};
+        PushQuad(&state->pipeline_elements.rl_nature_pack_debug.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+
+        auto fb_nature_pack_debug = state->render_pipeline.framebuffers[state->pipeline_elements.fb_nature_pack_debug];
+        ImGui::Image(
+            (void *)(intptr_t)fb_nature_pack_debug.framebuffer._texture,
+            {256, 256.0f * (float)fb_nature_pack_debug.framebuffer.size.y / (float)fb_nature_pack_debug.framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+        ImGui::End();
+    }
+
     MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
-    three_dee_mesh_flags_debug.debug = 1;
+    //three_dee_mesh_flags_debug.debug = 1;
 
-#if 1
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
@@ -724,36 +856,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
-#else
-
-    PushMeshFromAsset(
-        &state->three_dee_renderer.list,
-        (uint32_t)matrix_ids::mesh_projection_matrix,
-        (uint32_t)matrix_ids::mesh_view_matrix,
-        (uint32_t)matrix_ids::tree_model_matrix,
-        state->asset_ids.blockfigureRigged6_mesh,
-        /*state->asset_ids.blockfigureRigged6_texture,*/
-        -1,
-        1,
-        (int32_t)ArmatureIds::test1,
-        three_dee_mesh_flags_debug,
-        ShaderType::standard
-    );
-
-    PushMeshFromAsset(
-        &state->shadowmap_renderer.list,
-        (uint32_t)matrix_ids::light_projection_matrix,
-        -1,
-        (uint32_t)matrix_ids::tree_model_matrix,
-        state->asset_ids.blockfigureRigged6_mesh,
-        /*state->asset_ids.blockfigureRigged6_texture,*/
-        -1,
-        0,
-        (int32_t)ArmatureIds::test1,
-        shadowmap_mesh_flags,
-        ShaderType::variance_shadow_map
-    );
-#endif
 
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
@@ -788,6 +890,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_main].asset_descriptor
     );
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+
+    {
+        MeshFromAssetFlags flags = {};
+        flags.depth_disabled = 1;
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            (uint32_t)matrix_ids::horse_model_matrix,
+            state->asset_ids.cube_bounds_mesh,
+            -1,
+            0,
+            -1,
+            flags,
+            ShaderType::standard
+        );
+    }
 
     PipelineRender(state, &state->render_pipeline);
 
