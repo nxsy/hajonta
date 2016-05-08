@@ -211,6 +211,7 @@ struct MeshFromAssetFlags
     unsigned int cull_front:1;
     unsigned int attach_shadowmap_color:1;
     unsigned int debug:1;
+    unsigned int depth_disabled:1;
 };
 
 struct
