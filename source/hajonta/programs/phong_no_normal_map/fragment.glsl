@@ -182,6 +182,7 @@ void main()
     }
 
     float visibility = 1.0f;
+    o_color = material_color;
     if (u_lightspace_available == 1)
     {
         switch (u_shadow_mode)
