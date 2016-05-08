@@ -13,7 +13,7 @@ IF EXIST ..\..\thirdparty\assimp\lib\RelWithDebInfo (
 )
 
 IF EXIST %BUILDDIR%\assimp-vc140-mt.lib (
-    cl %TOOL_CPPFLAGS% ..\source\hajonta\utils\assimp_to_mesh_v1.cpp /link /incremental:no User32.lib assimp\assimp-vc140-mt.lib
+    cl %TOOL_CPPFLAGS% ..\source\hajonta\utils\assimp_to_mesh_v1.cpp /link /incremental:no -PDB:assimp_to_mesh_v1.pdb User32.lib assimp\assimp-vc140-mt.lib
 )
 
 cl %TOOL_CPPFLAGS% %TOOL_PATH%\obj_to_mesh_v1.cpp %TOOL_LINK%
