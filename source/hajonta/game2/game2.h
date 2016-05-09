@@ -195,6 +195,10 @@ debug_state
     bool cull_front;
     bool show_camera;
     bool show_nature_pack;
+    struct
+    {
+        int32_t asset_num;
+    } nature;
 };
 
 enum struct
@@ -318,11 +322,14 @@ enum struct matrix_ids
     quad_projection_matrix,
     mesh_projection_matrix,
     mesh_view_matrix,
-    horse_model_matrix,
+    np_projection_matrix,
+    np_view_matrix,
+    cube_bounds_model_matrix,
     chest_model_matrix,
     plane_model_matrix,
     tree_model_matrix,
     light_projection_matrix,
+    np_model_matrix,
     mesh_model_matrix,
 
     MAX = mesh_model_matrix,
@@ -384,6 +391,10 @@ CameraState
     v3 target;
     float near_;
     float far_;
+    struct
+    {
+        unsigned int orthographic:1;
+    };
 
     v3 location;
     m4 view;
@@ -455,6 +466,7 @@ struct game_state
     int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
 
     CameraState camera;
+    CameraState np_camera;
 
     uint32_t blocks[20*20*10];
 
@@ -462,5 +474,6 @@ struct game_state
     AssetListEntry asset_lists[100];
     uint32_t num_asset_classes;
     AssetClassEntry asset_classes[10];
+    const char *asset_class_names[10];
 };
 

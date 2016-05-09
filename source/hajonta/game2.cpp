@@ -144,7 +144,14 @@ update_camera(CameraState *camera, float aspect_ratio)
     }
 
     camera->view = m4lookat(eye, camera->target, up);
-    camera->projection = m4frustumprojection(camera->near_, camera->far_, {-aspect_ratio, -1.0f}, {aspect_ratio, 1.0f});
+    if (camera->orthographic)
+    {
+        camera->projection = m4orthographicprojection(camera->near_, camera->far_, {-aspect_ratio * rho, -1.0f * rho}, {aspect_ratio * rho, 1.0f * rho});
+    }
+    else
+    {
+        camera->projection = m4frustumprojection(camera->near_, camera->far_, {-aspect_ratio, -1.0f}, {aspect_ratio, 1.0f});
+    }
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -249,10 +256,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_lights = 0;
         state->debug.cull_front = 1;
         state->debug.show_nature_pack = 1;
+        state->debug.show_camera = 1;
 
         state->camera.distance = 10.0f;
         state->camera.near_ = 1.0f;
         state->camera.far_ = 100.0f;
+        state->camera.target = {0, 2, 0};
+
+        state->np_camera.distance = 2.0f;
+        state->np_camera.near_ = 1.0f;
+        state->np_camera.far_ = 100.0f;
+        state->np_camera.target = {0.5f, 0.5f, 0.5f};
+        state->np_camera.rotation.x = 0.5f * h_halfpi;
+        state->np_camera.orthographic = 1;
 
         {
             AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
@@ -353,6 +369,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 l.asset_id = add_asset(asset_descriptors, l.asset_name);
             }
         }
+
+        for (uint32_t i = 0; i < state->num_asset_classes; ++i)
+        {
+            state->asset_class_names[i] = state->asset_classes[i].name;
+        }
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -399,12 +420,38 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::DragFloat("Distance", &state->camera.distance);
         ImGui::DragFloat("Near", &state->camera.near_);
         ImGui::DragFloat("Far", &state->camera.far_);
+        bool orthographic = state->camera.orthographic;
+        ImGui::Checkbox("Orthographic", &orthographic);
+        state->camera.orthographic = (uint32_t)orthographic;
+
+        if (ImGui::Button("Top"))
+        {
+            state->camera.rotation.x = h_halfpi;
+            state->camera.rotation.y = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Front"))
+        {
+            state->camera.rotation.x = 0;
+            state->camera.rotation.y = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Right"))
+        {
+            state->camera.rotation.x = 0;
+            state->camera.rotation.y = h_halfpi;
+        }
+
         ImGui::Text("Camera location: %.2f, %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
         ImGui::End();
     }
     update_camera(&state->camera, ratio);
+    state->np_camera.rotation.y += 0.4f * input->delta_t;
+    update_camera(&state->np_camera, ratio);
     state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = state->camera.projection;
     state->matrices[(uint32_t)matrix_ids::mesh_view_matrix] = state->camera.view;
+    state->matrices[(uint32_t)matrix_ids::np_projection_matrix] = state->np_camera.projection;
+    state->matrices[(uint32_t)matrix_ids::np_view_matrix] = state->np_camera.view;
 
     static float rotation = 0;
     rotation += state->frame_state.delta_t;
@@ -426,9 +473,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     rotate = m4identity();
 
     float _scale = 10.0f;
-    translate.cols[3] = {0, -3.0f, 0, 1.0f};
+    translate.cols[3] = {0, -0.5f, 0, 1.0f};
     scale.cols[0].E[0] = _scale;
-    scale.cols[1].E[1] = 1.0f;
+    scale.cols[1].E[1] = 0.5f;
     scale.cols[2].E[2] = _scale;
     state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
     rotate = m4identity();
@@ -436,15 +483,25 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[0].E[0] = 1.0f;
     scale.cols[1].E[1] = 1.0f;
     scale.cols[2].E[2] = 1.0f;
-    translate.cols[3] = {0, -2.0f, 0, 1.0f};
+    translate.cols[3] = {0.5f, 0, 0.5f, 1.0f};
     state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     static float horse_scale = 1.0f;
     ImGui::DragFloat("Horse Scale", (float *)&horse_scale, 0.01f, 0.01f, 10.0f);
-    translate.cols[3] = {0,0,0,1};
-    scale.cols[0].E[0] = horse_scale;
-    scale.cols[1].E[1] = horse_scale;
-    scale.cols[2].E[2] = horse_scale;
-    state->matrices[(uint32_t)matrix_ids::horse_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
+
+    local_translate = m4identity();
+    rotate = m4identity();
+    translate = m4identity();
+    translate.cols[3] = {0.5f,0.5f,0.5f,1};
+    scale = m4identity();
+    state->matrices[(uint32_t)matrix_ids::cube_bounds_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
+
+    local_translate = m4identity();
+    local_translate.cols[3] = {0.75, 0, 0, 1};
+    rotate = m4identity();
+    translate = m4identity();
+    translate.cols[3] = {0.5f,0.5f,0.5f,1};
+    scale = m4scale(0.5f);
+    state->matrices[(uint32_t)matrix_ids::np_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     state->matrices[(uint32_t)matrix_ids::chest_model_matrix] = m4mul(translate, m4mul(rotate, local_translate));
 
@@ -801,23 +858,69 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if (state->debug.show_nature_pack) {
         ImGui::Begin("Nature Pack", &state->debug.show_nature_pack);
+
+        ImGui::DragInt("Asset number", &state->debug.nature.asset_num, 1, 0, 10);
+        int32_t asset_id = state->asset_lists[state->debug.nature.asset_num].asset_id;
         MeshFromAssetFlags nature_pack_flags = {};
         PushMeshFromAsset(
             &state->pipeline_elements.rl_nature_pack_debug.list,
-            (uint32_t)matrix_ids::mesh_projection_matrix,
-            (uint32_t)matrix_ids::mesh_view_matrix,
-            (uint32_t)matrix_ids::tree_model_matrix,
-            state->asset_lists[0].asset_id,
+            (uint32_t)matrix_ids::np_projection_matrix,
+            (uint32_t)matrix_ids::np_view_matrix,
+            (uint32_t)matrix_ids::np_model_matrix,
+            asset_id,
             state->asset_ids.knp_palette,
             0,
             -1,
             nature_pack_flags,
             ShaderType::standard
         );
+        static int32_t nature_pack_class = -1;
+        static int32_t nature_pack_item = -1;
 
-        v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
-        v3 mouse_size = {16.0f, -16.0f, 0.0f};
-        PushQuad(&state->pipeline_elements.rl_nature_pack_debug.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+        if (ImGui::Combo("Category", &nature_pack_class, state->asset_class_names, (int32_t)state->num_asset_classes))
+        {
+            nature_pack_item = -1;
+        }
+
+        if (nature_pack_class >= 0)
+        {
+            auto &asset_class = state->asset_classes[nature_pack_class];
+            const char *items[20];
+            hassert(harray_count(items) >= asset_class.count);
+            for (uint32_t i = 0; i < asset_class.count; ++i)
+            {
+                items[i] = state->asset_lists[asset_class.asset_start + i].pretty_name;
+            }
+            if (ImGui::Combo("Item", &nature_pack_item, items, (int32_t)asset_class.count))
+            {
+                state->debug.nature.asset_num = (int32_t)asset_class.asset_start + nature_pack_item;
+            }
+        }
+
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            (uint32_t)matrix_ids::np_model_matrix,
+            asset_id,
+            state->asset_ids.knp_palette,
+            1,
+            -1,
+            three_dee_mesh_flags,
+            ShaderType::standard
+        );
+        PushMeshFromAsset(
+            &state->shadowmap_renderer.list,
+            (uint32_t)matrix_ids::light_projection_matrix,
+            -1,
+            (uint32_t)matrix_ids::np_model_matrix,
+            asset_id,
+            state->asset_ids.knp_palette,
+            0,
+            -1,
+            shadowmap_mesh_flags,
+            ShaderType::variance_shadow_map
+        );
 
         auto fb_nature_pack_debug = state->render_pipeline.framebuffers[state->pipeline_elements.fb_nature_pack_debug];
         ImGui::Image(
@@ -898,7 +1001,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             &state->three_dee_renderer.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
-            (uint32_t)matrix_ids::horse_model_matrix,
+            (uint32_t)matrix_ids::cube_bounds_model_matrix,
             state->asset_ids.cube_bounds_mesh,
             -1,
             0,
