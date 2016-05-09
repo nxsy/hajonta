@@ -2007,6 +2007,8 @@ draw_mesh_from_asset(
 
             glEnableVertexAttribArray((GLuint)program.a_position_id);
             glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
+            glDisableVertexAttribArray((GLuint)program.a_bone_ids_id);
+            glDisableVertexAttribArray((GLuint)program.a_bone_weights_id);
             glErrorAssert();
 
             a_position_id = program.a_position_id;
