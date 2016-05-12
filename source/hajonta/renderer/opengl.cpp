@@ -651,18 +651,22 @@ load_mesh_asset(
         bone_name += bone_name_length + 1;
     }
 
-    BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
-    AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
-    for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
+    mesh->num_ticks = 0;
+    if (format.animation_size)
     {
-        for (uint32_t j = 0; j < format.num_bones; ++j)
+        BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
+        AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
+        for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
         {
-            mesh->animation_ticks[i][j].transform = anim_tick->transform;
-            ++anim_tick;
+            for (uint32_t j = 0; j < format.num_bones; ++j)
+            {
+                mesh->animation_ticks[i][j].transform = anim_tick->transform;
+                ++anim_tick;
+            }
         }
+        mesh->num_ticks = (uint32_t)bone_animation_header->num_ticks;
     }
     mesh->num_triangles = format.num_triangles;
-    mesh->num_ticks = (uint32_t)bone_animation_header->num_ticks;
     mesh->num_bones = format.num_bones;
     return true;
 }
@@ -1735,7 +1739,7 @@ draw_mesh_from_asset(
     }
 
 
-    if (armature)
+    if (mesh.num_bones)
     {
         int32_t first_bone = 0;
         for (uint32_t i = 0; i < mesh.num_bones; ++i)
@@ -1919,10 +1923,24 @@ draw_mesh_from_asset(
             {
                 if (opened_debug)
                 {
-                    ImGui::Text("No armature storage");
+                    ImGui::Text("Scale: %.2f", mesh.default_transforms[bone].scale.x);
                     ImGui::NextColumn();
+                    ImGui::Text("Translation: %.2f, %.2f, %0.2f",
+                        mesh.default_transforms[bone].translate.x,
+                        mesh.default_transforms[bone].translate.y,
+                        mesh.default_transforms[bone].translate.z);
+                    ImGui::NextColumn();
+                    ImGui::Text("Rotation: %.2f, %.2f, %.2f, %.2f",
+                        mesh.default_transforms[bone].q.x,
+                        mesh.default_transforms[bone].q.y,
+                        mesh.default_transforms[bone].q.z,
+                        mesh.default_transforms[bone].q.w);
                     ImGui::NextColumn();
                 }
+                m4 scale = m4scale(mesh.default_transforms[bone].scale);
+                m4 translate = m4translate(mesh.default_transforms[bone].translate);
+                m4 rotate = m4rotation(mesh.default_transforms[bone].q);
+                local_matrix = m4mul(translate,m4mul(rotate, scale));
             }
 
 
