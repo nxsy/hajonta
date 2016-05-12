@@ -159,6 +159,14 @@ process_nodes(
     }
 }
 
+size_t
+full_fwrite(const void *ptr, size_t size, size_t count, FILE *of)
+{
+    size_t elements_written = fwrite(ptr, size, count, of);
+    assert(elements_written == count);
+    return count * size;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -468,7 +476,6 @@ main(int argc, char **argv)
     std::vector<float> bone_weights;
     bone_weights.reserve(4 * num_vertices);
 
-    bool any_bones = false;
     for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
     {
         aiMesh *mesh = scene->mMeshes[h];
@@ -480,7 +487,6 @@ main(int argc, char **argv)
         local_lengths.resize(mesh->mNumVertices);
         for (uint32_t i = 0; i < mesh->mNumBones; ++i)
         {
-            any_bones = true;
             aiBone *bone = mesh->mBones[i];
             std::string bone_name(bone->mName.data);
             uint32_t bone_id = bone_id_lookup[bone_name];
@@ -516,19 +522,19 @@ main(int argc, char **argv)
 
     FILE *of = fopen(outputfile, "wb");
     char fmt[4] = { 'H', 'J', 'N', 'T' };
-    size_t written = 0;
-    written = fwrite(&fmt, sizeof(fmt), 1, of);
-    assert(written == 1);
+    full_fwrite(&fmt, sizeof(fmt), 1, of);
     uint32_t version = 2;
-    written = fwrite(&version, sizeof(uint32_t), 1, of);
-    assert(written == 1);
-    written = fwrite(&format, sizeof(binary_format_v2), 1, of);
-    assert(written == 1);
+    full_fwrite(&version, sizeof(uint32_t), 1, of);
+    full_fwrite(&format, sizeof(binary_format_v2), 1, of);
 
-    fwrite(&positions[0], sizeof(float), positions.size(), of);
+    size_t written = 0;
+    size_t total_written = 0;
+    total_written += written = full_fwrite(&positions[0], sizeof(float), positions.size(), of);
+    assert(written == format.vertices_size);
 
     if (format.texcoords_size)
     {
+        assert(total_written == format.texcoords_offset);
         std::vector<float> texcoords;
         texcoords.reserve(2 * num_vertices);
         for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
@@ -541,7 +547,8 @@ main(int argc, char **argv)
                 texcoords.push_back(v->y);
             }
         }
-        fwrite(&texcoords[0], sizeof(float), texcoords.size(), of);
+        total_written += written = full_fwrite(&texcoords[0], sizeof(float), texcoords.size(), of);
+        assert(written == format.texcoords_size);
     }
 
     std::vector<uint32_t> indices;
@@ -566,10 +573,13 @@ main(int argc, char **argv)
         start_index += mesh->mNumVertices;
     }
 
-    fwrite(&indices[0], sizeof(uint32_t), indices.size(), of);
+    assert(total_written == format.indices_offset);
+    total_written += written = full_fwrite(&indices[0], sizeof(uint32_t), indices.size(), of);
+    assert(written == format.indices_size);
 
     if (format.normals_size)
     {
+        assert(total_written == format.normals_offset);
         std::vector<float> normals;
         normals.reserve(2 * num_vertices);
         for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
@@ -583,36 +593,63 @@ main(int argc, char **argv)
                 normals.push_back(v->z);
             }
         }
-        fwrite(&normals[0], sizeof(float), normals.size(), of);
+        total_written += written = full_fwrite(&normals[0], sizeof(float), normals.size(), of);
+        assert(written == format.normals_size);
     }
 
     if (format.bone_names_size)
     {
+        assert(total_written == format.bone_names_offset);
+        written = 0;
         for (auto it = bone_names.begin(); it != bone_names.end(); ++it)
         {
             uint8_t length = (uint8_t)it->length();
-            fwrite(&length, sizeof(uint8_t), 1, of);
-            fwrite(it->c_str(), sizeof(uint8_t), length, of);
+            written += full_fwrite(&length, sizeof(uint8_t), 1, of);
+            written += full_fwrite(it->c_str(), sizeof(uint8_t), length, of);
         }
+        assert(written == format.bone_names_size);
+        total_written += written;
     }
 
-    if (any_bones && format.bone_ids_size)
+    if (format.bone_names_size && format.bone_ids_size)
     {
-        fwrite(&bone_ids[0], sizeof(float), bone_ids.size(), of);
-        fwrite(&bone_weights[0], sizeof(float), bone_weights.size(), of);
-        fwrite(&bone_parents[0], sizeof(BoneParent), bone_parents.size(), of);
-        fwrite(&bone_offsets[0], sizeof(OffsetMatrix), bone_offsets.size(), of);
-        fwrite(&bone_default_transforms[0], sizeof(MeshBoneDescriptor), bone_default_transforms.size(), of);
+        assert(total_written == format.bone_ids_offset);
+        total_written += written = full_fwrite(&bone_ids[0], sizeof(float), bone_ids.size(), of);
+        assert(written == format.bone_ids_size);
 
-        fwrite(&bone_animation_header, sizeof(BoneAnimationHeader), 1, of);
-        for (uint32_t i = 0; i < (uint32_t)bone_animation_header.num_ticks; ++i)
+        assert(total_written == format.bone_weights_offset);
+        total_written += written = full_fwrite(&bone_weights[0], sizeof(float), bone_weights.size(), of);
+        assert(written == format.bone_weights_size);
+
+        assert(total_written == format.bone_parent_offset);
+        total_written += written = full_fwrite(&bone_parents[0], sizeof(BoneParent), bone_parents.size(), of);
+        assert(written == format.bone_parent_size);
+
+        assert(total_written == format.bone_offsets_offset);
+        total_written += written = full_fwrite(&bone_offsets[0], sizeof(OffsetMatrix), bone_offsets.size(), of);
+        assert(written == format.bone_offsets_size);
+
+        assert(total_written == format.bone_default_transform_offset);
+        total_written += written = full_fwrite(&bone_default_transforms[0], sizeof(MeshBoneDescriptor), bone_default_transforms.size(), of);
+        assert(written == format.bone_default_transform_size);
+
+        if (format.animation_size)
         {
-            std::vector<AnimTick> &anim_ticks = all_anim_ticks[i];
-            fwrite(&anim_ticks[0], sizeof(AnimTick), format.num_bones, of);
+            assert(total_written == format.animation_offset);
+            written = fwrite(&bone_animation_header, sizeof(BoneAnimationHeader), 1, of);
+            for (uint32_t i = 0; i < (uint32_t)bone_animation_header.num_ticks; ++i)
+            {
+                std::vector<AnimTick> &anim_ticks = all_anim_ticks[i];
+                written += fwrite(&anim_ticks[0], sizeof(AnimTick), format.num_bones, of);
+            }
+            total_written += written;
+            assert(written == format.animation_size);
         }
     }
+    assert(total_written == offset);
 
+    printf("Excepted file size: %d bytes\n", (uint32_t)sizeof(binary_format_v2) + 4 + 4 + offset);
+    printf("Actual file size: %d bytes\n", (uint32_t)ftell(of));
     fclose(of);
-    printf("File size should be: %d bytes", (uint32_t)sizeof(binary_format_v2) + 4 + 4 + offset);
     return 0;
 }
