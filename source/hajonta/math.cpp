@@ -859,6 +859,27 @@ m4scale(float a)
 }
 
 m4
+m4scale(v3 a)
+{
+    m4 result = {};
+    result.cols[0].E[0] = a.x;
+    result.cols[1].E[1] = a.y;
+    result.cols[2].E[2] = a.z;
+    result.cols[3].E[3] = 1.0f;
+    return result;
+}
+
+m4
+m4translate(v3 a)
+{
+    m4 result = m4identity();
+    result.cols[3].x = a.x;
+    result.cols[3].y = a.y;
+    result.cols[3].z = a.z;
+    return result;
+}
+
+m4
 m4lookat(v3 eye, v3 target, v3 up)
 {
     v3 forward = v3normalize(v3sub(target, eye));
