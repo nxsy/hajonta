@@ -992,7 +992,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "cube_texture", "testing/wood-tex2a.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         add_asset(state, "knp_palette", "testing/kenney/Nature_Pack_3D/palettised/palette.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "knp_Brown_Cliff_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Bottom_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_Corner_Green_Top_01.hjm");
@@ -1002,7 +1002,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Brown_Cliff_End_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_End_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Top_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Top_01_2.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Top_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Top_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Waterfall_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_01.hjm");
         add_mesh_asset(state, "knp_Brown_Waterfall_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_Top_01.hjm");
@@ -1992,7 +1992,7 @@ draw_mesh_from_asset(
             glUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
 
             glUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
-            glUniform1i(program.u_bones_enabled_id, armature != 0);
+            glUniform1i(program.u_bones_enabled_id, (int32_t)mesh.num_bones);
 
             glEnableVertexAttribArray((GLuint)program.a_position_id);
             glEnableVertexAttribArray((GLuint)program.a_texcoord_id);
@@ -2021,7 +2021,7 @@ draw_mesh_from_asset(
             glUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
             glUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
-            glUniform1i(program.u_bones_enabled_id, armature != 0);
+            glUniform1i(program.u_bones_enabled_id, (int32_t)mesh.num_bones);
 
             glEnableVertexAttribArray((GLuint)program.a_position_id);
             glEnableVertexAttribArray((GLuint)program.a_texcoord_id);

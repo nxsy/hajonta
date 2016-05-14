@@ -496,11 +496,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::cube_bounds_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
 
     local_translate = m4identity();
-    local_translate.cols[3] = {0.75, 0, 0, 1};
     rotate = m4identity();
-    translate = m4identity();
-    translate.cols[3] = {0.5f,0.5f,0.5f,1};
-    scale = m4scale(0.5f);
+    translate = m4translate({0.5f,0.5f,0.5f});
+    scale = m4identity();
     state->matrices[(uint32_t)matrix_ids::np_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     state->matrices[(uint32_t)matrix_ids::chest_model_matrix] = m4mul(translate, m4mul(rotate, local_translate));
