@@ -340,6 +340,20 @@ main(int argc, char **argv)
     bone_parents.resize(bone_names.size());
     bone_default_transforms.resize(bone_names.size());
     process_nodes(scene->mRootNode, bone_id_lookup, bone_names, bone_parents, bone_default_transforms, format);
+
+    for (size_t i = bone_offsets.size(); i < bone_names.size(); ++i)
+    {
+        OffsetMatrix m = {
+            {
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1,
+            },
+        };
+
+        bone_offsets.push_back(m);
+    }
     bone_offsets.resize(bone_names.size());
 
     BoneAnimationHeader bone_animation_header;
@@ -503,6 +517,16 @@ main(int argc, char **argv)
         }
         for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
         {
+            auto &&length = local_lengths[i];
+            if (length == 0)
+            {
+                local_bone_ids[i].bones[length] = 0;
+                local_weights[i].weights[length] = 1.0f;
+                ++length;
+            }
+        }
+        for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+        {
             aiVector3D *v = mesh->mVertices + i;
             positions.push_back(v->x);
             positions.push_back(v->y);
@@ -613,6 +637,8 @@ main(int argc, char **argv)
 
     if (format.bone_names_size && format.bone_ids_size)
     {
+        printf("Bone names size: %d, bone ids size: %d\n",
+            format.bone_names_size, format.bone_ids_size);
         assert(total_written == format.bone_ids_offset);
         total_written += written = full_fwrite(&bone_ids[0], sizeof(float), bone_ids.size(), of);
         assert(written == format.bone_ids_size);
@@ -621,7 +647,13 @@ main(int argc, char **argv)
         total_written += written = full_fwrite(&bone_weights[0], sizeof(float), bone_weights.size(), of);
         assert(written == format.bone_weights_size);
 
+        printf("Bone parents:\n");
+        for (uint32_t i = 0; i < format.num_bones; ++i)
+        {
+            printf("    %d: %d\n", i, bone_parents[i].bone_id);
+        }
         assert(total_written == format.bone_parent_offset);
+        printf("Bone parent offset: %d\n", format.bone_parent_offset);
         total_written += written = full_fwrite(&bone_parents[0], sizeof(BoneParent), bone_parents.size(), of);
         assert(written == format.bone_parent_size);
 
