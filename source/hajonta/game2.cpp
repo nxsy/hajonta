@@ -453,12 +453,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::np_projection_matrix] = state->np_camera.projection;
     state->matrices[(uint32_t)matrix_ids::np_view_matrix] = state->np_camera.view;
 
-    static float rotation = 0;
-    rotation += state->frame_state.delta_t;
     m4 translate = m4identity();
     translate.cols[3] = {0, 0, -3.0f, 1.0f};
-    m4 rotate = m4rotation({1,0,0}, rotation);
-    rotate = m4identity();
+    m4 rotate = m4identity();
     m4 local_translate = m4identity();
     local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -954,6 +951,96 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
+
+    int32_t plate_grass_asset_id = -1;
+    int32_t cliff_top_asset_id = -1;
+    struct
+    {
+        const char *asset_name;
+        int32_t *asset_id;
+    } asset_names[] = {
+        {
+            "knp_Plate_Grass_01",
+            &plate_grass_asset_id,
+        },
+        {
+            "knp_Brown_Cliff_Top_01",
+            &cliff_top_asset_id,
+        },
+    };
+
+    for (uint32_t i = 0; i < state->assets.count; ++i)
+    {
+        for (uint32_t j = 0; j < harray_count(asset_names); ++j)
+        {
+            if (strcmp(state->assets.descriptors[i].asset_name, asset_names[j].asset_name) == 0)
+            {
+                 *(asset_names[j].asset_id) = (int32_t)i;
+                 break;
+            }
+        }
+    }
+
+    const int32_t x_width = 4;
+    int32_t x_start = -x_width;
+    int32_t x_end = x_width;
+    const int32_t z_width = 4;
+    int32_t z_start = -z_width;
+    int32_t z_end = z_width;
+
+    struct
+    {
+        int32_t asset_id;
+        m4 transform;
+    } foo[(x_width * 2 + 1) * (z_width * 2 + 1)];
+
+    for (int32_t x = x_start; x <= x_end; ++x)
+    {
+        for (int32_t z = z_start; z <= z_end; ++z)
+        {
+            m4 transform = m4translate({(float)x, 0, (float)z});
+            int32_t asset_id = plate_grass_asset_id;
+            if (abs(z) == z_width) {
+                asset_id = cliff_top_asset_id;
+                m4 rotation = m4rotation({0, 1, 0}, -h_halfpi);
+                transform = m4mul(transform, rotation);
+            }
+            auto &f = foo[(x+x_width)*(z_width*2+1) + z+z_width];
+            f = {
+                asset_id,
+                transform,
+            };
+        }
+    }
+
+    for (uint32_t i = 0; i < harray_count(foo); ++i)
+    {
+        auto &&asset_and_loc = foo[i];
+        //m4 model = m4mul(asset_and_loc.transform, state->np_model_matrix);
+        m4 model = m4mul(state->np_model_matrix, asset_and_loc.transform);
+        PushMeshFromAsset(&state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            model,
+            asset_and_loc.asset_id,
+            state->asset_ids.knp_palette,
+            1,
+            -1,
+            three_dee_mesh_flags,
+            ShaderType::standard
+        );
+        PushMeshFromAsset(&state->shadowmap_renderer.list,
+            (uint32_t)matrix_ids::light_projection_matrix,
+            -1,
+            model,
+            asset_and_loc.asset_id,
+            state->asset_ids.knp_palette,
+            0,
+            -1,
+            shadowmap_mesh_flags,
+            ShaderType::variance_shadow_map
+        );
+    }
 
     /*
     PushMeshFromAsset(&state->three_dee_renderer.list,
