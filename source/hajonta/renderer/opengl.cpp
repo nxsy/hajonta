@@ -1002,7 +1002,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Brown_Cliff_End_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_End_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Top_01_2.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Top_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Top_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Waterfall_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_01.hjm");
         add_mesh_asset(state, "knp_Brown_Waterfall_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_Top_01.hjm");
@@ -1042,7 +1042,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Plant_1_01", "testing/kenney/Nature_Pack_3D/palettised/Plant_1_01.hjm");
         add_mesh_asset(state, "knp_Plant_2_01", "testing/kenney/Nature_Pack_3D/palettised/Plant_2_01.hjm");
         add_mesh_asset(state, "knp_Plant_3_01", "testing/kenney/Nature_Pack_3D/palettised/Plant_3_01.hjm");
-        add_mesh_asset(state, "knp_Plate_Grass_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_Grass_01.hjm");
+        add_mesh_asset(state, "knp_Plate_Grass_01", "testing/kenney/Nature_Pack_3D/Plate_Grass_01.hjm");
         add_mesh_asset(state, "knp_Plate_Grass_Dirt_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_Grass_Dirt_01.hjm");
         add_mesh_asset(state, "knp_Plate_River_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_River_01.hjm");
         add_mesh_asset(state, "knp_Plate_River_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_River_Corner_01.hjm");
@@ -1684,18 +1684,20 @@ draw_mesh_from_asset(
         armature = armature_descriptors + mesh_from_asset->armature_descriptor_id;
     }
 
-    static float tick = 0;
     static bool proceed_time = true;
     static float playback_speed = 1.0f;
 
-    ImGui::Begin("Animation");
-    ImGui::Checkbox("Animation proceed", &proceed_time);
-    ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
-    if (ImGui::Button("Reset to start"))
+    if (armature)
     {
-        tick = 0;
+        ImGui::Begin("Animation");
+        ImGui::Checkbox("Animation proceed", &proceed_time);
+        ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
+        if (ImGui::Button("Reset to start"))
+        {
+            armature->tick = 0;
+        }
+        ImGui::End();
     }
-    ImGui::End();
 
     bool opened_debug = false;
     if (mesh_from_asset->flags.debug && state->show_animation_debug)
@@ -1816,9 +1818,9 @@ draw_mesh_from_asset(
 
         }
 
-        if (proceed_time)
+        if (armature && proceed_time)
         {
-            tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
+            armature->tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
         }
 
         while (stack_location >= 0)
@@ -1858,7 +1860,7 @@ draw_mesh_from_asset(
 
                 if (mesh.num_ticks)
                 {
-                    d = mesh.animation_ticks[(uint32_t)tick % mesh.num_ticks][bone].transform;
+                    d = mesh.animation_ticks[(uint32_t)armature->tick % mesh.num_ticks][bone].transform;
                 }
                 if (d.scale.x == 0)
                 {

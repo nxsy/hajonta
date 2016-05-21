@@ -128,6 +128,7 @@ ArmatureDescriptor
 {
     uint32_t count;
     MeshBoneDescriptor *bones;
+    float tick;
 };
 
 struct
