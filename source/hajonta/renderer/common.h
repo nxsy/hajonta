@@ -220,7 +220,7 @@ render_entry_type_mesh_from_asset
     render_entry_header header;
     int32_t projection_matrix_id;
     int32_t view_matrix_id;
-    int32_t model_matrix_id;
+    m4 model_matrix;
     int32_t mesh_asset_descriptor_id;
     int32_t texture_asset_descriptor_id;
     int32_t lights_mask;
@@ -614,7 +614,7 @@ PushMeshFromAsset(
     render_entry_list *list,
     int32_t projection_matrix_id,
     int32_t view_matrix_id,
-    int32_t model_matrix_id,
+    m4 model_matrix,
     int32_t mesh_asset_descriptor_id,
     int32_t texture_asset_descriptor_id,
     int32_t lights_mask,
@@ -627,7 +627,7 @@ PushMeshFromAsset(
      {
          entry->projection_matrix_id = projection_matrix_id;
          entry->view_matrix_id = view_matrix_id;
-         entry->model_matrix_id = model_matrix_id;
+         entry->model_matrix = model_matrix;
          entry->mesh_asset_descriptor_id = mesh_asset_descriptor_id;
          entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
          entry->lights_mask = lights_mask;

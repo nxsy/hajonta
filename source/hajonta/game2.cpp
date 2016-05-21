@@ -477,31 +477,28 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[0].E[0] = _scale;
     scale.cols[1].E[1] = 0.5f;
     scale.cols[2].E[2] = _scale;
-    state->matrices[(uint32_t)matrix_ids::plane_model_matrix] = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
+    state->plane_model_matrix = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
+
     rotate = m4identity();
     //rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
     scale.cols[0].E[0] = 1.0f;
     scale.cols[1].E[1] = 1.0f;
     scale.cols[2].E[2] = 1.0f;
     translate.cols[3] = {0.5f, 0, 0.5f, 1.0f};
-    state->matrices[(uint32_t)matrix_ids::tree_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    static float horse_scale = 1.0f;
-    ImGui::DragFloat("Horse Scale", (float *)&horse_scale, 0.01f, 0.01f, 10.0f);
+    state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     local_translate = m4identity();
     rotate = m4identity();
     translate = m4identity();
     translate.cols[3] = {0.5f,0.5f,0.5f,1};
     scale = m4identity();
-    state->matrices[(uint32_t)matrix_ids::cube_bounds_model_matrix] = m4mul(translate,m4mul(rotate, local_translate));
+    state->cube_bounds_model_matrix = m4mul(translate,m4mul(rotate, local_translate));
 
     local_translate = m4identity();
     rotate = m4identity();
     translate = m4translate({0.5f,0.5f,0.5f});
     scale = m4identity();
-    state->matrices[(uint32_t)matrix_ids::np_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-
-    state->matrices[(uint32_t)matrix_ids::chest_model_matrix] = m4mul(translate, m4mul(rotate, local_translate));
+    state->np_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     demo_data demoes[] = {
         {
@@ -864,7 +861,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             &state->pipeline_elements.rl_nature_pack_debug.list,
             (uint32_t)matrix_ids::np_projection_matrix,
             (uint32_t)matrix_ids::np_view_matrix,
-            (uint32_t)matrix_ids::np_model_matrix,
+            state->np_model_matrix,
             asset_id,
             state->asset_ids.knp_palette,
             0,
@@ -899,7 +896,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             &state->three_dee_renderer.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
-            (uint32_t)matrix_ids::np_model_matrix,
+            state->np_model_matrix,
             asset_id,
             state->asset_ids.knp_palette,
             1,
@@ -911,7 +908,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             &state->shadowmap_renderer.list,
             (uint32_t)matrix_ids::light_projection_matrix,
             -1,
-            (uint32_t)matrix_ids::np_model_matrix,
+            state->np_model_matrix,
             asset_id,
             state->asset_ids.knp_palette,
             0,
@@ -936,7 +933,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::mesh_view_matrix,
-        (uint32_t)matrix_ids::tree_model_matrix,
+        state->tree_model_matrix,
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         1,
@@ -949,7 +946,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
         -1,
-        (uint32_t)matrix_ids::tree_model_matrix,
+        state->tree_model_matrix,
         state->asset_ids.blocky_advanced_mesh,
         state->asset_ids.blocky_advanced_texture,
         0,
@@ -958,10 +955,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ShaderType::variance_shadow_map
     );
 
+    /*
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::mesh_view_matrix,
-        (uint32_t)matrix_ids::plane_model_matrix,
+        state->plane_model_matrix,
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,
         1,
@@ -972,7 +970,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(&state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
         -1,
-        (uint32_t)matrix_ids::plane_model_matrix,
+        state->plane_model_matrix,
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,
         0,
@@ -980,6 +978,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
+    */
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
@@ -999,7 +998,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             &state->three_dee_renderer.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
-            (uint32_t)matrix_ids::cube_bounds_model_matrix,
+            state->cube_bounds_model_matrix,
             state->asset_ids.cube_bounds_mesh,
             -1,
             0,

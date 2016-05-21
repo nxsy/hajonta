@@ -425,6 +425,11 @@ struct game_state
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
+    m4 np_model_matrix;
+    m4 cube_bounds_model_matrix;
+    m4 plane_model_matrix;
+    m4 tree_model_matrix;
+
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
     ArmatureDescriptor armatures[(uint32_t)ArmatureIds::MAX + 1];
     MeshBoneDescriptor bones[100];

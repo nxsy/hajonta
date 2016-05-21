@@ -993,10 +993,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
 
         add_asset(state, "knp_palette", "testing/kenney/Nature_Pack_3D/palettised/palette.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "knp_Brown_Cliff_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_Corner_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Bottom_Green_Top_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Corner_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Corner_Green_Top_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Green_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Corner_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_End_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_01.hjm");
@@ -1645,7 +1645,7 @@ draw_mesh_from_asset(
     {
         view = m4identity();
     }
-    m4 model = matrices[mesh_from_asset->model_matrix_id];
+    m4 &model = mesh_from_asset->model_matrix;
 
     v3 camera_position = calculate_camera_position(view);
     ImGui::Text("Camera location: %.2f, %.2f, %.2f, %.2f", camera_position.x, camera_position.y, camera_position.z);
