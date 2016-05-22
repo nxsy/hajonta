@@ -154,6 +154,68 @@ update_camera(CameraState *camera, float aspect_ratio)
     }
 }
 
+struct
+AssetPlusTransform
+{
+    int32_t asset_id;
+    m4 transform;
+};
+
+AssetPlusTransform
+tile_asset_and_transform(int32_t y, int32_t x, int32_t x_width, int32_t z, int32_t z_width, int32_t centre_asset_id, int32_t side_asset_id, int32_t corner_asset_id)
+{
+    AssetPlusTransform result = {};
+    auto &&asset_id = result.asset_id;
+    auto &&transform = result.transform;
+    transform = m4translate({(float)x, float(y), (float)z});
+    asset_id = centre_asset_id;
+    m4 rotation = m4identity();
+    if (abs(x) == x_width && abs(z) == z_width)
+    {
+        asset_id = corner_asset_id;
+        float rotate_amount = 0;
+        if (x < 0 && z > 0)
+        {
+            rotate_amount = -h_halfpi;
+        }
+        else if (x < 0 && z < 0)
+        {
+            rotate_amount = 0;
+        }
+        else if (x > 0 && z > 0)
+        {
+            rotate_amount = h_pi;
+        }
+        else if (x > 0 && z < 0)
+        {
+            rotate_amount = h_halfpi;
+        }
+        rotation = m4rotation({0, 1, 0}, rotate_amount);
+    }
+    else if (abs(x) == x_width)
+    {
+        asset_id = side_asset_id;
+        float rotate_amount = h_pi;
+        if (x < 0) {
+            rotate_amount = 0;
+        }
+        rotation = m4rotation({0, 1, 0}, rotate_amount);
+    }
+    else if (abs(z) == z_width)
+    {
+        asset_id = side_asset_id;
+        float rotate_amount = -h_halfpi;
+        if (z < 0) {
+            rotate_amount = -rotate_amount;
+        }
+        rotation = m4rotation({0, 1, 0}, rotate_amount);
+    }
+    transform = m4mul(transform, rotation);
+    m4 np_translate = m4translate({0.5f,0.5f,0.5f});
+    transform = m4mul(np_translate, transform);
+    return result;
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -242,9 +304,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         auto &light = state->lights[(uint32_t)LightIds::sun];
         light.type = LightType::directional;
-        light.direction = {1.0f, -1.0f, -1.0f};
-        light.color = {1.0f, 1.0f, 1.0f};
-        light.ambient_intensity = 0.2f;
+        light.direction = {1.0f, -0.66f, -0.288f};
+        light.color = {1.0f, 0.99f, 0.99f};
+        light.ambient_intensity = 0.35f;
         light.diffuse_intensity = 1.0f;
         light.attenuation_constant = 1.0f;
 
@@ -258,10 +320,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_nature_pack = 1;
         state->debug.show_camera = 1;
 
-        state->camera.distance = 10.0f;
-        state->camera.near_ = 1.0f;
+        state->camera.distance = 80.0f;
+        state->camera.near_ = 28.0f;
         state->camera.far_ = 100.0f;
-        state->camera.target = {0, 2, 0};
+        state->camera.target = {1, 1, 0};
+        state->camera.rotation = {0.2f, -0.8f, 0};
 
         state->np_camera.distance = 2.0f;
         state->np_camera.near_ = 1.0f;
@@ -357,6 +420,31 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 { "River_Corner", "knp_Plate_River_Corner_01" },
                 { "River Corner Dirt", "knp_Plate_River_Corner_Dirt_01" },
                 { "River Dirt", "knp_Plate_River_Dirt_01" },
+            };
+            f.asset_start = state->num_assets;
+            f.count = harray_count(_assets);
+            for (uint32_t i = 0; i < harray_count(_assets); ++i)
+            {
+                auto &a = _assets[i];
+                AssetListEntry &l = state->asset_lists[state->num_assets++];
+                l.pretty_name = a.pretty_name;
+                l.asset_name = a.asset_name;
+                l.asset_id = add_asset(asset_descriptors, l.asset_name);
+            }
+        }
+
+        {
+            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+            f.name = "Trees";
+            struct
+            {
+                const char *pretty_name;
+                const char *asset_name;
+            } _assets[] =
+            {
+                { "Large Oak Dark", "knp_Large_Oak_Dark_01" },
+                { "Large Oak Fall", "knp_Large_Oak_Fall_01" },
+                { "Large Oak Green", "knp_Large_Oak_Green_01" },
             };
             f.asset_start = state->num_assets;
             f.count = harray_count(_assets);
@@ -481,6 +569,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[0].E[0] = 1.0f;
     scale.cols[1].E[1] = 1.0f;
     scale.cols[2].E[2] = 1.0f;
+    rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
     translate.cols[3] = {0.5f, 0, 0.5f, 1.0f};
     state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
@@ -838,7 +927,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto fb_shadowmap = state->render_pipeline.framebuffers[state->pipeline_elements.fb_shadowmap];
         light.shadowmap_asset_descriptor_id = fb_shadowmap.depth_asset_descriptor;
-        light.shadowmap_color_asset_descriptor_id = fb_shadowmap.asset_descriptor;
+        auto fb_sm_blur_xy = state->render_pipeline.framebuffers[state->pipeline_elements.fb_sm_blur_xy];
+        light.shadowmap_color_asset_descriptor_id = fb_sm_blur_xy.asset_descriptor;
     }
 
     MeshFromAssetFlags shadowmap_mesh_flags = {};
@@ -889,6 +979,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
+        /*
         PushMeshFromAsset(
             &state->three_dee_renderer.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
@@ -913,6 +1004,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             shadowmap_mesh_flags,
             ShaderType::variance_shadow_map
         );
+        */
 
         auto fb_nature_pack_debug = state->render_pipeline.framebuffers[state->pipeline_elements.fb_nature_pack_debug];
         ImGui::Image(
@@ -954,6 +1046,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     int32_t plate_grass_asset_id = -1;
     int32_t cliff_top_asset_id = -1;
+    int32_t cliff_top_corner_asset_id = -1;
+    int32_t cliff_asset_id = -1;
+    int32_t cliff_corner_asset_id = -1;
+    int32_t cliff_bottom_asset_id = -1;
+    int32_t cliff_bottom_corner_asset_id = -1;
+    int32_t large_oak_dark_asset_id = -1;
+    int32_t large_oak_fall_asset_id = -1;
+    int32_t large_oak_green_asset_id = -1;
+
     struct
     {
         const char *asset_name;
@@ -966,6 +1067,38 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             "knp_Brown_Cliff_Top_01",
             &cliff_top_asset_id,
+        },
+        {
+            "knp_Brown_Cliff_Top_Corner_01",
+            &cliff_top_corner_asset_id,
+        },
+        {
+            "knp_Brown_Cliff_01",
+            &cliff_asset_id,
+        },
+        {
+            "knp_Brown_Cliff_Corner_01",
+            &cliff_corner_asset_id,
+        },
+        {
+            "knp_Brown_Cliff_Bottom_01",
+            &cliff_bottom_asset_id,
+        },
+        {
+            "knp_Brown_Cliff_Bottom_Corner_01",
+            &cliff_bottom_corner_asset_id,
+        },
+        {
+            "knp_Large_Oak_Dark_01",
+            &large_oak_dark_asset_id,
+        },
+        {
+            "knp_Large_Oak_Fall_01",
+            &large_oak_fall_asset_id,
+        },
+        {
+            "knp_Large_Oak_Green_01",
+            &large_oak_green_asset_id,
         },
     };
 
@@ -981,47 +1114,125 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    const int32_t x_width = 4;
+    const int32_t x_width = 3;
     int32_t x_start = -x_width;
     int32_t x_end = x_width;
-    const int32_t z_width = 4;
+    const int32_t z_width = 5;
     int32_t z_start = -z_width;
     int32_t z_end = z_width;
 
-    struct
-    {
-        int32_t asset_id;
-        m4 transform;
-    } foo[(x_width * 2 + 1) * (z_width * 2 + 1)];
+    const uint32_t num_foos = (
+        (x_width * 2 + 1) * (z_width * 2 + 1) // top
+        +
+        (x_width * 2 + 1) * 2 + (z_width * 2 + 1) * 2 - 4 // cliff
+        +
+        (x_width * 2 + 1) * 2 + (z_width * 2 + 1) * 2 - 4 // bottom of cliff
+        +
+        5
+    );
+    AssetPlusTransform foo[num_foos];
+    uint32_t foo_count = 0;
 
     for (int32_t x = x_start; x <= x_end; ++x)
     {
         for (int32_t z = z_start; z <= z_end; ++z)
         {
-            m4 transform = m4translate({(float)x, 0, (float)z});
-            int32_t asset_id = plate_grass_asset_id;
-            if (abs(z) == z_width) {
-                asset_id = cliff_top_asset_id;
-                m4 rotation = m4rotation({0, 1, 0}, -h_halfpi);
-                transform = m4mul(transform, rotation);
-            }
-            auto &f = foo[(x+x_width)*(z_width*2+1) + z+z_width];
-            f = {
-                asset_id,
-                transform,
-            };
+            auto &f = foo[foo_count++];
+            f = tile_asset_and_transform(0, x, x_width, z, z_width, plate_grass_asset_id, cliff_top_asset_id, cliff_top_corner_asset_id);
         }
     }
 
-    for (uint32_t i = 0; i < harray_count(foo); ++i)
+    for (int32_t x = x_start; x <= x_end; ++x)
+    {
+        for (int32_t z = z_start; z <= z_end; ++z)
+        {
+            if (abs(x) == x_width || abs(z) == z_width)
+            {
+                auto &f = foo[foo_count++];
+                f = tile_asset_and_transform(-1, x, x_width, z, z_width, plate_grass_asset_id, cliff_asset_id, cliff_corner_asset_id);
+            }
+        }
+    }
+
+    for (int32_t x = x_start; x <= x_end; ++x)
+    {
+        for (int32_t z = z_start; z <= z_end; ++z)
+        {
+            if (abs(x) == x_width || abs(z) == z_width)
+            {
+                auto &f = foo[foo_count++];
+                f = tile_asset_and_transform(-2, x, x_width, z, z_width, plate_grass_asset_id, cliff_bottom_asset_id, cliff_bottom_corner_asset_id);
+            }
+        }
+    }
+
+    {
+        auto &f = foo[foo_count++];
+        float x = -x_width + 1.0f;
+        float y = 0;
+        float z = -z_width + 1.0f;
+        m4 transform = m4translate({x, y, z});
+        m4 np_translate = m4translate({0.5f,0.5f,0.5f});
+        f.transform = m4mul(np_translate, transform);
+        f.asset_id = large_oak_dark_asset_id;
+    }
+
+    {
+        auto &f = foo[foo_count++];
+        float x = x_width - 1.5f;
+        float y = 0;
+        float z = -z_width + 2.5f;
+        m4 transform = m4translate({x, y, z});
+        m4 a_scale = m4scale({1.0f, 1.5f, 1.0f});
+        m4 np_translate = m4translate({0.5f,0.75f,0.5f});
+        f.transform = m4mul(np_translate, m4mul(transform, a_scale));
+        f.asset_id = large_oak_fall_asset_id;
+    }
+
+    {
+        auto &f = foo[foo_count++];
+        float x = x_width - 2.25f;
+        float y = 0;
+        float z = -z_width + 2.40f;
+        m4 transform = m4translate({x, y, z});
+        m4 a_scale = m4scale({0.75f, 1.0f, 0.75f});
+        m4 np_translate = m4translate({0.375f,0.5f,0.375f});
+        f.transform = m4mul(np_translate, m4mul(transform, a_scale));
+        f.asset_id = large_oak_fall_asset_id;
+    }
+
+    {
+        auto &f = foo[foo_count++];
+        float x = x_width - 1.95f;
+        float y = 0;
+        float z = -z_width + 3.25f;
+        m4 transform = m4translate({x, y, z});
+        m4 a_scale = m4scale({0.75f, 1.0f, 0.75f});
+        m4 np_translate = m4translate({0.375f,0.5f,0.375f});
+        f.transform = m4mul(np_translate, m4mul(transform, a_scale));
+        f.asset_id = large_oak_fall_asset_id;
+    }
+
+    {
+        auto &f = foo[foo_count++];
+        float x = x_width - 2.5f;
+        float y = 0;
+        float z = z_width - 1.5f;
+        m4 transform = m4translate({x, y, z});
+        m4 a_scale = m4scale({1.5f, 1.0f, 1.5f});
+        m4 np_translate = m4translate({0.75f,0.5f,0.75f});
+        f.transform = m4mul(np_translate, m4mul(transform, a_scale));
+        f.asset_id = large_oak_green_asset_id;
+    }
+
+    for (uint32_t i = 0; i < foo_count; ++i)
     {
         auto &&asset_and_loc = foo[i];
         //m4 model = m4mul(asset_and_loc.transform, state->np_model_matrix);
-        m4 model = m4mul(state->np_model_matrix, asset_and_loc.transform);
         PushMeshFromAsset(&state->three_dee_renderer.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
-            model,
+            asset_and_loc.transform,
             asset_and_loc.asset_id,
             state->asset_ids.knp_palette,
             1,
@@ -1032,7 +1243,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushMeshFromAsset(&state->shadowmap_renderer.list,
             (uint32_t)matrix_ids::light_projection_matrix,
             -1,
-            model,
+            asset_and_loc.transform,
             asset_and_loc.asset_id,
             state->asset_ids.knp_palette,
             0,
@@ -1078,6 +1289,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     );
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
+    /*
     {
         MeshFromAssetFlags flags = {};
         flags.depth_disabled = 1;
@@ -1094,6 +1306,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             ShaderType::standard
         );
     }
+    */
 
     PipelineRender(state, &state->render_pipeline);
 

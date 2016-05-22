@@ -997,13 +997,13 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Corner_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Green_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Corner_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Corner_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_End_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_End_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Green_Top_01.hjm");
         add_mesh_asset(state, "knp_Brown_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Top_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Top_Corner_01.hjm");
+        add_mesh_asset(state, "knp_Brown_Cliff_Top_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Top_Corner_01.hjm");
         add_mesh_asset(state, "knp_Brown_Waterfall_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_01.hjm");
         add_mesh_asset(state, "knp_Brown_Waterfall_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_Top_01.hjm");
         add_mesh_asset(state, "knp_Campfire_01", "testing/kenney/Nature_Pack_3D/palettised/Campfire_01.hjm");
@@ -1030,9 +1030,9 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Grey_Waterfall_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Waterfall_01.hjm");
         add_mesh_asset(state, "knp_Grey_Waterfall_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Waterfall_Top_01.hjm");
         add_mesh_asset(state, "knp_Hanging_Moss_01", "testing/kenney/Nature_Pack_3D/palettised/Hanging_Moss_01.hjm");
-        add_mesh_asset(state, "knp_Large_Oak_Dark_01", "testing/kenney/Nature_Pack_3D/palettised/Large_Oak_Dark_01.hjm");
-        add_mesh_asset(state, "knp_Large_Oak_Fall_01", "testing/kenney/Nature_Pack_3D/palettised/Large_Oak_Fall_01.hjm");
-        add_mesh_asset(state, "knp_Large_Oak_Green_01", "testing/kenney/Nature_Pack_3D/palettised/Large_Oak_Green_01.hjm");
+        add_mesh_asset(state, "knp_Large_Oak_Dark_01", "testing/kenney/Nature_Pack_3D/Large_Oak_Dark_01.hjm");
+        add_mesh_asset(state, "knp_Large_Oak_Fall_01", "testing/kenney/Nature_Pack_3D/Large_Oak_Fall_01.hjm");
+        add_mesh_asset(state, "knp_Large_Oak_Green_01", "testing/kenney/Nature_Pack_3D/Large_Oak_Green_01.hjm");
         add_mesh_asset(state, "knp_Mushroom_Brown_01", "testing/kenney/Nature_Pack_3D/palettised/Mushroom_Brown_01.hjm");
         add_mesh_asset(state, "knp_Mushroom_Red_01", "testing/kenney/Nature_Pack_3D/palettised/Mushroom_Red_01.hjm");
         add_mesh_asset(state, "knp_Mushroom_Tall_01", "testing/kenney/Nature_Pack_3D/palettised/Mushroom_Tall_01.hjm");
@@ -1094,13 +1094,14 @@ extern "C" RENDERER_SETUP(renderer_setup)
             GL_STATIC_DRAW);
         state->m4identity = m4identity();
         state->poisson_spread = 700;
-        state->shadow_mode = 4;
+        state->shadow_mode = 6;
         state->pcf_distance = 3;
         state->poisson_samples = 4;
         state->poisson_position_granularity = 1000.0f;
         state->vsm_minimum_variance = 0.0000002f;
         state->vsm_lightbleed_compensation = 0.001f;
-        state->blur_scale_divisor = 4096.0f;
+        state->blur_scale_divisor = 3072.0f;
+        state->shadowmap_bias = 0.008f;
     }
 
     _GlobalRendererState.input = input;
