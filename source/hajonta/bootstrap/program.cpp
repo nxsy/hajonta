@@ -278,19 +278,18 @@ main(int argc, char **argv)
 #endif
         glCompileShader(shader);
         glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        GLsizei info_log_written;
+        char info_log[1024] = {};
+        strcpy(info_log, PROGRAM_NAME " vertex: ");
+        glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
         if (!compiled)
         {
-            char info_log[1024] = {};
-            strcpy(info_log, PROGRAM_NAME " vertex: ");
-            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
         }
-        else
+
+        if (info_log_written)
         {
-            char info_log[1024] = {};
-            strcpy(info_log, PROGRAM_NAME " vertex: ");
-            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_debug_message(ctx, info_log);
         }
     }
@@ -304,19 +303,17 @@ main(int argc, char **argv)
 #endif
         glCompileShader(shader);
         glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        GLsizei info_log_written;
+        char info_log[1024] = {};
+        strcpy(info_log, PROGRAM_NAME " fragment: ");
+        glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
         if (!compiled)
         {
-            char info_log[1024] = {};
-            strcpy(info_log, PROGRAM_NAME " fragment: ");
-            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_fail(ctx, info_log);
             return false;
         }
-        else
+        if (info_log_written)
         {
-            char info_log[1024] = {};
-            strcpy(info_log, PROGRAM_NAME " fragment: ");
-            glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), 0, info_log + strlen(info_log));
             memory->platform_debug_message(ctx, info_log);
         }
     }
