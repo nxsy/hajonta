@@ -1649,7 +1649,7 @@ draw_mesh_from_asset(
     m4 &model = mesh_from_asset->model_matrix;
 
     v3 camera_position = calculate_camera_position(view);
-    ImGui::Text("Camera location: %.2f, %.2f, %.2f, %.2f", camera_position.x, camera_position.y, camera_position.z);
+    ImGui::Text("Camera location: %.2f, %.2f, %.2f", camera_position.x, camera_position.y, camera_position.z);
 
     v2 st0 = {};
     v2 st1 = {};
@@ -1848,9 +1848,9 @@ draw_mesh_from_asset(
             {
                 char label[200];
                 sprintf(label, "%*s %s", parent_list_location * 2, "", mesh.bone_names[bone]);
-                auto size = ImGui::CalcTextSize(label);
+                auto size = ImGui::CalcTextSize("%s", label);
                 ImGui::PushItemWidth(size.x);
-                ImGui::Text(label);
+                ImGui::Text("%s", label);
                 ImGui::PopItemWidth();
                 ImGui::NextColumn();
             }

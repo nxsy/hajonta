@@ -530,7 +530,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->camera.rotation.y = h_halfpi;
         }
 
-        ImGui::Text("Camera location: %.2f, %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
+        ImGui::Text("Camera location: %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
         ImGui::End();
     }
     update_camera(&state->camera, ratio);
