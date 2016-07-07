@@ -46,6 +46,14 @@ struct sdl2_state
 
     int32_t window_width;
     int32_t window_height;
+
+    int32_t gl_window_width;
+    int32_t gl_window_height;
+
+    float window_gl_ratio_width;
+    float window_gl_ratio_height;
+
+    bool no_borderless_fullscreen;
 };
 
 struct game_code
@@ -145,10 +153,58 @@ sdl_init(sdl2_state *state)
     }
     state->sdl_inited = true;
 
+#ifdef __APPLE__
+    state->no_borderless_fullscreen = true;
+#endif
+
+    int32_t num_displays = SDL_GetNumVideoDisplays();
+    if (num_displays <= 0)
+    {
+        const char *error = SDL_GetError();
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_GetNumVideoDisplays failed");
+    }
+    uint32_t window_x = 0;
+    uint32_t window_y = 0;
+    state->window_width = 0;
+    state->window_height = 0;
+
+    for (uint32_t i = 0; i < num_displays; ++i)
+    {
+        SDL_Rect i_bounds;
+        if (SDL_GetDisplayBounds(i, &i_bounds) < 0)
+        {
+            SDL_Log("SDL_GetDisplayBounds of display index %d failed: %s", i, SDL_GetError());
+            continue;
+        }
+        if (i_bounds.w * i_bounds.h > state->window_width * state->window_height)
+        {
+            window_x = i_bounds.x;
+            window_y = i_bounds.y;
+            state->window_width = i_bounds.w;
+            state->window_height = i_bounds.h;
+        }
+    }
+
+    SDL_Log("SDL_CreateWindow at %d,%d of size %d,%d", window_x, window_y, state->window_width, state->window_height);
+
+    uint32_t flags = SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (state->no_borderless_fullscreen)
+    {
+        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    }
+    else
+    {
+        flags |= SDL_WINDOW_BORDERLESS;
+    }
     state->window = SDL_CreateWindow("Hajonta",
-            0, 0,
+            window_x, window_y,
             state->window_width, state->window_height,
-            SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL); if (!state->window)
+            flags
+    );
+
+    if (!state->window)
     {
         const char *error = SDL_GetError();
         hassert(error);
@@ -164,6 +220,14 @@ sdl_init(sdl2_state *state)
         sdl_cleanup(state);
         return _fail(state, "SDL_CreateRenderer failed");
     }
+
+    SDL_GetRendererOutputSize(
+        state->renderer,
+        &state->gl_window_width,
+        &state->gl_window_height);
+
+    state->window_gl_ratio_width = (float)state->gl_window_width / (float)state->window_width;
+    state->window_gl_ratio_height = (float)state->gl_window_height / (float)state->window_height;
 
     SDL_Surface *surface = SDL_CreateRGBSurface(0, 100, 100, 32, 0, 0, 0, 0);
     if (!surface)
@@ -374,8 +438,8 @@ handle_sdl2_events(sdl2_state *state)
             } break;
             case SDL_MOUSEMOTION:
             {
-                state->new_input->mouse.x = sdl_event.motion.x;
-                state->new_input->mouse.y = sdl_event.motion.y;
+                state->new_input->mouse.x = sdl_event.motion.x * state->window_gl_ratio_width;
+                state->new_input->mouse.y = sdl_event.motion.y * state->window_gl_ratio_height;
             } break;
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
@@ -458,8 +522,6 @@ main(int argc, char *argv[])
 #endif
 {
     sdl2_state state = {};
-    state.window_width = 1920;
-    state.window_height = 1080;
     sdl_init(&state);
 
     platform_memory memory = {};
@@ -523,9 +585,8 @@ main(int argc, char *argv[])
         state.new_input->mouse.vertical_wheel_delta = 0;
 
         handle_sdl2_events(&state);
-
-        state.new_input->window.width = state.window_width;
-        state.new_input->window.height = state.window_height;
+        state.new_input->window.width = state.gl_window_width;
+        state.new_input->window.height = state.gl_window_height;
 
         renderercode.renderer_setup((hajonta_thread_context *)&state, &memory, state.new_input);
 
