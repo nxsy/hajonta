@@ -109,6 +109,7 @@ sdl_cleanup(sdl2_state *state)
     }
 }
 
+#if !SDL_VERSION_ATLEAST(2,0,4)
 void
 sdl_audio_callback(void *userdata, uint8_t *stream, int32_t len)
 {
@@ -131,6 +132,7 @@ sdl_audio_callback(void *userdata, uint8_t *stream, int32_t len)
         buffer->play_position %= sizeof(buffer->bytes);
     }
 }
+#endif
 
 static bool
 find_asset_path(sdl2_state *state)
