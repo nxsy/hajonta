@@ -167,12 +167,12 @@ sdl_init(sdl2_state *state)
         sdl_cleanup(state);
         return _fail(state, "SDL_GetNumVideoDisplays failed");
     }
-    uint32_t window_x = 0;
-    uint32_t window_y = 0;
+    int32_t window_x = 0;
+    int32_t window_y = 0;
     state->window_width = 0;
     state->window_height = 0;
 
-    for (uint32_t i = 0; i < num_displays; ++i)
+    for (int32_t i = 0; i < num_displays; ++i)
     {
         SDL_Rect i_bounds;
         if (SDL_GetDisplayBounds(i, &i_bounds) < 0)
@@ -440,8 +440,8 @@ handle_sdl2_events(sdl2_state *state)
             } break;
             case SDL_MOUSEMOTION:
             {
-                state->new_input->mouse.x = sdl_event.motion.x * state->window_gl_ratio_width;
-                state->new_input->mouse.y = sdl_event.motion.y * state->window_gl_ratio_height;
+                state->new_input->mouse.x = (int32_t)(sdl_event.motion.x * state->window_gl_ratio_width);
+                state->new_input->mouse.y = (int32_t)(sdl_event.motion.y * state->window_gl_ratio_height);
             } break;
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
