@@ -49,10 +49,7 @@ PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
         PushMatrices(entry->list, data->matrix_count, data->matrices);
         PushAssetDescriptors(entry->list, data->asset_count, data->assets);
         PushDescriptors(entry->list, data->l, data->armatures);
-        if (!entry->do_not_clear)
-        {
-            PushClear(entry->list, entry->clear_color);
-        }
+        PushClear(entry->list, entry->clear_color);
 
         if ((entry->target_framebuffer_id >= 0) && (entry->source_framebuffer_id >= 0))
         {
@@ -150,7 +147,6 @@ CreatePipeline(game_state *state)
         pipeline_elements.fb_main,
         pipeline_elements.fb_multisample,
     };
-    multisample->blit = 1;
     pipeline_elements.r_three_dee = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *three_dee = pipeline->entries + pipeline_elements.r_three_dee;
     *three_dee = {

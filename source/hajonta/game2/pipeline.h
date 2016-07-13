@@ -13,11 +13,6 @@ RenderPipelineEntry
     ApplyFilterType filter_type;
 
     v4 clear_color;
-    struct
-    {
-        uint32_t do_not_clear:1;
-        uint32_t blit:1;
-    };
 };
 
 struct
