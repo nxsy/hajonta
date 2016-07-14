@@ -2338,8 +2338,44 @@ extern "C" RENDERER_RENDER(renderer_render)
     window_data *window = &state->input->window;
     glErrorAssert();
 
+    uint32_t render_lists_to_process[10];
+    uint32_t render_lists_to_process_count = 0;
+
+    while(render_lists_to_process_count < memory->render_lists_count)
+    {
+        for (uint32_t i = 0; i < memory->render_lists_count; ++i)
+        {
+            render_entry_list *render_list = memory->render_lists[i];
+            if (!render_list->depends_on_slots)
+            {
+                bool handled = false;
+                for (uint32_t j = 0; j < render_lists_to_process_count; ++j)
+                {
+                    if (render_lists_to_process[j] == i)
+                    {
+                        handled = true;
+                        break;
+                    }
+
+                }
+                if (handled)
+                {
+                    continue;
+                }
+                hassert(render_lists_to_process_count < harray_count(render_lists_to_process));
+                render_lists_to_process[render_lists_to_process_count++] = i;
+                for (uint32_t j = 0; j < memory->render_lists_count; ++j)
+                {
+                    uint32_t inverse = (uint32_t)~(1 << i);
+                    render_entry_list *render_list_to_undepend = memory->render_lists[j];
+                    render_list_to_undepend->depends_on_slots &= inverse;
+                }
+            }
+        }
+    }
+
     uint32_t quads_drawn = 0;
-    for (uint32_t i = 0; i < memory->render_lists_count; ++i)
+    for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
         v2i size = {window->width, window->height};
         glActiveTexture(GL_TEXTURE0);
@@ -2357,7 +2393,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         glUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
         glUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
 
-        render_entry_list *render_list = memory->render_lists[i];
+        render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
         uint32_t offset = 0;
         hassert(render_list->element_count > 0);
 

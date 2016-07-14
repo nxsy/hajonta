@@ -25,7 +25,7 @@ PipelineInit(RenderPipeline *pipeline, AssetDescriptors *asset_descriptors)
 }
 
 void
-PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
+PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *data)
 {
     v2i window_size = data->window_size;
     for (uint32_t i = 0; i < pipeline->framebuffer_count; ++i)
@@ -46,6 +46,7 @@ PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
     {
         auto entry = pipeline->entries + i;
         RenderListReset(entry->list);
+        RegisterRenderList(state->frame_state.memory, entry->list);
         PushMatrices(entry->list, data->matrix_count, data->matrices);
         PushAssetDescriptors(entry->list, data->asset_count, data->assets);
         PushDescriptors(entry->list, data->l, data->armatures);
@@ -63,23 +64,14 @@ PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
             }
         }
     }
-}
 
-void
-PipelineRender(game_state *state, RenderPipeline *pipeline)
-{
-    //AddRenderList(state->frame_state.memory, &state->two_dee_renderer.list);
-    if (state->debug.rendering)
+    for (uint32_t i = 0; i < pipeline->dependency_count; ++i)
     {
-        //AddRenderList(state->frame_state.memory, &state->two_dee_debug_renderer.list);
+        auto dependency = pipeline->dependencies + i;
+        auto entry_depends = pipeline->entries + dependency->entry_depends;
+        auto entry_depended = pipeline->entries + dependency->entry_depended;
+        RenderListDependsOn(entry_depends->list, entry_depended->list);
     }
-    AddRenderList(state->frame_state.memory, &state->shadowmap_renderer.list);
-    AddRenderList(state->frame_state.memory, &state->sm_blur_x_renderer.list);
-    AddRenderList(state->frame_state.memory, &state->sm_blur_xy_renderer.list);
-    AddRenderList(state->frame_state.memory, &state->three_dee_renderer.list);
-    AddRenderList(state->frame_state.memory, &state->multisample_renderer.list);
-    AddRenderList(state->frame_state.memory, &state->framebuffer_renderer.list);
-    AddRenderList(state->frame_state.memory, &state->pipeline_elements.rl_nature_pack_debug.list);
 }
 
 RenderPipelineFramebufferId
@@ -92,6 +84,15 @@ RenderPipelineRendererId
 RenderPipelineAddRenderer(RenderPipeline *pipeline)
 {
     return pipeline->entry_count++;
+}
+
+void
+PipelineAddDependency(RenderPipeline *pipeline, uint32_t entry_depends, uint32_t entry_depended)
+{
+    hassert(pipeline->dependency_count < harray_count(pipeline->dependencies));
+    auto dependency = pipeline->dependencies + pipeline->dependency_count++;
+    dependency->entry_depends = entry_depends;
+    dependency->entry_depended = entry_depended;
 }
 
 void
@@ -219,5 +220,11 @@ CreatePipeline(game_state *state)
         pipeline_elements.fb_nature_pack_debug,
         -1,
     };
+
+    PipelineAddDependency(pipeline, pipeline_elements.r_three_dee, pipeline_elements.r_sm_blur_xy);
+    PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_xy, pipeline_elements.r_sm_blur_x);
+    PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_x, pipeline_elements.r_shadowmap);
+    PipelineAddDependency(pipeline, pipeline_elements.r_multisample, pipeline_elements.r_three_dee);
+    PipelineAddDependency(pipeline, pipeline_elements.r_framebuffer, pipeline_elements.r_multisample);
 }
 

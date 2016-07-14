@@ -612,6 +612,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     };
 
     PipelineReset(
+        state,
         &state->render_pipeline,
         &prd
     );
@@ -1307,8 +1308,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         );
     }
     */
-
-    PipelineRender(state, &state->render_pipeline);
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);

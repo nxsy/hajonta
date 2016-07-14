@@ -342,6 +342,9 @@ render_entry_type_QUADS_lookup
 struct
 render_entry_list
 {
+    int32_t slot;
+    uint32_t depends_on_slots;
+
     uint32_t max_size;
     uint32_t current_size;
     uint8_t *base;
@@ -364,6 +367,7 @@ render_entry_list
 inline void
 RenderListReset(render_entry_list *list)
 {
+    list->slot = -1;
     list->current_size = 0;
     list->element_count = 0;
     list->first_QUADS_lookup = 0;
@@ -381,6 +385,13 @@ RenderListReset(render_entry_list *list)
          list->element_types[i] = (render_entry_type)0;
     }
 #endif
+}
+
+void
+RenderListDependsOn(render_entry_list *list, render_entry_list *depends_on)
+{
+    hassert(depends_on->slot >= 0);
+    list->depends_on_slots ^= 1 << depends_on->slot;
 }
 
 inline void
@@ -659,10 +670,12 @@ PushFramebufferBlit(render_entry_list *list, int32_t fbo_asset_descriptor_id)
     }
 }
 
-inline void
-AddRenderList(platform_memory *memory, render_entry_list *list)
+inline int32_t
+RegisterRenderList(platform_memory *memory, render_entry_list *list)
 {
     hassert(memory->render_lists_count < sizeof(memory->render_lists) - 1);
+    hassert(list->slot == -1);
     memory->render_lists[memory->render_lists_count] = list;
-    ++memory->render_lists_count;
+    list->slot = (int32_t)(memory->render_lists_count++);
+    return list->slot;
 }

@@ -38,12 +38,22 @@ RenderPipelineFramebufferStage
 };
 
 struct
+RenderPipelineDependency
+{
+    uint32_t entry_depends;
+    uint32_t entry_depended;
+};
+
+struct
 RenderPipeline
 {
     uint8_t entry_count;
     RenderPipelineEntry entries[10];
     uint8_t framebuffer_count;
     RenderPipelineFramebuffer framebuffers[10];
+
+    uint8_t dependency_count;
+    RenderPipelineDependency dependencies[10];
 };
 
 typedef uint8_t RenderPipelineFramebufferId;

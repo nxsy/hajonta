@@ -84,7 +84,7 @@ struct platform_memory
     void *imgui_state;
 
     render_entry_list *render_lists[10];
-    uint8_t render_lists_count;
+    uint32_t render_lists_count;
 
     platform_cursor_settings cursor_settings;
 
