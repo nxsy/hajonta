@@ -183,7 +183,7 @@ main(int argc, char **argv)
     sprintf(buffer, "    #define PROGRAM_NAME \"%s\"\n", program_name);
     fwrite(buffer, 1, strlen(buffer), p);
 
-    strcpy(buffer, "    state->program = glCreateProgram();\n");
+    strcpy(buffer, "    state->program = hglCreateProgram();\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
     strcpy(buffer, "#if !defined(NEEDS_EGL)\n");
@@ -264,7 +264,7 @@ main(int argc, char **argv)
     uint32_t fragment_shader_id;
 
     {
-        uint32_t shader = vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
+        uint32_t shader = vertex_shader_id = hglCreateShader((GLenum)GL_VERTEX_SHADER);
         if (!shader)
         {
             memory->platform_fail(ctx, "Failed to allocate shader");
@@ -272,16 +272,16 @@ main(int argc, char **argv)
         }
         int compiled;
 #if defined(NEEDS_EGL)
-        glShaderSource(shader, 1, (const char **)&egl_vertex_shader_source, 0);
+        hglShaderSource(shader, 1, (const char **)&egl_vertex_shader_source, (const GLint *)0);
 #else
-        glShaderSource(shader, 1, (const char **)&vertex_shader_source, 0);
+        hglShaderSource(shader, 1, (const char **)&vertex_shader_source, (const GLint *)0);
 #endif
-        glCompileShader(shader);
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        hglCompileShader(shader);
+        hglGetShaderiv(shader, (GLenum)GL_COMPILE_STATUS, &compiled);
         GLsizei info_log_written;
         char info_log[1024] = {};
         strcpy(info_log, PROGRAM_NAME " vertex: ");
-        glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
+        hglGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
         if (!compiled)
         {
             memory->platform_fail(ctx, info_log);
@@ -294,19 +294,19 @@ main(int argc, char **argv)
         }
     }
     {
-        uint32_t shader = fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
+        uint32_t shader = fragment_shader_id = hglCreateShader((GLenum)GL_FRAGMENT_SHADER);
         int compiled;
 #if defined(NEEDS_EGL)
-        glShaderSource(shader, 1, (const char**)&egl_fragment_shader_source, 0);
+        hglShaderSource(shader, 1, (const char**)&egl_fragment_shader_source, (const GLint *)0);
 #else
-        glShaderSource(shader, 1, (const char**)&fragment_shader_source, 0);
+        hglShaderSource(shader, 1, (const char**)&fragment_shader_source, (const GLint *)0);
 #endif
-        glCompileShader(shader);
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        hglCompileShader(shader);
+        hglGetShaderiv(shader, (GLenum)GL_COMPILE_STATUS, &compiled);
         GLsizei info_log_written;
         char info_log[1024] = {};
         strcpy(info_log, PROGRAM_NAME " fragment: ");
-        glGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
+        hglGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
         if (!compiled)
         {
             memory->platform_fail(ctx, info_log);
@@ -317,21 +317,21 @@ main(int argc, char **argv)
             memory->platform_debug_message(ctx, info_log);
         }
     }
-    glAttachShader(state->program, vertex_shader_id);
-    glAttachShader(state->program, fragment_shader_id);
-    glLinkProgram(state->program);
+    hglAttachShader(state->program, vertex_shader_id);
+    hglAttachShader(state->program, fragment_shader_id);
+    hglLinkProgram(state->program);
 
     int linked;
-    glGetProgramiv(state->program, GL_LINK_STATUS, &linked);
+    hglGetProgramiv(state->program, (GLenum)GL_LINK_STATUS, &linked);
     if (!linked)
     {
         char info_log[1024] = {};
-        glGetProgramInfoLog(state->program, sizeof(info_log), 0, info_log);
+        hglGetProgramInfoLog(state->program, (GLsizei)sizeof(info_log), (GLsizei *)0, info_log);
         memory->platform_fail(ctx, info_log);
         return false;
     }
 
-    glUseProgram(state->program);
+    hglUseProgram(state->program);
 )EOF";
 
     fwrite(midbuffer, 1, strlen(midbuffer), p);
@@ -342,10 +342,10 @@ main(int argc, char **argv)
     {
         char uniform_location_string[1024];
         sprintf(uniform_location_string, R"EOF(
-    state->%s_id = glGetUniformLocation(state->program, "%s");
+    state->%s_id = hglGetUniformLocation(state->program, "%s");
     if (state->%s_id < 0) {
         char info_log[1024];
-        sprintf(info_log, PROGRAM_NAME ": Could not locate %s uniform - glGetUniformLocation returned %%d", state->%s_id);
+        sprintf(info_log, PROGRAM_NAME ": Could not locate %s uniform - hglGetUniformLocation returned %%d", state->%s_id);
         memory->platform_fail(ctx, info_log);
         return false;
     }
@@ -359,7 +359,7 @@ main(int argc, char **argv)
     {
         char attrib_location_string[1024];
         sprintf(attrib_location_string, R"EOF(
-    state->%s_id = glGetAttribLocation(state->program, "%s");
+    state->%s_id = hglGetAttribLocation(state->program, "%s");
     if (state->%s_id < 0) {
         char info_log[] = PROGRAM_NAME ": Could not locate %s attribute";
         memory->platform_fail(ctx, info_log);

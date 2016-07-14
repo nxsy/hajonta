@@ -12,6 +12,9 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no Use
 .\unit.exe
 del *.pdb > NUL 2> NUL
 
+cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\bootstrap.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
+.\bootstrap.exe
+
 echo > game2.dll.lock
 cl %CPPFLAGS% -DHAJONTA_DEBUG=1 /Zi ..\source\hajonta\game2.cpp -LD /link /incremental:no -PDB:game2-%random%.pdb -EXPORT:game_update_and_render Opengl32.lib
 del game2.dll.lock
