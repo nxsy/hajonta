@@ -47,7 +47,7 @@ main(int argc, char **argv)
 
     sprintf(buffer, "struct GLSetupCounters {\n");
     fwrite(buffer, 1, strlen(buffer), p);
-#define HGLD(b,a,...)  { sprintf(buffer, "    uint32_t %s;\n", hquoted(b)); fwrite(buffer, 1, strlen(buffer), p); }
+#define HGLD(b,a,...)  { sprintf(buffer, "    float %s;\n", hquoted(b)); fwrite(buffer, 1, strlen(buffer), p); }
 #include "hajonta/platform/glextlist.txt"
 #undef HGLD
     sprintf(buffer, R"EOF(};
@@ -59,7 +59,20 @@ ResetCounters(GLSetupCounters *counters)
 {
     *counters = {};
 };
+
+struct GLCounterNamesAndOffsets {
+    const char *name;
+    uint32_t offset;
+} counter_names_and_offsets[] =
+{
 )EOF");
+    fwrite(buffer, 1, strlen(buffer), p);
+
+#define HGLD(b,a,...)  { sprintf(buffer, R"EOF(    { "%s", offsetof(GLSetupCounters, %s) }, )EOF" "\n", hquoted(b), hquoted(b)); fwrite(buffer, 1, strlen(buffer), p); }
+#include "hajonta/platform/glextlist.txt"
+#undef HGLD
+
+    sprintf(buffer, "};\n\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
 #define HGLD(b,a,...) \

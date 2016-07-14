@@ -172,6 +172,15 @@ struct mesh_asset
     int32_t asset_file_id;
 };
 
+
+struct GLSetupCountersHistory
+{
+    GLSetupCounters entries[200];
+
+    int32_t first;
+    int32_t last;
+};
+
 struct renderer_state
 {
     bool initialized;
@@ -246,6 +255,8 @@ struct renderer_state
 
     bool show_debug;
     bool show_animation_debug;
+    bool show_gl_debug;
+    bool gl_debug_toggles[harray_count(counter_names_and_offsets)];
 
     struct
     {
@@ -255,7 +266,7 @@ struct renderer_state
     } debug_mesh_data;
 
     GLSetupCounters glsetup_counters;
-    GLSetupCounters glsetup_counters_history[200];
+    GLSetupCountersHistory glsetup_counters_history;
 };
 
 int32_t
@@ -930,13 +941,15 @@ extern "C" RENDERER_SETUP(renderer_setup)
     }
 #endif
     */
-    load_glfuncs(ctx, memory->platform_glgetprocaddress);
     memory->render_lists_count = 0;
     renderer_state *state = &_GlobalRendererState;
 
     memory->imgui_state = ImGui::GetInternalState();
     if (!_GlobalRendererState.initialized)
     {
+        glsetup_counters = &state->glsetup_counters;
+        state->glsetup_counters_history.first = -1;
+        load_glfuncs(ctx, memory->platform_glgetprocaddress);
         program_init(ctx, memory, &_GlobalRendererState);
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
@@ -1091,8 +1104,6 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->vsm_lightbleed_compensation = 0.001f;
         state->blur_scale_divisor = 3072.0f;
         state->shadowmap_bias = 0.008f;
-
-        glsetup_counters = &state->glsetup_counters;
     }
 
     _GlobalRendererState.input = input;
@@ -2635,23 +2646,83 @@ extern "C" RENDERER_RENDER(renderer_render)
         ImGui::End();
     }
 
+    if (state->show_gl_debug) {
+        ImGui::Begin("OpenGL debug", &state->show_gl_debug);
+
+        if (ImGui::Button("Graphs..."))
+            ImGui::OpenPopup("graphs");
+        if (ImGui::BeginPopup("graphs"))
+        {
+            for (int i = 0; i < harray_count(counter_names_and_offsets); i++)
+            {
+                ImGui::MenuItem(counter_names_and_offsets[i].name, "", &state->gl_debug_toggles[i]);
+            }
+            ImGui::EndPopup();
+        }
+
+        auto history = &state->glsetup_counters_history;
+
+        if (history->first >= 0)
+        {
+            int32_t values_count = 0;
+            if (history->first == 0)
+            {
+                values_count = history->last + 1;
+            }
+            else
+            {
+                values_count = harray_count(history->entries);
+            }
+            for (uint32_t i = 0; i < harray_count(counter_names_and_offsets); ++i)
+            {
+                if (state->gl_debug_toggles[i])
+                {
+                    auto name_and_offset = counter_names_and_offsets[i];
+                    ImGui::PlotLines(name_and_offset.name,
+                        (float *)((uint8_t *)history->entries + name_and_offset.offset), values_count, history->first, nullptr, 0.0, FLT_MAX, ImVec2(600,150), sizeof(GLSetupCounters));
+                }
+            }
+        }
+        ImGui::End();
+    }
+
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("Renderer"))
         {
             ImGui::MenuItem("Debug rendering", "", &state->show_debug);
             ImGui::MenuItem("Mesh animation debug", "", &state->show_animation_debug);
+            ImGui::MenuItem("OpenGL debug", "", &state->show_gl_debug);
             ImGui::EndMenu();
         }
     }
     ImGui::EndMainMenuBar();
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
+
+
     render_draw_lists(draw_data, state);
-
-    ResetCounters(glsetup_counters);
-
     hglErrorAssert();
+
+    {
+        auto history = &state->glsetup_counters_history;
+        if (history->first < 0)
+        {
+            history->entries[0] = *glsetup_counters;
+            history->first = 0;
+            history->last = 0;
+        }
+        else
+        {
+            history->last = (history->last + 1) % (int32_t)harray_count(history->entries);
+            if (history->last == history->first)
+            {
+                history->first = (history->first + 1) % (int32_t)harray_count(history->entries);
+            }
+            history->entries[history->last] = *glsetup_counters;
+        }
+    }
+    ResetCounters(glsetup_counters);
 
     input->mouse = state->original_mouse_input;
 
