@@ -22,11 +22,13 @@ RenderPipelineFramebuffer
     int32_t asset_descriptor;
     int32_t depth_asset_descriptor;
     v2i size;
+    v4 clear_color;
     struct {
         uint32_t fixed_size:1;
         uint32_t multisample:1;
         uint32_t use_depth_texture:1;
         uint32_t use_rg32f_buffer:1;
+        uint32_t no_clear_each_frame:1;
     };
 };
 

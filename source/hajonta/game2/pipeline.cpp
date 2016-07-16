@@ -21,6 +21,8 @@ PipelineInit(RenderPipeline *pipeline, AssetDescriptors *asset_descriptors)
         framebuffer->framebuffer._flags.use_multisample_buffer = framebuffer->multisample;
         framebuffer->framebuffer._flags.use_depth_texture = framebuffer->use_depth_texture;
         framebuffer->framebuffer._flags.use_rg32f_buffer = framebuffer->use_rg32f_buffer;
+        framebuffer->framebuffer._flags.no_clear_each_frame = framebuffer->no_clear_each_frame;
+        framebuffer->framebuffer.clear_color = framebuffer->clear_color;
     }
 }
 
@@ -40,6 +42,7 @@ PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *da
         {
             framebuffer->framebuffer.size = window_size;
         }
+        framebuffer->framebuffer._flags.cleared_this_frame = false;
     }
 
     for (uint32_t i = 0; i < pipeline->entry_count; ++i)
@@ -50,7 +53,6 @@ PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *da
         PushMatrices(entry->list, data->matrix_count, data->matrices);
         PushAssetDescriptors(entry->list, data->asset_count, data->assets);
         PushDescriptors(entry->list, data->l, data->armatures);
-        PushClear(entry->list, entry->clear_color);
 
         if ((entry->target_framebuffer_id >= 0) && (entry->source_framebuffer_id >= 0))
         {
@@ -110,8 +112,9 @@ CreatePipeline(game_state *state)
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
     fb_shadowmap.use_depth_texture = 1;
     fb_shadowmap.use_rg32f_buffer = 1;
-    fb_shadowmap.size = {4096, 4096};
+    fb_shadowmap.size = {2048, 2048};
     fb_shadowmap.fixed_size = 1;
+    fb_shadowmap.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
 
     pipeline_elements.fb_sm_blur_x = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_x = pipeline->framebuffers[pipeline_elements.fb_sm_blur_x];
@@ -167,7 +170,6 @@ CreatePipeline(game_state *state)
         pipeline_elements.fb_shadowmap,
         -1,
     };
-    shadowmap->clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
 
     pipeline_elements.r_sm_blur_x = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *sm_blur_x = pipeline->entries + pipeline_elements.r_sm_blur_x;

@@ -2408,8 +2408,19 @@ extern "C" RENDERER_RENDER(renderer_render)
         uint32_t asset_descriptor_count = 0;
 
         FramebufferDescriptor *framebuffer = render_list->framebuffer;
+        bool clear = false;
+        v4 clear_color = {};
         if (framebuffer)
         {
+            if (!framebuffer->_flags.no_clear_each_frame)
+            {
+                if (!framebuffer->_flags.cleared_this_frame)
+                {
+                    clear = true;
+                    clear_color = framebuffer->clear_color;
+                    framebuffer->_flags.cleared_this_frame = true;
+                }
+            }
             GLenum texture_target = GL_TEXTURE_2D;
             uint32_t texture_id = framebuffer->_texture;
             if (framebuffer->_flags.use_multisample_buffer)
@@ -2523,6 +2534,11 @@ extern "C" RENDERER_RENDER(renderer_render)
         }
         hglViewport(0, 0, (GLsizei)size.x, (GLsizei)size.y);
         hglScissor(0, 0, size.x, size.y);
+        if (clear)
+        {
+            hglClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
+            hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
 
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
         {

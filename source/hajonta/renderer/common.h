@@ -263,12 +263,15 @@ struct FramebufferFlags
     unsigned int use_depth_texture:1;
     unsigned int use_rg32f_buffer:1;
     unsigned int use_multisample_buffer:1;
+    unsigned int no_clear_each_frame:1;
+    unsigned int cleared_this_frame:1;
 };
 
 struct
 FramebufferDescriptor
 {
     v2i size;
+    v4 clear_color;
 
     FramebufferFlags _flags;
     uint32_t _fbo;
