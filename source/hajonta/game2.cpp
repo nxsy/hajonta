@@ -320,11 +320,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_nature_pack = 1;
         state->debug.show_camera = 1;
 
-        state->camera.distance = 80.0f;
-        state->camera.near_ = 28.0f;
-        state->camera.far_ = 100.0f;
-        state->camera.target = {1, 1, 0};
-        state->camera.rotation = {0.2f, -0.8f, 0};
+        state->camera.distance = 40.0f;
+        state->camera.near_ = 18.0f;
+        state->camera.far_ = 800.0f;
+        state->camera.target = {2, 3.5, 0};
+        state->camera.rotation = {0.0f, -0.8f, 0};
 
         state->np_camera.distance = 2.0f;
         state->np_camera.near_ = 1.0f;
@@ -557,7 +557,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     ImGui::DragFloat("Plane rotation", &plane_rotation, 0.01f, 0, 3.0f);
     rotate = m4identity();
 
-    float _scale = 10.0f;
+    float _scale = 500.0f;
     translate.cols[3] = {0, -0.5f, 0, 1.0f};
     scale.cols[0].E[0] = _scale;
     scale.cols[1].E[1] = 0.5f;
@@ -570,7 +570,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[1].E[1] = 1.0f;
     scale.cols[2].E[2] = 1.0f;
     rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
-    translate.cols[3] = {0.5f, 0, 0.5f, 1.0f};
+    translate.cols[3] = {0.5f, 2, 0.5f, 1.0f};
     state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     local_translate = m4identity();
@@ -908,7 +908,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushQuad(&state->two_dee_renderer.list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
-    m4 shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f, {-ratio * 5.0f, -5.0f}, {ratio * 5.0f, 5.0f});
+    m4 shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f, {-ratio * 7.0f, -7.0f}, {ratio * 7.0f, 7.0f});
 
     m4 shadowmap_view_matrix;
     {
@@ -1139,7 +1139,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         for (int32_t z = z_start; z <= z_end; ++z)
         {
             auto &f = foo[foo_count++];
-            f = tile_asset_and_transform(0, x, x_width, z, z_width, plate_grass_asset_id, cliff_top_asset_id, cliff_top_corner_asset_id);
+            f = tile_asset_and_transform(2, x, x_width, z, z_width, plate_grass_asset_id, cliff_top_asset_id, cliff_top_corner_asset_id);
         }
     }
 
@@ -1150,7 +1150,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             if (abs(x) == x_width || abs(z) == z_width)
             {
                 auto &f = foo[foo_count++];
-                f = tile_asset_and_transform(-1, x, x_width, z, z_width, plate_grass_asset_id, cliff_asset_id, cliff_corner_asset_id);
+                f = tile_asset_and_transform(1, x, x_width, z, z_width, plate_grass_asset_id, cliff_asset_id, cliff_corner_asset_id);
             }
         }
     }
@@ -1162,7 +1162,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             if (abs(x) == x_width || abs(z) == z_width)
             {
                 auto &f = foo[foo_count++];
-                f = tile_asset_and_transform(-2, x, x_width, z, z_width, plate_grass_asset_id, cliff_bottom_asset_id, cliff_bottom_corner_asset_id);
+                f = tile_asset_and_transform(0, x, x_width, z, z_width, plate_grass_asset_id, cliff_bottom_asset_id, cliff_bottom_corner_asset_id);
             }
         }
     }
@@ -1170,7 +1170,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &f = foo[foo_count++];
         float x = -x_width + 1.0f;
-        float y = 0;
+        float y = 2;
         float z = -z_width + 1.0f;
         m4 transform = m4translate({x, y, z});
         m4 np_translate = m4translate({0.5f,0.5f,0.5f});
@@ -1181,7 +1181,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &f = foo[foo_count++];
         float x = x_width - 1.5f;
-        float y = 0;
+        float y = 2;
         float z = -z_width + 2.5f;
         m4 transform = m4translate({x, y, z});
         m4 a_scale = m4scale({1.0f, 1.5f, 1.0f});
@@ -1193,7 +1193,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &f = foo[foo_count++];
         float x = x_width - 2.25f;
-        float y = 0;
+        float y = 2;
         float z = -z_width + 2.40f;
         m4 transform = m4translate({x, y, z});
         m4 a_scale = m4scale({0.75f, 1.0f, 0.75f});
@@ -1205,7 +1205,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &f = foo[foo_count++];
         float x = x_width - 1.95f;
-        float y = 0;
+        float y = 2;
         float z = -z_width + 3.25f;
         m4 transform = m4translate({x, y, z});
         m4 a_scale = m4scale({0.75f, 1.0f, 0.75f});
@@ -1217,7 +1217,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &f = foo[foo_count++];
         float x = x_width - 2.5f;
-        float y = 0;
+        float y = 2;
         float z = z_width - 1.5f;
         m4 transform = m4translate({x, y, z});
         m4 a_scale = m4scale({1.5f, 1.0f, 1.5f});
@@ -1254,7 +1254,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         );
     }
 
-    /*
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::mesh_view_matrix,
@@ -1277,7 +1276,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
-    */
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
@@ -1326,7 +1324,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 );
                 sameline = true;
             }
-            if (rfb.framebuffer._flags.use_depth_texture)
+            if (rfb.framebuffer._flags.use_depth_texture && !rfb.framebuffer._flags.use_multisample_buffer)
             {
                 if (sameline)
                 {
