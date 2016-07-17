@@ -2322,7 +2322,7 @@ framebuffer_blit(hajonta_thread_context *ctx, platform_memory *memory, renderer_
     uint32_t fbo = f->_fbo;
 
     hglBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
-    hglBlitFramebuffer(0, 0, size.x, size.y, 0, 0, size.x, size.y, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    hglBlitFramebuffer(0, 0, size.x, size.y, 0, 0, size.x, size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 }
 
 extern "C" RENDERER_RENDER(renderer_render)
@@ -2488,12 +2488,19 @@ extern "C" RENDERER_RENDER(renderer_render)
                 else
                 {
                     hglGenTextures(1, &framebuffer->_renderbuffer);
-                    hglBindTexture(GL_TEXTURE_2D, framebuffer->_renderbuffer);
-                    hglTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-                    hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                    hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                    hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    hglBindTexture(texture_target, framebuffer->_renderbuffer);
+                    if (framebuffer->_flags.use_multisample_buffer)
+                    {
+                        hglTexImage2DMultisample(texture_target, 4, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, true);
+                    }
+                    else
+                    {
+                        hglTexImage2D(texture_target, 0, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+                        hglTexParameterf(texture_target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                        hglTexParameterf(texture_target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                        hglTexParameterf(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                        hglTexParameterf(texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    }
                 }
                 hglErrorAssert();
 
@@ -2522,8 +2529,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             }
             else
             {
-                hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
-
+                hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture_target, framebuffer->_renderbuffer, 0);
             }
             hglErrorAssert();
 
