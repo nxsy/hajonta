@@ -104,15 +104,18 @@ CreatePipeline(game_state *state)
     auto pipeline = &state->render_pipeline;
     *pipeline = {};
     pipeline_elements.fb_main = RenderPipelineAddFramebuffer(pipeline);
+    auto &fb_main = pipeline->framebuffers[pipeline_elements.fb_main];
+    fb_main.use_depth_texture = 1;
     pipeline_elements.fb_multisample = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_multisample = pipeline->framebuffers[pipeline_elements.fb_multisample];
     fb_multisample.multisample = 1;
+    fb_multisample.use_depth_texture = 1;
 
     pipeline_elements.fb_shadowmap = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
     fb_shadowmap.use_depth_texture = 1;
     fb_shadowmap.use_rg32f_buffer = 1;
-    fb_shadowmap.size = {2048, 2048};
+    fb_shadowmap.size = {4096, 4096};
     fb_shadowmap.fixed_size = 1;
     fb_shadowmap.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
 
