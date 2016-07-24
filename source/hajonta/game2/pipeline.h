@@ -73,6 +73,7 @@ GamePipelineElements
 
     RenderPipelineRendererId r_framebuffer;
     RenderPipelineRendererId r_multisample;
+    RenderPipelineRendererId r_sky;
     RenderPipelineRendererId r_three_dee;
     RenderPipelineRendererId r_shadowmap;
     RenderPipelineRendererId r_sm_blur_x;
@@ -82,6 +83,7 @@ GamePipelineElements
     RenderPipelineRendererId r_nature_pack_debug;
 
     _render_list<1024 * 100> rl_nature_pack_debug;
+    _render_list<2 * 1024 * 1024> rl_sky;
 };
 
 struct

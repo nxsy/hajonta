@@ -1281,6 +1281,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->two_dee_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
+    {
+        PushSky(&state->pipeline_elements.rl_sky.list);
+    }
+
     PushQuad(&state->framebuffer_renderer.list, {0,0},
             {(float)input->window.width, (float)input->window.height},
             {1,1,1,1}, 0,

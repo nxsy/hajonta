@@ -18,6 +18,7 @@ render_entry_type
 
     apply_filter,
     framebuffer_blit,
+    sky,
 
     mesh,
     mesh_from_asset,
@@ -235,6 +236,12 @@ render_entry_type_framebuffer_blit
 {
     render_entry_header header;
     int32_t fbo_asset_descriptor_id;
+};
+
+struct
+render_entry_type_sky
+{
+    render_entry_header header;
 };
 
 enum struct
@@ -660,6 +667,15 @@ PushApplyFilter(render_entry_list *list, ApplyFilterType type, int32_t source_as
     {
        entry->type = type;
        entry->source_asset_descriptor_id = source_asset_descriptor_id;
+    }
+}
+
+inline void
+PushSky(render_entry_list *list)
+{
+    render_entry_type_sky *entry = PushRenderElement(list, sky);
+    if (entry)
+    {
     }
 }
 

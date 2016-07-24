@@ -145,6 +145,17 @@ CreatePipeline(game_state *state)
         -1,
         -1,
     };
+
+    pipeline_elements.r_sky = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *sky = pipeline->entries + pipeline_elements.r_sky;
+    *sky = {
+        &state->pipeline_elements.rl_sky.list,
+        state->pipeline_elements.rl_sky.buffer,
+        sizeof(state->pipeline_elements.rl_sky.buffer),
+        -1,
+        -1,
+    };
+
     pipeline_elements.r_multisample = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *multisample = pipeline->entries + pipeline_elements.r_multisample;
     *multisample = {
@@ -230,6 +241,7 @@ CreatePipeline(game_state *state)
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_xy, pipeline_elements.r_sm_blur_x);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_x, pipeline_elements.r_shadowmap);
     PipelineAddDependency(pipeline, pipeline_elements.r_multisample, pipeline_elements.r_three_dee);
-    PipelineAddDependency(pipeline, pipeline_elements.r_framebuffer, pipeline_elements.r_multisample);
+    PipelineAddDependency(pipeline, pipeline_elements.r_framebuffer, pipeline_elements.r_sky);
+    PipelineAddDependency(pipeline, pipeline_elements.r_sky, pipeline_elements.r_multisample);
 }
 
