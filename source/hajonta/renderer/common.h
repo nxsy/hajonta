@@ -242,6 +242,9 @@ struct
 render_entry_type_sky
 {
     render_entry_header header;
+    int32_t projection_matrix_id;
+    int32_t view_matrix_id;
+    v3 light_direction;
 };
 
 enum struct
@@ -671,11 +674,19 @@ PushApplyFilter(render_entry_list *list, ApplyFilterType type, int32_t source_as
 }
 
 inline void
-PushSky(render_entry_list *list)
+PushSky(
+    render_entry_list *list,
+    int32_t projection_matrix_id,
+    int32_t view_matrix_id,
+    v3 light_direction
+)
 {
     render_entry_type_sky *entry = PushRenderElement(list, sky);
     if (entry)
     {
+        entry->projection_matrix_id = projection_matrix_id;
+        entry->view_matrix_id = view_matrix_id;
+        entry->light_direction = light_direction;
     }
 }
 

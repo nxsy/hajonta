@@ -21,6 +21,7 @@
 #include "hajonta/programs/phong_no_normal_map.h"
 #include "hajonta/programs/variance_shadow_map.h"
 #include "hajonta/programs/filters/filter_gaussian_7x1.h"
+#include "hajonta/programs/sky.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -29,6 +30,9 @@
 
 static platform_memory *_platform_memory;
 static hajonta_thread_context *_ctx;
+
+static float h_pi = 3.14159265358979f;
+static float h_halfpi = h_pi / 2.0f;
 
 inline void
 hglErrorAssert(bool skip = false)
@@ -181,6 +185,15 @@ struct GLSetupCountersHistory
     int32_t last;
 };
 
+struct Skybox
+{
+    v3 vertices[12];
+    v3i faces[20];
+
+    uint32_t vbo;
+    uint32_t ibo;
+};
+
 struct renderer_state
 {
     bool initialized;
@@ -189,6 +202,7 @@ struct renderer_state
     phong_no_normal_map_program_struct phong_no_normal_map_program;
     variance_shadow_map_program_struct variance_shadow_map_program;
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
+    sky_program_struct sky_program;
     uint32_t vbo;
     uint32_t ibo;
     uint32_t QUADS_ibo;
@@ -264,6 +278,8 @@ struct renderer_state
         v2 plane_uvs[4];
         uint16_t plane_indices[6];
     } debug_mesh_data;
+
+    Skybox skybox;
 
     GLSetupCounters glsetup_counters;
     GLSetupCountersHistory glsetup_counters_history;
@@ -707,6 +723,70 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
 }
 
 bool
+populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, Skybox *skybox)
+{
+    hglGenBuffers(1, &skybox->vbo);
+    hglGenBuffers(1, &skybox->ibo);
+
+    hglErrorAssert();
+
+    v3 vertices[] = {
+        { 0.000f,  0.000f,  1.000f },
+        { 0.894f,  0.000f,  0.447f },
+        { 0.276f,  0.851f,  0.447f },
+        {-0.724f,  0.526f,  0.447f },
+        {-0.724f, -0.526f,  0.447f },
+        { 0.276f, -0.851f,  0.447f },
+        { 0.724f,  0.526f, -0.447f },
+        {-0.276f,  0.851f, -0.447f },
+        {-0.894f,  0.000f, -0.447f },
+        {-0.276f, -0.851f, -0.447f },
+        { 0.724f, -0.526f, -0.447f },
+        { 0.000f,  0.000f, -1.000f },
+    };
+    memcpy(skybox->vertices, vertices, sizeof(vertices));
+    hglBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
+    hglBufferData(GL_ARRAY_BUFFER,
+            sizeof(skybox->vertices),
+            skybox->vertices,
+            GL_STATIC_DRAW);
+
+    hglErrorAssert();
+
+    v3i faces[] = {
+        { 0, 1, 2},
+        { 0, 2, 3},
+        { 0, 3, 4},
+        { 0, 4, 5},
+        { 0, 5, 1},
+        { 6, 11, 7},
+        { 7, 11, 8},
+        { 8, 11, 9},
+        { 9, 11,10},
+        {10, 11, 6},
+        { 1, 6, 2},
+        { 2, 7, 3},
+        { 3, 8, 4},
+        { 4, 9, 5},
+        { 5, 10,1},
+        { 6, 7, 2},
+        { 7, 8, 3},
+        { 8, 9, 4},
+        { 9,10, 5},
+        {10, 6, 1},
+    };
+    memcpy(skybox->faces, faces, sizeof(faces));
+    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
+    hglErrorAssert();
+    hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            sizeof(skybox->faces),
+            skybox->faces,
+            GL_STATIC_DRAW);
+
+    return true;
+}
+
+bool
 program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
 {
     {
@@ -772,6 +852,12 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         filter_gaussian_7x1_program_struct *program = &state->filter_gaussian_7x1_program;
         filter_gaussian_7x1_program(program, ctx, memory);
         state->filter_gaussian_7x1_tex_id = hglGetUniformLocation(program->program, "tex");
+    }
+
+    {
+        sky_program_struct *program = &state->sky_program;
+        sky_program(program, ctx, memory);
+        populate_skybox(ctx, memory, state, &state->skybox);
     }
 
     return true;
@@ -1651,7 +1737,6 @@ draw_mesh_from_asset(
     m4 &model = mesh_from_asset->model_matrix;
 
     v3 camera_position = calculate_camera_position(view);
-    ImGui::Text("Camera location: %.2f, %.2f, %.2f", camera_position.x, camera_position.y, camera_position.z);
 
     v2 st0 = {};
     v2 st1 = {};
@@ -2328,76 +2413,39 @@ framebuffer_blit(hajonta_thread_context *ctx, platform_memory *memory, renderer_
 void
 draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_sky *sky)
 {
-    hglUseProgram(state->imgui_program.program);
+    auto &program = state->sky_program;
+    hglUseProgram(program.program);
 
-    auto &program = state->imgui_program;
-    m4 projection = m4identity();
+    hglEnable(GL_DEPTH_TEST);
+    hglDepthFunc(GL_LESS);
+    hglEnable(GL_CULL_FACE);
+    hglCullFace(GL_FRONT);
 
-    uint32_t texture = state->white_texture;
-    hglUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-    hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-    hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-    hglUniform1f(state->imgui_program.u_use_color_id, 1.0f);
     hglBindVertexArray(state->vao);
 
     v2 st0 = {0, 0};
     v2 st1 = {1, 1};
 
     hglErrorAssert();
-    hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-
-    v4 color = {0.3f, 0.6f, 0.8f, 1.0f};
-    uint32_t col = 0x00000000;
-    col |= (uint32_t)(color.w * 255.0f) << 24;
-    col |= (uint32_t)(color.z * 255.0f) << 16;
-    col |= (uint32_t)(color.y * 255.0f) << 8;
-    col |= (uint32_t)(color.x * 255.0f) << 0;
-
-    struct vertex_format
-    {
-        v2 pos;
-        v2 uv;
-        uint32_t col;
-    } vertices[] = {
-        {
-            {-1.0f,-1.0f },
-            { 0.0f, 0.0f },
-            col,
-        },
-        {
-            { 1.0f,-1.0f },
-            { 1.0f, 0.0f },
-            col,
-        },
-        {
-            { 1.0f, 1.0f },
-            { 1.0f, 1.0f },
-            col,
-        },
-        {
-            {-1.0f, 1.0f },
-            { 0.0f, 1.0f },
-            col,
-        },
-    };
-
-    hglBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
-    hglVertexAttribPointer((GLuint)program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertex_format), (void *)offsetof(vertex_format, pos));
-    hglVertexAttribPointer((GLuint)program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertex_format), (void *)offsetof(vertex_format, uv));
-    hglVertexAttribPointer((GLuint)program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex_format), (void *)offsetof(vertex_format, col));
+    hglBindBuffer(GL_ARRAY_BUFFER, state->skybox.vbo);
+    hglVertexAttribPointer((GLuint)program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
     hglEnableVertexAttribArray((GLuint)program.a_position_id);
-    hglEnableVertexAttribArray((GLuint)program.a_uv_id);
-    hglEnableVertexAttribArray((GLuint)program.a_color_id);
+    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->skybox.ibo);
 
-    uint32_t indices[] = {
-        0, 1, 2,
-        2, 3, 0,
-    };
-    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
-    hglBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
+    m4 projection_matrix = matrices[sky->projection_matrix_id];
+    m4 view_matrix = matrices[sky->view_matrix_id];
+    v3 camera_position = calculate_camera_position(view_matrix);
 
-    hglBindTexture(GL_TEXTURE_2D, texture);
-    hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
+    hglUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
+    hglUniform3fv(program.u_light_direction_id, 1, (float *)&sky->light_direction);
+    m4 model_matrix = m4scale(10000.0f);
+
+    hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model_matrix);
+    hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view_matrix);
+    hglUniformMatrix4fv(program.u_projection_matrix_id, 1, GL_FALSE, (float *)&projection_matrix);
+
+    hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(state->skybox.faces) * 3, GL_UNSIGNED_INT, (void *)0);
+
 
     hglBindVertexArray(0);
 }

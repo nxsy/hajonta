@@ -5,6 +5,7 @@ call build_base.bat
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\program.exe ..\source hajonta\programs ui2d
 .\program.exe ..\source hajonta\programs imgui
+.\program.exe ..\source hajonta\programs sky
 .\program.exe ..\source hajonta\programs phong_no_normal_map
 .\program.exe ..\source hajonta\programs variance_shadow_map
 .\program.exe ..\source hajonta\programs\filters filter_gaussian_7x1

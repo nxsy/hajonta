@@ -320,11 +320,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_nature_pack = 1;
         state->debug.show_camera = 1;
 
-        state->camera.distance = 40.0f;
-        state->camera.near_ = 18.0f;
-        state->camera.far_ = 800.0f;
+        state->camera.distance = 4.0f;
+        state->camera.near_ = 1.0f;
+        state->camera.far_ = 10000.0f * 1.1f;
         state->camera.target = {2, 3.5, 0};
-        state->camera.rotation = {0.0f, -0.8f, 0};
+        state->camera.rotation = {0.0f, -1.0f, 0};
 
         state->np_camera.distance = 2.0f;
         state->np_camera.near_ = 1.0f;
@@ -483,6 +483,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         if (state->debug.show_lights) {
             ImGui::Begin("Lights", &state->debug.show_lights);
             ImGui::DragFloat3("Direction", &light.direction.x, 0.001f, -1.0f, 1.0f);
+            static bool animate_sun = false;
+            ImGui::Checkbox("Animate Sun", &animate_sun);
+            if (animate_sun)
+            {
+                static float animation_speed_per_second = 0.5f;
+                ImGui::DragFloat("  Animation Speed", &animation_speed_per_second, 0.001f, 0.0f, 1.0f);
+                if (light.direction.y < -0.5)
+                {
+                    light.direction.y = 0.5;
+                }
+                light.direction.y -= input->delta_t * animation_speed_per_second;
+            }
             ImGui::ColorEdit3("Colour", &light.color.x);
             ImGui::DragFloat("Ambient Intensity", &light.ambient_intensity, 0.001f, -1.0f, 1.0f);
             ImGui::DragFloat("Diffuse Intensity", &light.diffuse_intensity, 0.001f, -1.0f, 1.0f);
@@ -1282,7 +1294,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushQuad(&state->two_dee_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
     {
-        PushSky(&state->pipeline_elements.rl_sky.list);
+        PushClear(&state->pipeline_elements.rl_sky.list, {1.0f, 1.0f, 0.4f, 1.0f});
+        PushSky(&state->pipeline_elements.rl_sky.list,
+            (int32_t)matrix_ids::mesh_projection_matrix,
+            (int32_t)matrix_ids::mesh_view_matrix,
+            light.direction);
     }
 
     PushQuad(&state->framebuffer_renderer.list, {0,0},

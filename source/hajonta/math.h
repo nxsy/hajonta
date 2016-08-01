@@ -19,6 +19,13 @@ struct v3
     float z;
 };
 
+struct v3i
+{
+    int32_t x;
+    int32_t y;
+    int32_t z;
+};
+
 struct triangle2
 {
     v2 p0;
