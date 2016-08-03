@@ -484,10 +484,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             ImGui::Begin("Lights", &state->debug.show_lights);
             ImGui::DragFloat3("Direction", &light.direction.x, 0.001f, -1.0f, 1.0f);
             static bool animate_sun = false;
+            if (ImGui::Button("Normalize"))
+            {
+                light.direction = v3normalize(light.direction);
+            }
             ImGui::Checkbox("Animate Sun", &animate_sun);
             if (animate_sun)
             {
-                static float animation_speed_per_second = 0.5f;
+                static float animation_speed_per_second = 0.1f;
                 ImGui::DragFloat("  Animation Speed", &animation_speed_per_second, 0.001f, 0.0f, 1.0f);
                 if (light.direction.y < -0.5)
                 {
@@ -925,7 +929,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     m4 shadowmap_view_matrix;
     {
         auto &light = state->lights[(uint32_t)LightIds::sun];
-        v3 eye = v3sub({0,0,0}, light.direction);
+        v3 eye = v3sub({0,0,0}, v3normalize(light.direction));
         eye = v3mul(eye, 5);
         static v3 target = {0,0,0};
         ImGui::DragFloat3("Target", &target.x, 0.1f, -100.0f, 100.0f);
@@ -1298,7 +1302,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         PushSky(&state->pipeline_elements.rl_sky.list,
             (int32_t)matrix_ids::mesh_projection_matrix,
             (int32_t)matrix_ids::mesh_view_matrix,
-            light.direction);
+            v3normalize(light.direction));
     }
 
     PushQuad(&state->framebuffer_renderer.list, {0,0},

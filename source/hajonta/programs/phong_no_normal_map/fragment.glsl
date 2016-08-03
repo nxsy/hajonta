@@ -15,6 +15,8 @@ uniform float u_minimum_variance;
 uniform float u_lightbleed_compensation;
 uniform vec3 u_camera_position;
 
+uniform bool do_not_skip = true;
+
 struct Light {
     vec4 position_or_direction;
     vec3 color;
@@ -163,16 +165,48 @@ void main()
 {
     vec4 material_color = texture(tex, v_texcoord);
 
-    float ambient = light.ambient_intensity;
 
     vec3 w_normal = normalize(v_w_normal);
     vec3 w_surface_to_light_direction = -light.position_or_direction.xyz;
+
+    float ambient_intensity = 0;
+    if (w_surface_to_light_direction.y > 0.2)
+    {
+        ambient_intensity = 1.0f;
+    }
+    else if (w_surface_to_light_direction.y < -0.3)
+    {
+        ambient_intensity = 0.0f;
+    }
+    else
+    {
+        ambient_intensity = pow((w_surface_to_light_direction.y + 0.35) / 0.5, 2);
+    }
+    ambient_intensity = clamp(ambient_intensity, 0.2, 1);
+
+    float ambient = ambient_intensity * light.ambient_intensity;
+
     float direction_similarity = max(dot(w_normal, w_surface_to_light_direction), 0.0);
     float diffuse = light.diffuse_intensity * direction_similarity;
+    float horizon_intensity = 1.0f;
+    if (w_surface_to_light_direction.y < -0.05)
+    {
+        horizon_intensity = 0;
+    }
+    else if (w_surface_to_light_direction.y < 0.05)
+    {
+        horizon_intensity = pow((w_surface_to_light_direction.y + 0.05) / 0.1, 2);
+    }
+    diffuse *= horizon_intensity;
 
     vec3 w_surface_to_eye = normalize(-u_camera_position - v_w_position);
     vec3 w_reflection_direction = reflect(-w_surface_to_light_direction.xyz, w_normal);
-    float specular = pow(max(dot(w_surface_to_eye, w_reflection_direction), 0.0), 10.0f);
+    float specular = 0;
+    if (direction_similarity > 0) //  && !do_not_skip)
+    {
+        specular = pow(max(dot(w_surface_to_eye, w_reflection_direction), 0.0), 10.0f) / 10.0f;
+        specular *= horizon_intensity;
+    }
 
     float attenuation = 1.0f;
     if (light.position_or_direction.w > 0.0f)
