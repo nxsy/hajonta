@@ -1784,6 +1784,13 @@ draw_mesh_from_asset(
         {
             armature->tick = 0;
         }
+        if (proceed_time)
+        {
+            armature->tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
+        }
+        ImGui::Text("Tick %d of %d",
+            (uint32_t)armature->tick % mesh.num_ticks,
+            mesh.num_ticks - 1);
         ImGui::End();
     }
 
@@ -1906,11 +1913,6 @@ draw_mesh_from_asset(
 
         }
 
-        if (armature && proceed_time)
-        {
-            armature->tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
-        }
-
         while (stack_location >= 0)
         {
             int32_t bone = stack[stack_location];
@@ -1946,7 +1948,7 @@ draw_mesh_from_asset(
             {
                 MeshBoneDescriptor &d = armature->bones[bone];
 
-                if (mesh.num_ticks)
+                if (mesh.num_ticks && proceed_time)
                 {
                     d = mesh.animation_ticks[(uint32_t)armature->tick % mesh.num_ticks][bone].transform;
                 }
@@ -1987,10 +1989,10 @@ draw_mesh_from_asset(
                     d.scale.z = d.scale.x;
                     ImGui::NextColumn();
                     sprintf(label, "Translation##%d", bone);
-                    ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.2f");
+                    ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.4f");
                     ImGui::NextColumn();
                     sprintf(label, "Rotation##%d", bone);
-                    ImGui::DragFloat4(label, &d.q.x, 0.01f, -100.0f, 100.0f, "%.2f");
+                    ImGui::DragFloat4(label, &d.q.x, 0.01f, -100.0f, 100.0f, "%.4f");
                     ImGui::NextColumn();
                 }
 
