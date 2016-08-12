@@ -120,9 +120,6 @@ process_nodes(
     uint32_t bone_id;
     if (!bone_id_lookup.count(bone_name))
     {
-        char pointer[32];
-        sprintf(pointer, "%p", node);
-        bone_name += pointer;
         bone_id = (uint32_t)bone_id_lookup.size();
         bone_id_lookup[bone_name] = bone_id;
         // Bone name = length (1 byte) + name
@@ -136,7 +133,10 @@ process_nodes(
         bone_id = bone_id_lookup[bone_name];
     }
 
-    bone_parents[bone_id] = {parent_bone};
+    if (bone_parents[bone_id].bone_id != -1)
+    {
+        bone_parents[bone_id] = {parent_bone};
+    }
     auto &t = node->mTransformation;
     aiVector3D scaling;
     aiVector3D position;
@@ -364,8 +364,14 @@ main(int argc, char **argv)
         bone_animation_header.version = 1;
         printf("Scene has %d animations\n", scene->mNumAnimations);
 
-        //for (uint32_t i = 0; i < scene->mNumAnimations; ++i)
-        uint32_t i = 0;
+        for (uint32_t i = 0; i < scene->mNumAnimations; ++i)
+        {
+            auto &animation = scene->mAnimations[i];
+            std::string animation_name(animation->mName.data);
+            printf("animation[%d|%s]\n", i, animation_name.c_str());
+        }
+
+        uint32_t i = 3;
         {
             auto &animation = scene->mAnimations[i];
             std::string animation_name(animation->mName.data);
@@ -385,10 +391,7 @@ main(int argc, char **argv)
             {
                 auto &anim = animation->mChannels[j];
                 std::string channel_name(anim->mNodeName.data);
-                if (!bone_id_lookup.count(channel_name))
-                {
-                    continue;
-                }
+                assert(bone_id_lookup.count(channel_name));
                 int32_t bone = bone_id_lookup[channel_name];
 
                 printf("  Channel %s: %d position, %d rotation, %d scaling keys\n",
@@ -668,14 +671,15 @@ main(int argc, char **argv)
         if (format.animation_size)
         {
             assert(total_written == format.animation_offset);
-            written = fwrite(&bone_animation_header, sizeof(BoneAnimationHeader), 1, of);
+            size_t anim_written = 0;
+            anim_written += written = full_fwrite(&bone_animation_header, sizeof(BoneAnimationHeader), 1, of);
             for (uint32_t i = 0; i < (uint32_t)bone_animation_header.num_ticks; ++i)
             {
                 std::vector<AnimTick> &anim_ticks = all_anim_ticks[i];
-                written += fwrite(&anim_ticks[0], sizeof(AnimTick), format.num_bones, of);
+                anim_written += written = full_fwrite(&anim_ticks[0], sizeof(AnimTick), format.num_bones, of);
             }
-            total_written += written;
-            assert(written == format.animation_size);
+            assert(anim_written == format.animation_size);
+            total_written += anim_written;
         }
     }
     assert(total_written == offset);
@@ -683,5 +687,6 @@ main(int argc, char **argv)
     printf("Excepted file size: %d bytes\n", (uint32_t)sizeof(binary_format_v2) + 4 + 4 + offset);
     printf("Actual file size: %d bytes\n", (uint32_t)ftell(of));
     fclose(of);
+
     return 0;
 }
