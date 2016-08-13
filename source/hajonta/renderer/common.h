@@ -285,6 +285,7 @@ asset_descriptor_type
     name,
     framebuffer,
     framebuffer_depth,
+    dynamic_mesh,
 };
 
 struct

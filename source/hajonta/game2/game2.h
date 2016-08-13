@@ -75,6 +75,7 @@ _asset_ids
     int32_t blockfigureRigged6_texture;
     int32_t knp_palette;
     int32_t cube_bounds_mesh;
+    int32_t dynamic_mesh_test;
 };
 
 struct
@@ -480,5 +481,8 @@ struct game_state
     uint32_t num_asset_classes;
     AssetClassEntry asset_classes[10];
     const char *asset_class_names[10];
+
+    par_shapes_mesh *par_mesh;
+    Mesh test_mesh;
 };
 

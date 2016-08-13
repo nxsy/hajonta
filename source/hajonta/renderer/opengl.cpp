@@ -1497,12 +1497,16 @@ get_texture_id_from_asset_descriptor(
                     *texture = descriptor->framebuffer->_renderbuffer;
                 }
             } break;
+            case asset_descriptor_type::dynamic_mesh:
+            {
+                hassert(!"Not a texture asset type");
+            } break;
         }
 
     }
 }
 
-void
+bool
 get_mesh_from_asset_descriptor(
     hajonta_thread_context *ctx,
     platform_memory *memory,
@@ -1512,28 +1516,47 @@ get_mesh_from_asset_descriptor(
     // out
     Mesh *mesh)
 {
+    bool result = false;
     if (asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
-        update_asset_descriptor_asset_id(state, descriptor);
-        if (descriptor->asset_id >= 0)
+        switch (descriptor->type)
         {
-            asset *descriptor_asset = state->assets + descriptor->asset_id;
-            int32_t asset_file_id = descriptor_asset->asset_file_id;
-
-            int32_t mesh_id = lookup_asset_file_to_mesh(state, asset_file_id);
-            if (mesh_id < 0)
+            case asset_descriptor_type::framebuffer:
+            case asset_descriptor_type::framebuffer_depth:
             {
-                mesh_id = add_asset_file_mesh(ctx, memory, state, asset_file_id);
-            }
-            hassert(mesh_id >= 0);
-            if (mesh_id >= 0)
-            {
-                *mesh = state->meshes[mesh_id];
+                hassert(!"Not a mesh asset");
 
-            }
+            } break;
+            case asset_descriptor_type::name:
+            {
+                update_asset_descriptor_asset_id(state, descriptor);
+                if (descriptor->asset_id >= 0)
+                {
+                    asset *descriptor_asset = state->assets + descriptor->asset_id;
+                    int32_t asset_file_id = descriptor_asset->asset_file_id;
+
+                    int32_t mesh_id = lookup_asset_file_to_mesh(state, asset_file_id);
+                    if (mesh_id < 0)
+                    {
+                        mesh_id = add_asset_file_mesh(ctx, memory, state, asset_file_id);
+                    }
+                    hassert(mesh_id >= 0);
+                    if (mesh_id >= 0)
+                    {
+                        *mesh = state->meshes[mesh_id];
+                        result = true;
+                    }
+                }
+            } break;
+            case asset_descriptor_type::dynamic_mesh:
+            {
+                *mesh = *((Mesh *)descriptor->ptr);
+                result = true;
+            } break;
         }
     }
+    return result;
 }
 
 void
@@ -1686,7 +1709,8 @@ draw_mesh_from_asset(
         &texture, &st0, &st1);
 
     Mesh mesh = {};
-    get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id, &mesh);
+    bool loaded = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id, &mesh);
+    hassert(loaded);
 
     auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
 

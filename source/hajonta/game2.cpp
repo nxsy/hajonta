@@ -2,12 +2,17 @@
 #include "hajonta/renderer/common.h"
 
 #if defined(_MSC_VER)
-#pragma warning(push, 4)
-#pragma warning(disable: 4365 4312 4456 4457 4774 4577)
+#pragma warning(push, 3)
+#pragma warning(disable: 4365 4312 4456 4457 4774 4577 4244 4242 4838 4305 4018)
 #endif
 #include "imgui.cpp"
 #include "imgui_draw.cpp"
 #include "imgui_demo.cpp"
+
+#define PAR_SHAPES_T uint32_t
+#define PAR_SHAPES_IMPLEMENTATION
+#include "par_shapes.h"
+
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -53,6 +58,20 @@ int32_t
 add_asset(AssetDescriptors *asset_descriptors, const char *name, bool debug = false)
 {
     return add_asset(asset_descriptors, name, asset_descriptor_type::name, debug);
+}
+
+int32_t
+add_dynamic_mesh_asset(AssetDescriptors *asset_descriptors, void *ptr, bool debug = false)
+{
+    int32_t result = -1;
+    if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
+    {
+        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::dynamic_mesh;
+        asset_descriptors->descriptors[asset_descriptors->count].ptr = ptr;
+        result = (int32_t)asset_descriptors->count;
+        ++asset_descriptors->count;
+    }
+    return result;
 }
 
 int32_t
@@ -462,6 +481,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             state->asset_class_names[i] = state->asset_classes[i].name;
         }
+
+        state->par_mesh = par_shapes_create_dodecahedron();
+        par_shapes_unweld(state->par_mesh, true);
+        par_shapes_compute_normals(state->par_mesh);
+        //par_shapes_scale(state->par_mesh, 10, 10, 10);
+        par_shapes_translate(state->par_mesh, 0, 3.0f, 0);
+        auto &mesh = state->test_mesh;
+        auto &par_mesh = *state->par_mesh;
+
+        mesh.vertices = {
+            (void *)par_mesh.points,
+            par_mesh.npoints * sizeof(float) * 3,
+        };
+        mesh.indices = {
+            (void *)par_mesh.triangles,
+            par_mesh.ntriangles * sizeof(uint32_t) * 3,
+        };
+        mesh.normals = {
+            (void *)par_mesh.normals,
+            par_mesh.npoints * sizeof(float) * 3,
+        };
+        mesh.uvs = {
+            (void *)par_mesh.tcoords,
+            par_mesh.npoints * sizeof(float) * 2,
+        };
+        mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
+        state->asset_ids.dynamic_mesh_test = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh);
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -1287,6 +1333,30 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->plane_model_matrix,
         state->asset_ids.cube_mesh,
         state->asset_ids.cube_texture,
+        0,
+        -1,
+        shadowmap_mesh_flags,
+        ShaderType::variance_shadow_map
+    );
+
+    PushMeshFromAsset(&state->three_dee_renderer.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
+        state->tree_model_matrix,
+        state->asset_ids.dynamic_mesh_test,
+        -1,
+        1,
+        -1,
+        three_dee_mesh_flags,
+        ShaderType::standard
+    );
+
+    PushMeshFromAsset(&state->shadowmap_renderer.list,
+        (uint32_t)matrix_ids::light_projection_matrix,
+        -1,
+        state->tree_model_matrix,
+        state->asset_ids.dynamic_mesh_test,
+        -1,
         0,
         -1,
         shadowmap_mesh_flags,
