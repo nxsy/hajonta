@@ -169,14 +169,6 @@ struct asset
     v2 st1;
 };
 
-struct mesh_asset
-{
-    uint32_t asset_id;
-    char asset_name[100];
-    int32_t asset_file_id;
-};
-
-
 struct GLSetupCountersHistory
 {
     GLSetupCounters entries[200];
@@ -1611,58 +1603,6 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     hglErrorAssert();
 }
 
-void
-draw_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_mesh *mesh)
-{
-    hglDisable(GL_BLEND);
-    hglEnable(GL_DEPTH_TEST);
-    hglDepthFunc(GL_LESS);
-    m4 projection = matrices[mesh->projection_matrix_id];
-    m4 model = matrices[mesh->model_matrix_id];
-
-    v2 st0 = {};
-    v2 st1 = {};
-    uint32_t texture = 0;
-    get_texture_id_from_asset_descriptor(
-        ctx, memory, state, descriptors, mesh->texture_asset_descriptor_id,
-        &texture, &st0, &st1);
-
-    hglUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-    hglUniform1f(state->imgui_program.u_use_color_id, 0.0f);
-    hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-    hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
-    hglBindVertexArray(state->vao);
-
-    hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);
-    hglBufferData(GL_ARRAY_BUFFER,
-            mesh->mesh.vertices.size,
-            mesh->mesh.vertices.data,
-            GL_STATIC_DRAW);
-    hglVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
-
-    hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
-    hglBufferData(GL_ARRAY_BUFFER,
-            mesh->mesh.uvs.size,
-            mesh->mesh.uvs.data,
-            GL_STATIC_DRAW);
-    hglVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, 0, (void *)0);
-
-    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
-    hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
-            mesh->mesh.indices.size,
-            mesh->mesh.indices.data,
-            GL_STATIC_DRAW);
-
-    hglDisableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
-    hglDrawElements(GL_TRIANGLES, (GLsizei)(mesh->mesh.num_triangles * 3), GL_UNSIGNED_SHORT, (void *)0);
-    hglEnableVertexAttribArray((GLuint)state->imgui_program.a_color_id);
-
-    hglBindVertexArray(0);
-    hglDisable(GL_DEPTH_TEST);
-    hglDepthFunc(GL_ALWAYS);
-    hglEnable(GL_BLEND);
-}
-
 v3
 calculate_camera_position(m4 view)
 {
@@ -2731,11 +2671,6 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::QUADS_lookup:
                 {
                     ExtractRenderElementSizeOnly(QUADS_lookup, element_size);
-                } break;
-                case render_entry_type::mesh:
-                {
-                    ExtractRenderElementWithSize(mesh, item, header, element_size);
-                    draw_mesh(ctx, memory, state, matrices, asset_descriptors, item);
                 } break;
                 case render_entry_type::mesh_from_asset:
                 {

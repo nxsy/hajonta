@@ -20,7 +20,6 @@ render_entry_type
     framebuffer_blit,
     sky,
 
-    mesh,
     mesh_from_asset,
 
     MAX = mesh_from_asset,
@@ -195,16 +194,6 @@ Mesh
     MeshBoneDescriptor default_transforms[100];
     uint32_t num_ticks;
     AnimTick animation_ticks[100][100];
-};
-
-struct
-render_entry_type_mesh
-{
-    render_entry_header header;
-    int32_t projection_matrix_id;
-    int32_t model_matrix_id;
-    Mesh mesh;
-    int32_t texture_asset_descriptor_id;
 };
 
 struct MeshFromAssetFlags
@@ -618,19 +607,6 @@ PushDescriptors(render_entry_list *list, LightDescriptors lights, ArmatureDescri
      {
         entry->lights = lights;
         entry->armatures = armatures;
-     }
-}
-
-inline void
-PushMesh(render_entry_list *list, int32_t projection_matrix_id, int32_t model_matrix_id, Mesh mesh, int32_t texture_asset_descriptor_id)
-{
-     render_entry_type_mesh *entry = PushRenderElement(list, mesh);
-     if (entry)
-     {
-         entry->projection_matrix_id = projection_matrix_id;
-         entry->model_matrix_id = model_matrix_id;
-         entry->mesh = mesh;
-         entry->texture_asset_descriptor_id = texture_asset_descriptor_id;
      }
 }
 
