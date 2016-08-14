@@ -129,7 +129,7 @@ inline auto %s(Args... args)
             return 1;
         }
     }
-    fclose(f);
+    fclose(final);
 #endif
     return 0;
 }

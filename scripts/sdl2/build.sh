@@ -4,10 +4,10 @@ set -e
 set -u
 
 CC=clang
-WARNFLAGS="-Wall -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-missing-braces -Werror -ferror-limit=3 -Wno-unused-function"
+WARNFLAGS="-Wall -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-missing-braces -Werror -ferror-limit=3 -Wno-unused-function -Wno-c++11-narrowing"
 DEBUG_FLAGS="-DDEBUG -g"
-CPPFLAGS="-std=c++11 -DHAJONTA_DEBUG=1 -DSDL_WITH_SUBDIR=1"
-INCLUDES="-Isource -Ibuild/debug/generated -Ithirdparty/stb -Ithirdparty/imgui"
+CPPFLAGS="-std=c++14 -DHAJONTA_DEBUG=1 -DSDL_WITH_SUBDIR=1"
+INCLUDES="-Isource -Ibuild/debug/generated -Ithirdparty/stb -Ithirdparty/imgui -Ithirdparty/par"
 CLANG="clang++"
 
 BASEDIR=`dirname $0`/../..
@@ -15,10 +15,15 @@ cd ${BASEDIR}
 mkdir -p build
 mkdir -p build/debug
 
+#
+${CLANG} ${CPPFLAGS} ${WARNFLAGS} -o build/debug/bootstrap source/hajonta/bootstrap/bootstrap.cpp ${DEBUG_FLAGS} ${INCLUDES}
+( cd build/debug && ./bootstrap )
+
 # code generation
 ${CLANG} ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstrap/program.cpp ${DEBUG_FLAGS} ${INCLUDES}
 ( cd build/debug && ./program ../../source hajonta/programs ui2d )
 ( cd build/debug && ./program ../../source hajonta/programs imgui )
+( cd build/debug && ./program ../../source hajonta/programs sky )
 ( cd build/debug && ./program ../../source hajonta/programs phong_no_normal_map )
 ( cd build/debug && ./program ../../source hajonta/programs variance_shadow_map )
 ( cd build/debug && ./program ../../source hajonta/programs/filters filter_gaussian_7x1 )
