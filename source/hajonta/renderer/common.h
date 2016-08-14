@@ -194,6 +194,11 @@ Mesh
     MeshBoneDescriptor default_transforms[100];
     uint32_t num_ticks;
     AnimTick animation_ticks[100][100];
+
+    bool loaded;
+    bool reload;
+    uint32_t vbo;
+    uint32_t ibo;
 };
 
 struct MeshFromAssetFlags

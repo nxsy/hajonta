@@ -1506,16 +1506,15 @@ get_texture_id_from_asset_descriptor(
     }
 }
 
-bool
+Mesh *
 get_mesh_from_asset_descriptor(
     hajonta_thread_context *ctx,
     platform_memory *memory,
     renderer_state *state,
     asset_descriptor *descriptors,
-    int32_t asset_descriptor_id,
-    // out
-    Mesh *mesh)
+    int32_t asset_descriptor_id)
 {
+    Mesh *mesh = 0;
     bool result = false;
     if (asset_descriptor_id != -1)
     {
@@ -1544,19 +1543,19 @@ get_mesh_from_asset_descriptor(
                     hassert(mesh_id >= 0);
                     if (mesh_id >= 0)
                     {
-                        *mesh = state->meshes[mesh_id];
+                        mesh = state->meshes + mesh_id;
                         result = true;
                     }
                 }
             } break;
             case asset_descriptor_type::dynamic_mesh:
             {
-                *mesh = *((Mesh *)descriptor->ptr);
+                mesh = (Mesh *)descriptor->ptr;
                 result = true;
             } break;
         }
     }
-    return result;
+    return mesh;
 }
 
 void
@@ -1708,9 +1707,7 @@ draw_mesh_from_asset(
         ctx, memory, state, descriptors, mesh_from_asset->texture_asset_descriptor_id,
         &texture, &st0, &st1);
 
-    Mesh mesh = {};
-    bool loaded = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id, &mesh);
-    hassert(loaded);
+    Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
 
     auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
 
@@ -1720,7 +1717,7 @@ draw_mesh_from_asset(
     int32_t a_bone_ids_id = -1;
     int32_t a_bone_weights_id = -1;
 
-    int32_t max_faces = (int32_t)mesh.num_triangles;
+    int32_t max_faces = (int32_t)mesh->num_triangles;
     int32_t start_face = 0;
     int32_t end_face = max_faces;
 
@@ -1753,8 +1750,8 @@ draw_mesh_from_asset(
             armature->tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
         }
         ImGui::Text("Tick %d of %d",
-            (uint32_t)armature->tick % mesh.num_ticks,
-            mesh.num_ticks - 1);
+            (uint32_t)armature->tick % mesh->num_ticks,
+            mesh->num_ticks - 1);
         ImGui::End();
     }
 
@@ -1775,7 +1772,7 @@ draw_mesh_from_asset(
             ImGui::Begin(label, &state->show_animation_debug);
         }
 
-        ImGui::Text("%d faces, %d bones", mesh.num_triangles, mesh.num_bones);
+        ImGui::Text("%d faces, %d bones", mesh->num_triangles, mesh->num_bones);
         if (!mesh_descriptor.mesh_debug.flags.initialized)
         {
             mesh_descriptor.mesh_debug.end_face = max_faces;
@@ -1800,12 +1797,12 @@ draw_mesh_from_asset(
     }
 
 
-    if (mesh.num_bones)
+    if (mesh->num_bones)
     {
         int32_t first_bone = 0;
-        for (uint32_t i = 0; i < mesh.num_bones; ++i)
+        for (uint32_t i = 0; i < mesh->num_bones; ++i)
         {
-            if (mesh.bone_parents[i] == -1)
+            if (mesh->bone_parents[i] == -1)
             {
                 first_bone = (int32_t)i;
                 break;
@@ -1881,7 +1878,7 @@ draw_mesh_from_asset(
         {
             int32_t bone = stack[stack_location];
 
-            int32_t parent_bone = mesh.bone_parents[bone];
+            int32_t parent_bone = mesh->bone_parents[bone];
             --stack_location;
             while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
             {
@@ -1900,7 +1897,7 @@ draw_mesh_from_asset(
             if (opened_debug)
             {
                 char label[200];
-                sprintf(label, "%*s %s", parent_list_location * 2, "", mesh.bone_names[bone]);
+                sprintf(label, "%*s %s", parent_list_location * 2, "", mesh->bone_names[bone]);
                 auto size = ImGui::CalcTextSize("%s", label);
                 ImGui::PushItemWidth(size.x);
                 ImGui::Text("%s", label);
@@ -1912,15 +1909,15 @@ draw_mesh_from_asset(
             {
                 MeshBoneDescriptor &d = armature->bones[bone];
 
-                if (mesh.num_ticks && proceed_time)
+                if (mesh->num_ticks && proceed_time)
                 {
-                    d = mesh.animation_ticks[(uint32_t)armature->tick % mesh.num_ticks][bone].transform;
+                    d = mesh->animation_ticks[(uint32_t)armature->tick % mesh->num_ticks][bone].transform;
                 }
                 if (d.scale.x == 0)
                 {
-                    d.scale = mesh.default_transforms[bone].scale;
-                    d.translate = mesh.default_transforms[bone].translate;
-                    d.q = mesh.default_transforms[bone].q;
+                    d.scale = mesh->default_transforms[bone].scale;
+                    d.translate = mesh->default_transforms[bone].translate;
+                    d.q = mesh->default_transforms[bone].q;
                     /*
                     if (d.scale.x > 50)
                     {
@@ -1979,23 +1976,23 @@ draw_mesh_from_asset(
             {
                 if (opened_debug)
                 {
-                    ImGui::Text("Scale: %.2f", mesh.default_transforms[bone].scale.x);
+                    ImGui::Text("Scale: %.2f", mesh->default_transforms[bone].scale.x);
                     ImGui::NextColumn();
                     ImGui::Text("Translation: %.2f, %.2f, %0.2f",
-                        mesh.default_transforms[bone].translate.x,
-                        mesh.default_transforms[bone].translate.y,
-                        mesh.default_transforms[bone].translate.z);
+                        mesh->default_transforms[bone].translate.x,
+                        mesh->default_transforms[bone].translate.y,
+                        mesh->default_transforms[bone].translate.z);
                     ImGui::NextColumn();
                     ImGui::Text("Rotation: %.2f, %.2f, %.2f, %.2f",
-                        mesh.default_transforms[bone].q.x,
-                        mesh.default_transforms[bone].q.y,
-                        mesh.default_transforms[bone].q.z,
-                        mesh.default_transforms[bone].q.w);
+                        mesh->default_transforms[bone].q.x,
+                        mesh->default_transforms[bone].q.y,
+                        mesh->default_transforms[bone].q.z,
+                        mesh->default_transforms[bone].q.w);
                     ImGui::NextColumn();
                 }
-                m4 scale = m4scale(mesh.default_transforms[bone].scale);
-                m4 translate = m4translate(mesh.default_transforms[bone].translate);
-                m4 rotate = m4rotation(mesh.default_transforms[bone].q);
+                m4 scale = m4scale(mesh->default_transforms[bone].scale);
+                m4 translate = m4translate(mesh->default_transforms[bone].translate);
+                m4 rotate = m4rotation(mesh->default_transforms[bone].q);
                 local_matrix = m4mul(translate,m4mul(rotate, scale));
             }
 
@@ -2007,11 +2004,11 @@ draw_mesh_from_asset(
                 global_transform,
             };
 
-            bones[bone] = m4mul(global_transform, mesh.bone_offsets[bone]);
+            bones[bone] = m4mul(global_transform, mesh->bone_offsets[bone]);
 
-            for (uint32_t i = 0; i < mesh.num_bones; ++i)
+            for (uint32_t i = 0; i < mesh->num_bones; ++i)
             {
-                if (mesh.bone_parents[i] == bone)
+                if (mesh->bone_parents[i] == bone)
                 {
                     stack_location++;
                     stack[stack_location] = (int32_t)i;
@@ -2048,7 +2045,7 @@ draw_mesh_from_asset(
             hglUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
 
             hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
-            hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh.num_bones);
+            hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh->num_bones);
 
             hglEnableVertexAttribArray((GLuint)program.a_position_id);
             hglEnableVertexAttribArray((GLuint)program.a_texcoord_id);
@@ -2077,7 +2074,7 @@ draw_mesh_from_asset(
             hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
             hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
-            hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh.num_bones);
+            hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh->num_bones);
 
             hglEnableVertexAttribArray((GLuint)program.a_position_id);
             hglEnableVertexAttribArray((GLuint)program.a_texcoord_id);
@@ -2184,69 +2181,98 @@ draw_mesh_from_asset(
         //glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     }
 
-    hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_vertex_vbo);
-    hglBufferData(GL_ARRAY_BUFFER,
-            mesh.vertices.size,
-            mesh.vertices.data,
-            GL_STATIC_DRAW);
-    hglVertexAttribPointer((GLuint)a_position_id, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
-    hglErrorAssert();
+    if (!mesh->loaded)
+    {
+        mesh->loaded = true;
+        mesh->reload = true;
+        hglGenBuffers(1, &mesh->vbo);
+        hglGenBuffers(1, &mesh->ibo);
+    }
+    hglBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
+    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ibo);
+    uint32_t positions_offset = 0, offset = 0;
+    uint32_t uvs_offset = offset += mesh->vertices.size;
+    uint32_t normals_offset = offset += mesh->uvs.size;
+    uint32_t bone_ids_offset = offset += mesh->normals.size;
+    uint32_t bone_weights_offset = offset += mesh->bone_ids.size;
+    if (mesh->reload)
+    {
+        hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                mesh->indices.size,
+                mesh->indices.data,
+                GL_STATIC_DRAW);
 
-    hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_uvs_vbo);
-    hglBufferData(GL_ARRAY_BUFFER,
-            mesh.uvs.size,
-            mesh.uvs.data,
-            GL_STATIC_DRAW);
-    hglVertexAttribPointer((GLuint)a_texcoord_id, 2, GL_FLOAT, GL_FALSE, 0, (void *)0);
-    hglErrorAssert();
+        uint32_t size = 0 +
+            mesh->vertices.size +
+            mesh->uvs.size +
+            mesh->normals.size +
+            mesh->bone_ids.size +
+            mesh->bone_weights.size;
+        hglBufferData(GL_ARRAY_BUFFER, size, (void *)0, GL_STATIC_DRAW);
+        hglBufferSubData(GL_ARRAY_BUFFER, positions_offset, mesh->vertices.size,
+                mesh->vertices.data);
+        if (mesh->uvs.data)
+        {
+            hglBufferSubData(GL_ARRAY_BUFFER, uvs_offset, mesh->uvs.size,
+                    mesh->uvs.data);
+        }
+        hglBufferSubData(GL_ARRAY_BUFFER, normals_offset, mesh->normals.size,
+                mesh->normals.data);
+        hglBufferSubData(GL_ARRAY_BUFFER, bone_ids_offset, mesh->bone_ids.size,
+                mesh->bone_ids.data);
+        hglBufferSubData(GL_ARRAY_BUFFER, bone_weights_offset, mesh->bone_weights.size,
+                mesh->bone_weights.data);
+        mesh->reload = false;
+    }
+    hglVertexAttribPointer(
+        (GLuint)a_position_id,
+        3, GL_FLOAT, GL_FALSE,
+        0,
+        (void *)positions_offset
+    );
+
+    hglVertexAttribPointer(
+        (GLuint)a_texcoord_id,
+        2, GL_FLOAT, GL_FALSE,
+        0,
+        (void *)uvs_offset
+    );
 
     if (a_normal_id >= 0)
     {
-        hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_normals_vbo);
-        hglBufferData(GL_ARRAY_BUFFER,
-                mesh.normals.size,
-                mesh.normals.data,
-                GL_STATIC_DRAW);
-        hglVertexAttribPointer((GLuint)a_normal_id, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
-        hglErrorAssert();
+        hglVertexAttribPointer(
+            (GLuint)a_normal_id,
+            3, GL_FLOAT, GL_FALSE,
+            0,
+            (void *)normals_offset
+        );
     }
-
     if (a_bone_ids_id >= 0)
     {
-        if (mesh.bone_ids.size)
+        if (mesh->bone_ids.size)
         {
             hglEnableVertexAttribArray((GLuint)a_bone_ids_id);
-            hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_bone_ids_vbo);
-            hglBufferData(GL_ARRAY_BUFFER,
-                    mesh.bone_ids.size,
-                    mesh.bone_ids.data,
-                    GL_STATIC_DRAW);
-            hglVertexAttribIPointer((GLuint)a_bone_ids_id, 4, GL_INT, 0, (void *)0);
-            hglErrorAssert();
+            hglVertexAttribIPointer(
+                (GLuint)a_bone_ids_id,
+                4, GL_INT,
+                0,
+                (void *)bone_ids_offset
+            );
         }
     }
-
     if (a_bone_weights_id >= 0)
     {
-        if (mesh.bone_weights.size)
+        if (mesh->bone_weights.size)
         {
             hglEnableVertexAttribArray((GLuint)a_bone_weights_id);
-            hglBindBuffer(GL_ARRAY_BUFFER, state->mesh_bone_weights_vbo);
-            hglBufferData(GL_ARRAY_BUFFER,
-                    mesh.bone_weights.size,
-                    mesh.bone_weights.data,
-                    GL_STATIC_DRAW);
-            hglVertexAttribPointer((GLuint)a_bone_weights_id, 4, GL_FLOAT, GL_FALSE, 0, (void *)0);
-            hglErrorAssert();
+            hglVertexAttribPointer(
+                (GLuint)a_bone_weights_id,
+                4, GL_FLOAT, GL_FALSE,
+                0,
+                (void *)bone_weights_offset
+            );
         }
     }
-
-    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
-    hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
-            mesh.indices.size,
-            mesh.indices.data,
-            GL_STATIC_DRAW);
-
 
     hglBindTexture(GL_TEXTURE_2D, texture);
     hglErrorAssert();
@@ -2514,6 +2540,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             }
             GLenum texture_target = GL_TEXTURE_2D;
             uint32_t texture_id = framebuffer->_texture;
+            uint32_t multisample_samples = 2;
             if (framebuffer->_flags.use_multisample_buffer)
             {
                 texture_target = GL_TEXTURE_2D_MULTISAMPLE;
@@ -2549,7 +2576,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     {
                         if (framebuffer->_flags.use_multisample_buffer)
                         {
-                            hglTexImage2DMultisample(texture_target, 4, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, true);
+                            hglTexImage2DMultisample(texture_target, multisample_samples, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, true);
                         }
                         else
                         {
@@ -2572,7 +2599,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     hglBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
                     if (framebuffer->_flags.use_multisample_buffer)
                     {
-                        hglRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, framebuffer->size.x, framebuffer->size.y);
+                        hglRenderbufferStorageMultisample(GL_RENDERBUFFER, multisample_samples, GL_DEPTH24_STENCIL8, framebuffer->size.x, framebuffer->size.y);
                     }
                     else
                     {
@@ -2586,7 +2613,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     hglBindTexture(texture_target, framebuffer->_renderbuffer);
                     if (framebuffer->_flags.use_multisample_buffer)
                     {
-                        hglTexImage2DMultisample(texture_target, 4, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, true);
+                        hglTexImage2DMultisample(texture_target, multisample_samples, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, true);
                     }
                     else
                     {
