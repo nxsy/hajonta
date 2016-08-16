@@ -26,6 +26,14 @@ struct v3i
     int32_t z;
 };
 
+struct v4b
+{
+    uint8_t x;
+    uint8_t y;
+    uint8_t z;
+    uint8_t w;
+};
+
 struct triangle2
 {
     v2 p0;

@@ -76,6 +76,7 @@ _asset_ids
     int32_t knp_palette;
     int32_t cube_bounds_mesh;
     int32_t dynamic_mesh_test;
+    int32_t dynamic_texture_test;
 };
 
 struct
@@ -484,5 +485,9 @@ struct game_state
 
     par_shapes_mesh *par_mesh;
     Mesh test_mesh;
+    DynamicTextureDescriptor test_texture;
+
+    array2<512, 512, float> noisemap;
+    v4b noisemap_scratch[512 * 512];
 };
 

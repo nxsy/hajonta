@@ -13,6 +13,8 @@
 #define PAR_SHAPES_IMPLEMENTATION
 #include "par_shapes.h"
 
+#define STB_PERLIN_IMPLEMENTATION
+#include "stb_perlin.h"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -68,6 +70,20 @@ add_dynamic_mesh_asset(AssetDescriptors *asset_descriptors, void *ptr, bool debu
     {
         asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::dynamic_mesh;
         asset_descriptors->descriptors[asset_descriptors->count].ptr = ptr;
+        result = (int32_t)asset_descriptors->count;
+        ++asset_descriptors->count;
+    }
+    return result;
+}
+
+int32_t
+add_dynamic_texture_asset(AssetDescriptors *asset_descriptors, DynamicTextureDescriptor *ptr, bool debug = false)
+{
+    int32_t result = -1;
+    if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
+    {
+        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::dynamic_texture;
+        asset_descriptors->descriptors[asset_descriptors->count].dynamic_texture_descriptor = ptr;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
     }
@@ -235,6 +251,271 @@ tile_asset_and_transform(int32_t y, int32_t x, int32_t x_width, int32_t z, int32
     return result;
 }
 
+void
+initialize(platform_memory *memory, game_state *state)
+{
+    CreatePipeline(state);
+    AssetDescriptors *asset_descriptors = &state->assets;
+    state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
+    state->asset_ids.sea_0 = add_asset(asset_descriptors, "sea_0");
+    state->asset_ids.ground_0 = add_asset(asset_descriptors, "ground_0");
+    state->asset_ids.sea_ground_br = add_asset(asset_descriptors, "sea_ground_br");
+    state->asset_ids.sea_ground_bl = add_asset(asset_descriptors, "sea_ground_bl");
+    state->asset_ids.sea_ground_tr = add_asset(asset_descriptors, "sea_ground_tr");
+    state->asset_ids.sea_ground_tl = add_asset(asset_descriptors, "sea_ground_tl");
+    state->asset_ids.sea_ground_r = add_asset(asset_descriptors, "sea_ground_r");
+    state->asset_ids.sea_ground_l = add_asset(asset_descriptors, "sea_ground_l");
+    state->asset_ids.sea_ground_t = add_asset(asset_descriptors, "sea_ground_t");
+    state->asset_ids.sea_ground_b = add_asset(asset_descriptors, "sea_ground_b");
+    state->asset_ids.sea_ground_t_l = add_asset(asset_descriptors, "sea_ground_t_l");
+    state->asset_ids.sea_ground_t_r = add_asset(asset_descriptors, "sea_ground_t_r");
+    state->asset_ids.sea_ground_b_l = add_asset(asset_descriptors, "sea_ground_b_l");
+    state->asset_ids.sea_ground_b_r = add_asset(asset_descriptors, "sea_ground_b_r");
+    state->asset_ids.bottom_wall = add_asset(asset_descriptors, "bottom_wall");
+    state->asset_ids.player = add_asset(asset_descriptors, "player");
+    state->asset_ids.familiar_ship = add_asset(asset_descriptors, "familiar_ship");
+    state->asset_ids.plane_mesh = add_asset(asset_descriptors, "plane_mesh");
+    state->asset_ids.tree_mesh = add_asset(asset_descriptors, "tree_mesh");
+    state->asset_ids.tree_texture = add_asset(asset_descriptors, "tree_texture");
+    state->asset_ids.horse_mesh = add_asset(asset_descriptors, "horse_mesh", true);
+    state->asset_ids.horse_texture = add_asset(asset_descriptors, "horse_texture");
+    state->asset_ids.chest_mesh = add_asset(asset_descriptors, "chest_mesh");
+    state->asset_ids.chest_texture = add_asset(asset_descriptors, "chest_texture");
+    state->asset_ids.konserian_mesh = add_asset(asset_descriptors, "konserian_mesh");
+    state->asset_ids.konserian_texture = add_asset(asset_descriptors, "konserian_texture");
+    state->asset_ids.cactus_mesh = add_asset(asset_descriptors, "cactus_mesh");
+    state->asset_ids.cactus_texture = add_asset(asset_descriptors, "cactus_texture");
+    state->asset_ids.kitchen_mesh = add_asset(asset_descriptors, "kitchen_mesh");
+    state->asset_ids.kitchen_texture = add_asset(asset_descriptors, "kitchen_texture");
+    state->asset_ids.nature_pack_tree_mesh = add_asset(asset_descriptors, "nature_pack_tree_mesh");
+    state->asset_ids.nature_pack_tree_texture = add_asset(asset_descriptors, "nature_pack_tree_texture");
+    state->asset_ids.another_ground_0 = add_asset(asset_descriptors, "another_ground_0");
+    state->asset_ids.cube_mesh = add_asset(asset_descriptors, "cube_mesh");
+    state->asset_ids.cube_texture = add_asset(asset_descriptors, "cube_texture");
+
+    state->asset_ids.blocky_advanced_mesh = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh");
+    state->asset_ids.blocky_advanced_texture = add_asset(asset_descriptors, "kenney_blocky_advanced_cowboy_texture");
+
+    state->asset_ids.blockfigureRigged6_mesh = add_asset(asset_descriptors, "blockfigureRigged6_mesh");
+    state->asset_ids.blockfigureRigged6_texture = add_asset(asset_descriptors, "blockfigureRigged6_texture");
+
+    state->asset_ids.knp_palette = add_asset(asset_descriptors, "knp_palette");
+    state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
+
+    state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
+
+    state->furniture_to_asset[0] = -1;
+    state->furniture_to_asset[(uint32_t)FurnitureType::ship] = state->asset_ids.familiar_ship;
+    state->furniture_to_asset[(uint32_t)FurnitureType::wall] = state->asset_ids.bottom_wall;
+
+    hassert(state->asset_ids.familiar > 0);
+    build_map(state, &state->map);
+
+    PipelineInit(&state->render_pipeline, asset_descriptors);
+
+    state->pixel_size = 64;
+    state->familiar_movement.position = {-2, 2};
+
+    state->acceleration_multiplier = 50.0f;
+
+    state->debug.selected_tile = {MAP_WIDTH / 2, MAP_HEIGHT / 2};
+
+    queue_init(
+        &state->debug.priority_queue.queue,
+        harray_count(state->debug.priority_queue.entries),
+        state->debug.priority_queue.entries
+    );
+    auto &astar_data = state->debug.familiar_path.data;
+    queue_init(
+        &astar_data.queue,
+        harray_count(astar_data.entries),
+        astar_data.entries
+    );
+
+    auto &light = state->lights[(uint32_t)LightIds::sun];
+    light.type = LightType::directional;
+    light.direction = {1.0f, -0.66f, -0.288f};
+    light.color = {1.0f, 0.99f, 0.99f};
+    light.ambient_intensity = 0.35f;
+    light.diffuse_intensity = 1.0f;
+    light.attenuation_constant = 1.0f;
+
+    auto &armature = state->armatures[(uint32_t)ArmatureIds::test1];
+    armature.count = harray_count(state->bones);
+    armature.bones = state->bones;
+
+    state->debug.show_textures = 0;
+    state->debug.show_lights = 0;
+    state->debug.cull_front = 1;
+    state->debug.show_nature_pack = 1;
+    state->debug.show_camera = 1;
+
+    state->camera.distance = 4.0f;
+    state->camera.near_ = 1.0f;
+    state->camera.far_ = 10000.0f * 1.1f;
+    state->camera.target = {2, 3.5, 0};
+    state->camera.rotation = {0.0f, -1.0f, 0};
+
+    state->np_camera.distance = 2.0f;
+    state->np_camera.near_ = 1.0f;
+    state->np_camera.far_ = 100.0f;
+    state->np_camera.target = {0.5f, 0.5f, 0.5f};
+    state->np_camera.rotation.x = 0.5f * h_halfpi;
+    state->np_camera.orthographic = 1;
+
+    {
+        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+        f.name = "Brown Cliff";
+        struct
+        {
+            const char *pretty_name;
+            const char *asset_name;
+        } _assets[] =
+        {
+            { "01", "knp_Brown_Cliff_01" },
+            { "Bottom_01", "knp_Brown_Cliff_Bottom_01" },
+            { "Bottom_Corner_01", "knp_Brown_Cliff_Bottom_Corner_01" },
+            { "Bottom_Corner_Green_Top_01", "knp_Brown_Cliff_Bottom_Corner_Green_Top_01" },
+            { "Bottom_Green_Top_01", "knp_Brown_Cliff_Bottom_Green_Top_01" },
+            { "Corner_01", "knp_Brown_Cliff_Corner_01" },
+            { "Corner_Green_Top_01", "knp_Brown_Cliff_Corner_Green_Top_01" },
+            { "End_01", "knp_Brown_Cliff_End_01" },
+            { "End_Green_Top_01", "knp_Brown_Cliff_End_Green_Top_01" },
+            { "Green_Top_01", "knp_Brown_Cliff_Green_Top_01" },
+            { "Top_01", "knp_Brown_Cliff_Top_01" },
+            { "Top_Corner_01", "knp_Brown_Cliff_Top_Corner_01" },
+            { "Waterfall_01", "knp_Brown_Waterfall_01" },
+            { "Waterfall_Top_01", "knp_Brown_Waterfall_Top_01" },
+        };
+        f.asset_start = state->num_assets;
+        f.count = harray_count(_assets);
+        for (uint32_t i = 0; i < harray_count(_assets); ++i)
+        {
+            auto &a = _assets[i];
+            AssetListEntry &l = state->asset_lists[state->num_assets++];
+            l.pretty_name = a.pretty_name;
+            l.asset_name = a.asset_name;
+            l.asset_id = add_asset(asset_descriptors, l.asset_name);
+        }
+    }
+
+    {
+        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+        f.name = "Grey Cliff";
+        struct
+        {
+            const char *pretty_name;
+            const char *asset_name;
+        } _assets[] =
+        {
+            { "01", "knp_Grey_Cliff_01" },
+            { "Bottom_01", "knp_Grey_Cliff_Bottom_01" },
+            { "Bottom_Corner_01", "knp_Grey_Cliff_Bottom_Corner_01" },
+            { "Bottom_Corner_Green_Top_01", "knp_Grey_Cliff_Bottom_Corner_Green_Top_01" },
+            { "Bottom_Green_Top_01", "knp_Grey_Cliff_Bottom_Green_Top_01" },
+            { "Corner_01", "knp_Grey_Cliff_Corner_01" },
+            { "Corner_Green_Top_01", "knp_Grey_Cliff_Corner_Green_Top_01" },
+            { "End_01", "knp_Grey_Cliff_End_01" },
+            { "End_Green_Top_01", "knp_Grey_Cliff_End_Green_Top_01" },
+            { "Green_Top_01", "knp_Grey_Cliff_Green_Top_01" },
+            { "Top_01", "knp_Grey_Cliff_Top_01" },
+            { "Top_Corner_01", "knp_Grey_Cliff_Top_Corner_01" },
+            { "Waterfall_01", "knp_Grey_Waterfall_01" },
+            { "Waterfall_Top_01", "knp_Grey_Waterfall_Top_01" },
+        };
+        f.asset_start = state->num_assets;
+        f.count = harray_count(_assets);
+        for (uint32_t i = 0; i < harray_count(_assets); ++i)
+        {
+            auto &a = _assets[i];
+            AssetListEntry &l = state->asset_lists[state->num_assets++];
+            l.pretty_name = a.pretty_name;
+            l.asset_name = a.asset_name;
+            l.asset_id = add_asset(asset_descriptors, l.asset_name);
+        }
+    }
+
+    {
+        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+        f.name = "Ground";
+        struct
+        {
+            const char *pretty_name;
+            const char *asset_name;
+        } _assets[] =
+        {
+            { "Grass", "knp_Plate_Grass_01" },
+            { "Grass Dirt", "knp_Plate_Grass_Dirt_01" },
+            { "River", "knp_Plate_River_01" },
+            { "River_Corner", "knp_Plate_River_Corner_01" },
+            { "River Corner Dirt", "knp_Plate_River_Corner_Dirt_01" },
+            { "River Dirt", "knp_Plate_River_Dirt_01" },
+        };
+        f.asset_start = state->num_assets;
+        f.count = harray_count(_assets);
+        for (uint32_t i = 0; i < harray_count(_assets); ++i)
+        {
+            auto &a = _assets[i];
+            AssetListEntry &l = state->asset_lists[state->num_assets++];
+            l.pretty_name = a.pretty_name;
+            l.asset_name = a.asset_name;
+            l.asset_id = add_asset(asset_descriptors, l.asset_name);
+        }
+    }
+
+    {
+        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
+        f.name = "Trees";
+        struct
+        {
+            const char *pretty_name;
+            const char *asset_name;
+        } _assets[] =
+        {
+            { "Large Oak Dark", "knp_Large_Oak_Dark_01" },
+            { "Large Oak Fall", "knp_Large_Oak_Fall_01" },
+            { "Large Oak Green", "knp_Large_Oak_Green_01" },
+        };
+        f.asset_start = state->num_assets;
+        f.count = harray_count(_assets);
+        for (uint32_t i = 0; i < harray_count(_assets); ++i)
+        {
+            auto &a = _assets[i];
+            AssetListEntry &l = state->asset_lists[state->num_assets++];
+            l.pretty_name = a.pretty_name;
+            l.asset_name = a.asset_name;
+            l.asset_id = add_asset(asset_descriptors, l.asset_name);
+        }
+    }
+
+    for (uint32_t i = 0; i < state->num_asset_classes; ++i)
+    {
+        state->asset_class_names[i] = state->asset_classes[i].name;
+    }
+
+    state->asset_ids.dynamic_mesh_test = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh);
+    state->asset_ids.dynamic_texture_test = add_dynamic_texture_asset(asset_descriptors, &state->test_texture);
+}
+
+template<uint32_t H, uint32_t W>
+void
+generate_noise_map(array2<H,W,float> *map, float scale)
+{
+    if (scale <= 0) {
+        scale = 0.0001f;
+    }
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            float sample_x = (float)x / scale;
+            float sample_y = (float)y / scale;
+
+            float perlin_value = stb_perlin_noise3(sample_x, sample_y, 100.0f, 256, 256, 256);
+            map->set({x, y}, perlin_value);
+        }
+    }
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     game_state *state = (game_state *)memory->memory;
@@ -242,245 +523,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if (!memory->initialized)
     {
-        CreatePipeline(state);
         memory->initialized = 1;
-        AssetDescriptors *asset_descriptors = &state->assets;
-        state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
-        state->asset_ids.sea_0 = add_asset(asset_descriptors, "sea_0");
-        state->asset_ids.ground_0 = add_asset(asset_descriptors, "ground_0");
-        state->asset_ids.sea_ground_br = add_asset(asset_descriptors, "sea_ground_br");
-        state->asset_ids.sea_ground_bl = add_asset(asset_descriptors, "sea_ground_bl");
-        state->asset_ids.sea_ground_tr = add_asset(asset_descriptors, "sea_ground_tr");
-        state->asset_ids.sea_ground_tl = add_asset(asset_descriptors, "sea_ground_tl");
-        state->asset_ids.sea_ground_r = add_asset(asset_descriptors, "sea_ground_r");
-        state->asset_ids.sea_ground_l = add_asset(asset_descriptors, "sea_ground_l");
-        state->asset_ids.sea_ground_t = add_asset(asset_descriptors, "sea_ground_t");
-        state->asset_ids.sea_ground_b = add_asset(asset_descriptors, "sea_ground_b");
-        state->asset_ids.sea_ground_t_l = add_asset(asset_descriptors, "sea_ground_t_l");
-        state->asset_ids.sea_ground_t_r = add_asset(asset_descriptors, "sea_ground_t_r");
-        state->asset_ids.sea_ground_b_l = add_asset(asset_descriptors, "sea_ground_b_l");
-        state->asset_ids.sea_ground_b_r = add_asset(asset_descriptors, "sea_ground_b_r");
-        state->asset_ids.bottom_wall = add_asset(asset_descriptors, "bottom_wall");
-        state->asset_ids.player = add_asset(asset_descriptors, "player");
-        state->asset_ids.familiar_ship = add_asset(asset_descriptors, "familiar_ship");
-        state->asset_ids.plane_mesh = add_asset(asset_descriptors, "plane_mesh");
-        state->asset_ids.tree_mesh = add_asset(asset_descriptors, "tree_mesh");
-        state->asset_ids.tree_texture = add_asset(asset_descriptors, "tree_texture");
-        state->asset_ids.horse_mesh = add_asset(asset_descriptors, "horse_mesh", true);
-        state->asset_ids.horse_texture = add_asset(asset_descriptors, "horse_texture");
-        state->asset_ids.chest_mesh = add_asset(asset_descriptors, "chest_mesh");
-        state->asset_ids.chest_texture = add_asset(asset_descriptors, "chest_texture");
-        state->asset_ids.konserian_mesh = add_asset(asset_descriptors, "konserian_mesh");
-        state->asset_ids.konserian_texture = add_asset(asset_descriptors, "konserian_texture");
-        state->asset_ids.cactus_mesh = add_asset(asset_descriptors, "cactus_mesh");
-        state->asset_ids.cactus_texture = add_asset(asset_descriptors, "cactus_texture");
-        state->asset_ids.kitchen_mesh = add_asset(asset_descriptors, "kitchen_mesh");
-        state->asset_ids.kitchen_texture = add_asset(asset_descriptors, "kitchen_texture");
-        state->asset_ids.nature_pack_tree_mesh = add_asset(asset_descriptors, "nature_pack_tree_mesh");
-        state->asset_ids.nature_pack_tree_texture = add_asset(asset_descriptors, "nature_pack_tree_texture");
-        state->asset_ids.another_ground_0 = add_asset(asset_descriptors, "another_ground_0");
-        state->asset_ids.cube_mesh = add_asset(asset_descriptors, "cube_mesh");
-        state->asset_ids.cube_texture = add_asset(asset_descriptors, "cube_texture");
+        initialize(memory, state);
 
-        state->asset_ids.blocky_advanced_mesh = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh");
-        state->asset_ids.blocky_advanced_texture = add_asset(asset_descriptors, "kenney_blocky_advanced_cowboy_texture");
-
-        state->asset_ids.blockfigureRigged6_mesh = add_asset(asset_descriptors, "blockfigureRigged6_mesh");
-        state->asset_ids.blockfigureRigged6_texture = add_asset(asset_descriptors, "blockfigureRigged6_texture");
-
-        state->asset_ids.knp_palette = add_asset(asset_descriptors, "knp_palette");
-        state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
-
-        state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
-
-        state->furniture_to_asset[0] = -1;
-        state->furniture_to_asset[(uint32_t)FurnitureType::ship] = state->asset_ids.familiar_ship;
-        state->furniture_to_asset[(uint32_t)FurnitureType::wall] = state->asset_ids.bottom_wall;
-
-        hassert(state->asset_ids.familiar > 0);
-        build_map(state, &state->map);
-
-        PipelineInit(&state->render_pipeline, asset_descriptors);
-
-        state->pixel_size = 64;
-        state->familiar_movement.position = {-2, 2};
-
-        state->acceleration_multiplier = 50.0f;
-
-        state->debug.selected_tile = {MAP_WIDTH / 2, MAP_HEIGHT / 2};
-
-        queue_init(
-            &state->debug.priority_queue.queue,
-            harray_count(state->debug.priority_queue.entries),
-            state->debug.priority_queue.entries
-        );
-        auto &astar_data = state->debug.familiar_path.data;
-        queue_init(
-            &astar_data.queue,
-            harray_count(astar_data.entries),
-            astar_data.entries
-        );
-
-        auto &light = state->lights[(uint32_t)LightIds::sun];
-        light.type = LightType::directional;
-        light.direction = {1.0f, -0.66f, -0.288f};
-        light.color = {1.0f, 0.99f, 0.99f};
-        light.ambient_intensity = 0.35f;
-        light.diffuse_intensity = 1.0f;
-        light.attenuation_constant = 1.0f;
-
-        auto &armature = state->armatures[(uint32_t)ArmatureIds::test1];
-        armature.count = harray_count(state->bones);
-        armature.bones = state->bones;
-
-        state->debug.show_textures = 0;
-        state->debug.show_lights = 0;
-        state->debug.cull_front = 1;
-        state->debug.show_nature_pack = 1;
-        state->debug.show_camera = 1;
-
-        state->camera.distance = 4.0f;
-        state->camera.near_ = 1.0f;
-        state->camera.far_ = 10000.0f * 1.1f;
-        state->camera.target = {2, 3.5, 0};
-        state->camera.rotation = {0.0f, -1.0f, 0};
-
-        state->np_camera.distance = 2.0f;
-        state->np_camera.near_ = 1.0f;
-        state->np_camera.far_ = 100.0f;
-        state->np_camera.target = {0.5f, 0.5f, 0.5f};
-        state->np_camera.rotation.x = 0.5f * h_halfpi;
-        state->np_camera.orthographic = 1;
-
-        {
-            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-            f.name = "Brown Cliff";
-            struct
-            {
-                const char *pretty_name;
-                const char *asset_name;
-            } _assets[] =
-            {
-                { "01", "knp_Brown_Cliff_01" },
-                { "Bottom_01", "knp_Brown_Cliff_Bottom_01" },
-                { "Bottom_Corner_01", "knp_Brown_Cliff_Bottom_Corner_01" },
-                { "Bottom_Corner_Green_Top_01", "knp_Brown_Cliff_Bottom_Corner_Green_Top_01" },
-                { "Bottom_Green_Top_01", "knp_Brown_Cliff_Bottom_Green_Top_01" },
-                { "Corner_01", "knp_Brown_Cliff_Corner_01" },
-                { "Corner_Green_Top_01", "knp_Brown_Cliff_Corner_Green_Top_01" },
-                { "End_01", "knp_Brown_Cliff_End_01" },
-                { "End_Green_Top_01", "knp_Brown_Cliff_End_Green_Top_01" },
-                { "Green_Top_01", "knp_Brown_Cliff_Green_Top_01" },
-                { "Top_01", "knp_Brown_Cliff_Top_01" },
-                { "Top_Corner_01", "knp_Brown_Cliff_Top_Corner_01" },
-                { "Waterfall_01", "knp_Brown_Waterfall_01" },
-                { "Waterfall_Top_01", "knp_Brown_Waterfall_Top_01" },
-            };
-            f.asset_start = state->num_assets;
-            f.count = harray_count(_assets);
-            for (uint32_t i = 0; i < harray_count(_assets); ++i)
-            {
-                auto &a = _assets[i];
-                AssetListEntry &l = state->asset_lists[state->num_assets++];
-                l.pretty_name = a.pretty_name;
-                l.asset_name = a.asset_name;
-                l.asset_id = add_asset(asset_descriptors, l.asset_name);
-            }
-        }
-
-        {
-            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-            f.name = "Grey Cliff";
-            struct
-            {
-                const char *pretty_name;
-                const char *asset_name;
-            } _assets[] =
-            {
-                { "01", "knp_Grey_Cliff_01" },
-                { "Bottom_01", "knp_Grey_Cliff_Bottom_01" },
-                { "Bottom_Corner_01", "knp_Grey_Cliff_Bottom_Corner_01" },
-                { "Bottom_Corner_Green_Top_01", "knp_Grey_Cliff_Bottom_Corner_Green_Top_01" },
-                { "Bottom_Green_Top_01", "knp_Grey_Cliff_Bottom_Green_Top_01" },
-                { "Corner_01", "knp_Grey_Cliff_Corner_01" },
-                { "Corner_Green_Top_01", "knp_Grey_Cliff_Corner_Green_Top_01" },
-                { "End_01", "knp_Grey_Cliff_End_01" },
-                { "End_Green_Top_01", "knp_Grey_Cliff_End_Green_Top_01" },
-                { "Green_Top_01", "knp_Grey_Cliff_Green_Top_01" },
-                { "Top_01", "knp_Grey_Cliff_Top_01" },
-                { "Top_Corner_01", "knp_Grey_Cliff_Top_Corner_01" },
-                { "Waterfall_01", "knp_Grey_Waterfall_01" },
-                { "Waterfall_Top_01", "knp_Grey_Waterfall_Top_01" },
-            };
-            f.asset_start = state->num_assets;
-            f.count = harray_count(_assets);
-            for (uint32_t i = 0; i < harray_count(_assets); ++i)
-            {
-                auto &a = _assets[i];
-                AssetListEntry &l = state->asset_lists[state->num_assets++];
-                l.pretty_name = a.pretty_name;
-                l.asset_name = a.asset_name;
-                l.asset_id = add_asset(asset_descriptors, l.asset_name);
-            }
-        }
-
-        {
-            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-            f.name = "Ground";
-            struct
-            {
-                const char *pretty_name;
-                const char *asset_name;
-            } _assets[] =
-            {
-                { "Grass", "knp_Plate_Grass_01" },
-                { "Grass Dirt", "knp_Plate_Grass_Dirt_01" },
-                { "River", "knp_Plate_River_01" },
-                { "River_Corner", "knp_Plate_River_Corner_01" },
-                { "River Corner Dirt", "knp_Plate_River_Corner_Dirt_01" },
-                { "River Dirt", "knp_Plate_River_Dirt_01" },
-            };
-            f.asset_start = state->num_assets;
-            f.count = harray_count(_assets);
-            for (uint32_t i = 0; i < harray_count(_assets); ++i)
-            {
-                auto &a = _assets[i];
-                AssetListEntry &l = state->asset_lists[state->num_assets++];
-                l.pretty_name = a.pretty_name;
-                l.asset_name = a.asset_name;
-                l.asset_id = add_asset(asset_descriptors, l.asset_name);
-            }
-        }
-
-        {
-            AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-            f.name = "Trees";
-            struct
-            {
-                const char *pretty_name;
-                const char *asset_name;
-            } _assets[] =
-            {
-                { "Large Oak Dark", "knp_Large_Oak_Dark_01" },
-                { "Large Oak Fall", "knp_Large_Oak_Fall_01" },
-                { "Large Oak Green", "knp_Large_Oak_Green_01" },
-            };
-            f.asset_start = state->num_assets;
-            f.count = harray_count(_assets);
-            for (uint32_t i = 0; i < harray_count(_assets); ++i)
-            {
-                auto &a = _assets[i];
-                AssetListEntry &l = state->asset_lists[state->num_assets++];
-                l.pretty_name = a.pretty_name;
-                l.asset_name = a.asset_name;
-                l.asset_id = add_asset(asset_descriptors, l.asset_name);
-            }
-        }
-
-        for (uint32_t i = 0; i < state->num_asset_classes; ++i)
-        {
-            state->asset_class_names[i] = state->asset_classes[i].name;
-        }
+        generate_noise_map(&state->noisemap, 5.0f);
 
         state->par_mesh = par_shapes_create_dodecahedron();
         par_shapes_unweld(state->par_mesh, true);
@@ -507,7 +553,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             par_mesh.npoints * sizeof(float) * 2,
         };
         mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
-        state->asset_ids.dynamic_mesh_test = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh);
+
+        auto &texture = state->test_texture;
+        texture.size = {512, 512};
+        for (uint32_t i = 0; i < 512 * 512; ++i)
+        {
+            state->noisemap_scratch[i] =
+            {
+                (uint8_t)(255.0f * state->noisemap.values[i]),
+                (uint8_t)(255.0f * state->noisemap.values[i]),
+                (uint8_t)(255.0f * state->noisemap.values[i]),
+                255,
+            };
+        }
+        texture.data = state->noisemap_scratch;
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -1321,7 +1380,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         (uint32_t)matrix_ids::mesh_view_matrix,
         state->plane_model_matrix,
         state->asset_ids.cube_mesh,
-        state->asset_ids.cube_texture,
+        state->asset_ids.dynamic_texture_test,
         1,
         -1,
         three_dee_mesh_flags,
@@ -1432,5 +1491,28 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
         ImGui::End();
+    }
+
+    static float rebuild_time = 0.0f;
+    rebuild_time += input->delta_t;
+    if (rebuild_time > 1.0f)
+    {
+        rebuild_time = 0;
+        float noise_scale = 5.0f + state->noisemap.values[487] * 10.f;
+        generate_noise_map(&state->noisemap, noise_scale);
+        auto &texture = state->test_texture;
+        texture.size = {512, 512};
+        for (uint32_t i = 0; i < 512 * 512; ++i)
+        {
+            state->noisemap_scratch[i] =
+            {
+                (uint8_t)(255.0f * state->noisemap.values[i]),
+                (uint8_t)(255.0f * state->noisemap.values[i]),
+                (uint8_t)(255.0f * state->noisemap.values[i]),
+                255,
+            };
+        }
+        texture.data = state->noisemap_scratch;
+        texture.reload = true;
     }
 }

@@ -291,12 +291,24 @@ asset_descriptor_type
     framebuffer,
     framebuffer_depth,
     dynamic_mesh,
+    dynamic_texture,
 };
 
 struct
 MeshDebugFlags
 {
     unsigned int initialized:1;
+};
+
+struct
+DynamicTextureDescriptor
+{
+    v2i size;
+    bool reload;
+    void *data;
+
+    bool _loaded;
+    uint32_t _texture;
 };
 
 struct
@@ -308,6 +320,7 @@ asset_descriptor
         const char *asset_name;
         void *ptr;
         FramebufferDescriptor *framebuffer;
+        DynamicTextureDescriptor *dynamic_texture_descriptor;
     };
     int32_t asset_id;
     uint32_t generation_id;

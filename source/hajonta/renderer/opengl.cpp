@@ -1501,6 +1501,29 @@ get_texture_id_from_asset_descriptor(
             {
                 hassert(!"Not a texture asset type");
             } break;
+            case asset_descriptor_type::dynamic_texture:
+            {
+                DynamicTextureDescriptor *d = descriptor->dynamic_texture_descriptor;
+                if (!d->_loaded)
+                {
+                    hglGenTextures(1, &d->_texture);
+                    d->reload = true;
+                    d->_loaded = true;
+                }
+                if (d->reload)
+                {
+                    d->reload = false;
+                    hglBindTexture(GL_TEXTURE_2D, d->_texture);
+                    hglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                        d->size.x, d->size.y, 0,
+                        GL_RGBA, GL_UNSIGNED_BYTE, d->data);
+                    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                }
+                *texture = d->_texture;
+            } break;
         }
 
     }
@@ -1523,6 +1546,7 @@ get_mesh_from_asset_descriptor(
         {
             case asset_descriptor_type::framebuffer:
             case asset_descriptor_type::framebuffer_depth:
+            case asset_descriptor_type::dynamic_texture:
             {
                 hassert(!"Not a mesh asset");
 
@@ -2228,14 +2252,14 @@ draw_mesh_from_asset(
         (GLuint)a_position_id,
         3, GL_FLOAT, GL_FALSE,
         0,
-        (void *)positions_offset
+        (void *)(uintptr_t)positions_offset
     );
 
     hglVertexAttribPointer(
         (GLuint)a_texcoord_id,
         2, GL_FLOAT, GL_FALSE,
         0,
-        (void *)uvs_offset
+        (void *)(uintptr_t)uvs_offset
     );
 
     if (a_normal_id >= 0)
@@ -2244,7 +2268,7 @@ draw_mesh_from_asset(
             (GLuint)a_normal_id,
             3, GL_FLOAT, GL_FALSE,
             0,
-            (void *)normals_offset
+            (void *)(uintptr_t)normals_offset
         );
     }
     if (a_bone_ids_id >= 0)
@@ -2256,7 +2280,7 @@ draw_mesh_from_asset(
                 (GLuint)a_bone_ids_id,
                 4, GL_INT,
                 0,
-                (void *)bone_ids_offset
+                (void *)(uintptr_t)bone_ids_offset
             );
         }
     }
@@ -2269,7 +2293,7 @@ draw_mesh_from_asset(
                 (GLuint)a_bone_weights_id,
                 4, GL_FLOAT, GL_FALSE,
                 0,
-                (void *)bone_weights_offset
+                (void *)(uintptr_t)bone_weights_offset
             );
         }
     }
