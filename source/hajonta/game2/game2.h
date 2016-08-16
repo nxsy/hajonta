@@ -253,6 +253,8 @@ debug_state
         int32_t octaves;
         float persistence;
         float lacunarity;
+        int32_t seed;
+        v2 offset;
     } perlin;
 };
 

@@ -31,6 +31,8 @@ game_state *_hidden_state;
 
 #include "hajonta/game2/two_dee.cpp"
 
+#include <random>
+
 static float h_pi = 3.14159265358979f;
 static float h_halfpi = h_pi / 2.0f;
 static float h_twopi = h_pi * 2.0f;
@@ -499,7 +501,7 @@ initialize(platform_memory *memory, game_state *state)
 }
 
 void
-generate_noise_map(array2p<float> map, float scale, uint32_t octaves, float persistence, float lacunarity)
+generate_noise_map(array2p<float> map, uint32_t seed, float scale, uint32_t octaves, float persistence, float lacunarity, v2 offset)
 {
     if (scale <= 0) {
         scale = 0.0001f;
@@ -508,9 +510,26 @@ generate_noise_map(array2p<float> map, float scale, uint32_t octaves, float pers
     float max_noise_height = FLT_MIN;
     float min_noise_height = FLT_MAX;
 
-    for (int32_t y = 0; y < map.height; y++)
+    std::mt19937 prng;
+    prng.seed(seed);
+    std::uniform_int_distribution<int32_t> distribution(-100000, 100000);
+
+    hassert(octaves <= 10);
+    v2 offsets[10];
+    for (uint32_t i = 0; i < octaves; ++i)
     {
-        for (int32_t x = 0; x < map.width; x++)
+        offsets[i] = {
+            distribution(prng) + offset.x,
+            distribution(prng) + offset.y
+        };
+    }
+
+    float half_width = map.width / 2.0f;
+    float half_height = map.height / 2.0f;
+
+    for (int32_t y = 0; y < map.height; ++y)
+    {
+        for (int32_t x = 0; x < map.width; ++x)
         {
             float amplitude = 1.0f;
             float frequency = 1.0f;
@@ -518,8 +537,8 @@ generate_noise_map(array2p<float> map, float scale, uint32_t octaves, float pers
 
             for (uint32_t i = 0; i < octaves; ++i)
             {
-                float sample_x = (float)x / scale * frequency;
-                float sample_y = (float)y / scale * frequency;
+                float sample_x = (x - half_width) / scale * frequency + offsets[i].x;
+                float sample_y = (y - half_height) / scale * frequency + offsets[i].y;
 
                 float perlin_value = stb_perlin_noise3(sample_x, sample_y, 0, 256, 256, 256) * 2.0f - 1.0f;
                 height += perlin_value * amplitude;
@@ -654,16 +673,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         if (perlin.show)
         {
             ImGui::Begin("Perlin", &perlin.show);
-            rebuild |= ImGui::DragFloat("Scale", &perlin.scale, 0.001f, 0.001f, 1000.0f, "%0.3f");
+            rebuild |= ImGui::DragInt("Seed", &perlin.seed, 1, 0, INT32_MAX);
+            rebuild |= ImGui::DragFloat("Scale", &perlin.scale, 0.01f, 0.001f, 1000.0f, "%0.3f");
             rebuild |= ImGui::DragInt("Octaves", &perlin.octaves, 1.0f, 1, 10);
             rebuild |= ImGui::DragFloat("Persistence", &perlin.persistence, 0.001f, 0.001f, 1000.0f, "%0.3f");
             rebuild |= ImGui::DragFloat("Lacunarity", &perlin.lacunarity, 0.001f, 0.001f, 1000.0f, "%0.3f");
+            rebuild |= ImGui::DragFloat2("Offset", &perlin.offset.x, 0.01f, -100.0f, 100.0f, "%0.2f");
             ImGui::End();
         }
         if (rebuild)
         {
             rebuild_time = 0;
-            generate_noise_map(state->noisemap.array2p(), perlin.scale, (uint32_t)perlin.octaves, perlin.persistence, perlin.lacunarity);
+            generate_noise_map(state->noisemap.array2p(), (uint32_t)perlin.seed, perlin.scale, (uint32_t)perlin.octaves, perlin.persistence, perlin.lacunarity, perlin.offset);
             noise_map_to_texture(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture);
         }
 
