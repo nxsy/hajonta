@@ -148,6 +148,7 @@ show_debug_main_menu(game_state *state)
             ImGui::MenuItem("Show textures", "", &state->debug.show_textures);
             ImGui::MenuItem("Show camera", "", &state->debug.show_camera);
             ImGui::MenuItem("Show nature pack", "", &state->debug.show_nature_pack);
+            ImGui::MenuItem("Show perlin", "", &state->debug.perlin.show);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -497,23 +498,46 @@ initialize(platform_memory *memory, game_state *state)
     state->asset_ids.dynamic_texture_test = add_dynamic_texture_asset(asset_descriptors, &state->test_texture);
 }
 
-template<uint32_t H, uint32_t W>
 void
-generate_noise_map(array2<H,W,float> *map, float scale)
+generate_noise_map(array2p<float> map, float scale)
 {
     if (scale <= 0) {
         scale = 0.0001f;
     }
 
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
+    for (int32_t y = 0; y < map.height; y++) {
+        for (int32_t x = 0; x < map.width; x++) {
             float sample_x = (float)x / scale;
             float sample_y = (float)y / scale;
 
             float perlin_value = stb_perlin_noise3(sample_x, sample_y, 100.0f, 256, 256, 256);
-            map->set({x, y}, perlin_value);
+            map.set({x, y}, perlin_value);
         }
     }
+}
+
+void
+noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDescriptor *texture)
+{
+    texture->size = {map.width, map.height};
+    for (int32_t y = 0; y < map.height; ++y)
+    {
+        for (int32_t x = 0; x < map.width; ++x)
+        {
+            uint8_t gray = (uint8_t)(255.0f * map.get({x,y}));
+            scratch.set(
+                {x,y},
+                {
+                    gray,
+                    gray,
+                    gray,
+                    255,
+                }
+            );
+        }
+    }
+    texture->data = scratch.values;
+    texture->reload = true;
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -525,8 +549,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         memory->initialized = 1;
         initialize(memory, state);
-
-        generate_noise_map(&state->noisemap, 5.0f);
 
         state->par_mesh = par_shapes_create_dodecahedron();
         par_shapes_unweld(state->par_mesh, true);
@@ -553,20 +575,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             par_mesh.npoints * sizeof(float) * 2,
         };
         mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
-
-        auto &texture = state->test_texture;
-        texture.size = {512, 512};
-        for (uint32_t i = 0; i < 512 * 512; ++i)
-        {
-            state->noisemap_scratch[i] =
-            {
-                (uint8_t)(255.0f * state->noisemap.values[i]),
-                (uint8_t)(255.0f * state->noisemap.values[i]),
-                (uint8_t)(255.0f * state->noisemap.values[i]),
-                255,
-            };
-        }
-        texture.data = state->noisemap_scratch;
+        auto &perlin = state->debug.perlin;
+        perlin.scale = 5.0f;
+        perlin.show = true;
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -580,6 +591,24 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     show_debug_main_menu(state);
     show_pq_debug(&state->debug.priority_queue);
+
+    {
+        static float rebuild_time = 1.0f;
+        rebuild_time += input->delta_t;
+        bool rebuild = rebuild_time > 1.0f;
+        auto &perlin = state->debug.perlin;
+        if (perlin.show) {
+            ImGui::Begin("Perlin", &perlin.show);
+            rebuild |= ImGui::DragFloat("Scale", &perlin.scale, 0.001f, 0.001f, 1000.0f, "%0.3f");
+            ImGui::End();
+        }
+        if (rebuild)
+        {
+            rebuild_time = 0;
+            generate_noise_map(state->noisemap.array2p(), perlin.scale);
+            noise_map_to_texture(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture);
+        }
+    }
 
     {
         auto &light = state->lights[(uint32_t)LightIds::sun];
@@ -1491,28 +1520,5 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
         ImGui::End();
-    }
-
-    static float rebuild_time = 0.0f;
-    rebuild_time += input->delta_t;
-    if (rebuild_time > 1.0f)
-    {
-        rebuild_time = 0;
-        float noise_scale = 5.0f + state->noisemap.values[487] * 10.f;
-        generate_noise_map(&state->noisemap, noise_scale);
-        auto &texture = state->test_texture;
-        texture.size = {512, 512};
-        for (uint32_t i = 0; i < 512 * 512; ++i)
-        {
-            state->noisemap_scratch[i] =
-            {
-                (uint8_t)(255.0f * state->noisemap.values[i]),
-                (uint8_t)(255.0f * state->noisemap.values[i]),
-                (uint8_t)(255.0f * state->noisemap.values[i]),
-                255,
-            };
-        }
-        texture.data = state->noisemap_scratch;
-        texture.reload = true;
     }
 }

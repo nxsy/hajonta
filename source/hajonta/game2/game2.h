@@ -117,6 +117,19 @@ entity_movement
     v2 velocity;
 };
 
+template<typename T>
+struct
+array2p
+{
+    T *values;
+    int32_t height;
+    int32_t width;
+
+    void setall(T value);
+    void set(v2i location, T value);
+    T get(v2i location);
+};
+
 template<uint32_t H, uint32_t W, typename T>
 struct
 array2
@@ -126,13 +139,31 @@ array2
     void set(v2i location, T value);
     T get(v2i location);
     T get(int32_t x, int32_t y);
+    array2p<T> array2p();
 };
+
+template<uint32_t H, uint32_t W, typename T>
+array2p<T>
+array2<H,W,T>::array2p()
+{
+    return { (T *)values, H, W };
+}
 
 template<uint32_t H, uint32_t W, typename T>
 void
 array2<H,W,T>::setall(T value)
 {
     for (uint32_t x = 0; x < H * W; ++x)
+    {
+        values[x] = value;
+    }
+}
+
+template<typename T>
+void
+array2p<T>::setall(T value)
+{
+    for (uint32_t x = 0; x < height * width; ++x)
     {
         values[x] = value;
     }
@@ -145,11 +176,25 @@ array2<H,W,T>::set(v2i location, T value)
     values[location.y * W + location.x] = value;
 }
 
+template<typename T>
+void
+array2p<T>::set(v2i location, T value)
+{
+    values[location.y * width + location.x] = value;
+}
+
 template<uint32_t H, uint32_t W, typename T>
 T
 array2<H,W,T>::get(v2i location)
 {
     return values[location.y * W + location.x];
+}
+
+template<typename T>
+T
+array2p<T>::get(v2i location)
+{
+    return values[location.y * width + location.x];
 }
 
 template<uint32_t H, uint32_t W, typename T>
@@ -201,6 +246,11 @@ debug_state
     {
         int32_t asset_num;
     } nature;
+    struct
+    {
+        bool show;
+        float scale;
+    } perlin;
 };
 
 enum struct
@@ -488,6 +538,6 @@ struct game_state
     DynamicTextureDescriptor test_texture;
 
     array2<512, 512, float> noisemap;
-    v4b noisemap_scratch[512 * 512];
+    array2<512, 512, v4b> noisemap_scratch;
 };
 
