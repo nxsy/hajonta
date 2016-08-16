@@ -499,19 +499,54 @@ initialize(platform_memory *memory, game_state *state)
 }
 
 void
-generate_noise_map(array2p<float> map, float scale)
+generate_noise_map(array2p<float> map, float scale, uint32_t octaves, float persistence, float lacunarity)
 {
     if (scale <= 0) {
         scale = 0.0001f;
     }
 
-    for (int32_t y = 0; y < map.height; y++) {
-        for (int32_t x = 0; x < map.width; x++) {
-            float sample_x = (float)x / scale;
-            float sample_y = (float)y / scale;
+    float max_noise_height = FLT_MIN;
+    float min_noise_height = FLT_MAX;
 
-            float perlin_value = stb_perlin_noise3(sample_x, sample_y, 100.0f, 256, 256, 256);
-            map.set({x, y}, perlin_value);
+    for (int32_t y = 0; y < map.height; y++)
+    {
+        for (int32_t x = 0; x < map.width; x++)
+        {
+            float amplitude = 1.0f;
+            float frequency = 1.0f;
+            float height = 0.0f;
+
+            for (uint32_t i = 0; i < octaves; ++i)
+            {
+                float sample_x = (float)x / scale * frequency;
+                float sample_y = (float)y / scale * frequency;
+
+                float perlin_value = stb_perlin_noise3(sample_x, sample_y, 0, 256, 256, 256) * 2.0f - 1.0f;
+                height += perlin_value * amplitude;
+
+                amplitude *= persistence;
+                frequency *= lacunarity;
+            }
+            if (height > max_noise_height)
+            {
+                max_noise_height = height;
+            }
+            if (height < min_noise_height)
+            {
+                min_noise_height = height;
+            }
+            map.set({x, y}, height);
+        }
+    }
+
+    for (int32_t y = 0; y < map.height; y++)
+    {
+        for (int32_t x = 0; x < map.width; x++)
+        {
+            float value = map.get({x, y});
+            value -= min_noise_height;
+            value /= (max_noise_height - min_noise_height);
+            map.set({x,y}, value);
         }
     }
 }
@@ -576,8 +611,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         };
         mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
         auto &perlin = state->debug.perlin;
-        perlin.scale = 5.0f;
+        perlin.scale = 27.6f;
         perlin.show = true;
+        perlin.octaves = 4;
+        perlin.persistence = 0.5f;
+        perlin.lacunarity = 2.0f;
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -597,16 +635,47 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         rebuild_time += input->delta_t;
         bool rebuild = rebuild_time > 1.0f;
         auto &perlin = state->debug.perlin;
-        if (perlin.show) {
+        if (perlin.scale <= 0.0f)
+        {
+            perlin.scale = 5.0f;
+        }
+        if (perlin.octaves <= 0)
+        {
+            perlin.octaves = 1;
+        }
+        if (perlin.persistence <= 0.0f)
+        {
+            perlin.persistence = 0.5f;
+        }
+        if (perlin.lacunarity <= 0.0f)
+        {
+            perlin.lacunarity = 2.0f;
+        }
+        if (perlin.show)
+        {
             ImGui::Begin("Perlin", &perlin.show);
             rebuild |= ImGui::DragFloat("Scale", &perlin.scale, 0.001f, 0.001f, 1000.0f, "%0.3f");
+            rebuild |= ImGui::DragInt("Octaves", &perlin.octaves, 1.0f, 1, 10);
+            rebuild |= ImGui::DragFloat("Persistence", &perlin.persistence, 0.001f, 0.001f, 1000.0f, "%0.3f");
+            rebuild |= ImGui::DragFloat("Lacunarity", &perlin.lacunarity, 0.001f, 0.001f, 1000.0f, "%0.3f");
             ImGui::End();
         }
         if (rebuild)
         {
             rebuild_time = 0;
-            generate_noise_map(state->noisemap.array2p(), perlin.scale);
+            generate_noise_map(state->noisemap.array2p(), perlin.scale, (uint32_t)perlin.octaves, perlin.persistence, perlin.lacunarity);
             noise_map_to_texture(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture);
+        }
+
+        if (perlin.show)
+        {
+            ImGui::Begin("Perlin", &perlin.show);
+            ImGui::Image(
+                (void *)(intptr_t)state->test_texture._texture,
+                {512, 512},
+                {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+            );
+            ImGui::End();
         }
     }
 

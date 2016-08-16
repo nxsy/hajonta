@@ -250,6 +250,9 @@ debug_state
     {
         bool show;
         float scale;
+        int32_t octaves;
+        float persistence;
+        float lacunarity;
     } perlin;
 };
 
@@ -537,7 +540,7 @@ struct game_state
     Mesh test_mesh;
     DynamicTextureDescriptor test_texture;
 
-    array2<512, 512, float> noisemap;
-    array2<512, 512, v4b> noisemap_scratch;
+    array2<256, 256, float> noisemap;
+    array2<256, 256, v4b> noisemap_scratch;
 };
 
