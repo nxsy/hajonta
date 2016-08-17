@@ -498,6 +498,93 @@ initialize(platform_memory *memory, game_state *state)
 
     state->asset_ids.dynamic_mesh_test = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh);
     state->asset_ids.dynamic_texture_test = add_dynamic_texture_asset(asset_descriptors, &state->test_texture);
+
+    for (uint32_t i = 0; i < (uint32_t)TerrainType::MAX + 1; ++i)
+    {
+        TerrainTypeInfo *ti = state->landmass.terrains + i;
+        ti->type = (TerrainType)i;
+        switch(ti->type)
+        {
+            case TerrainType::deep_water:
+            {
+                ti->name = "deep water";
+                ti->height = 0.3f;
+                ti->color = {0, 0, 0.8f, 1.0f};
+            } break;
+            case TerrainType::water:
+            {
+                ti->name = "water";
+                ti->height = 0.4f;
+                ti->color = {0.1f, 0.1f, 0.9f, 1.0f};
+            } break;
+            case TerrainType::sand:
+            {
+                ti->name = "sand";
+                ti->height = 0.45f;
+                ti->color = {0.8f, 0.8f, 0.0f, 1.0f};
+            } break;
+            case TerrainType::grass:
+            {
+                ti->name = "grass";
+                ti->height = 0.55f;
+                ti->color = {0.1f, 0.8f, 0.0f, 1.0f};
+            } break;
+            case TerrainType::grass_2:
+            {
+                ti->name = "grass 2";
+                ti->height = 0.6f;
+                ti->color = {0.0f, 0.8f, 0.0f, 1.0f};
+            } break;
+            case TerrainType::rock:
+            {
+                ti->name = "rock";
+                ti->height = 0.7f;
+                ti->color = {0.65f, 0.25f, 0.25f, 1.0f};
+            } break;
+            case TerrainType::rock_2:
+            {
+                ti->name = "rock 2";
+                ti->height = 0.9f;
+                ti->color = {0.5f, 0.2f, 0.2f, 1.0f};
+            } break;
+            case TerrainType::snow:
+            {
+                ti->name = "snow";
+                ti->height = 1.0f;
+                ti->color = {0.9f, 0.9f, 0.9f, 1.0f};
+            } break;
+        }
+    }
+}
+
+void
+generate_terrain_mesh(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *mesh, float height_multiplier)
+{
+    v2 top_left = {
+        -(map.width - 1) / 2.0f,
+        (map.height - 1) / 2.0f,
+    };
+
+    int32_t vertex_index = 0;
+    for (int32_t y = 0; y < map.height; ++y)
+    {
+        for (int32_t x = 0; x < map.width; ++x)
+        {
+            mesh_data_p.vertices.values[vertex_index] = {top_left.x + x, map.get({x,y}) * height_multiplier, top_left.y - y};
+            mesh_data_p.normals.values[vertex_index] = {0, 1, 0};
+            mesh_data_p.uvs.values[vertex_index] = {x/(float)map.width, y/(float)map.height};
+
+            if (x < map.width - 1 && y < map.height -1)
+            {
+                 mesh_data_p.add_triangle({vertex_index, vertex_index + map.width + 1, vertex_index + map.width});
+                 mesh_data_p.add_triangle({vertex_index + map.width + 1, vertex_index, vertex_index + 1});
+            }
+
+            ++vertex_index;
+        }
+    }
+
+    mesh_data_p.create_mesh(mesh);
 }
 
 void
@@ -570,24 +657,61 @@ generate_noise_map(array2p<float> map, uint32_t seed, float scale, uint32_t octa
     }
 }
 
+enum struct
+TerrainMode
+{
+    gray,
+    color,
+};
+
+template<TerrainMode mode>
 void
-noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDescriptor *texture)
+noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDescriptor *texture, TerrainTypeInfo *terrains)
 {
     texture->size = {map.width, map.height};
     for (int32_t y = 0; y < map.height; ++y)
     {
         for (int32_t x = 0; x < map.width; ++x)
         {
-            uint8_t gray = (uint8_t)(255.0f * map.get({x,y}));
-            scratch.set(
-                {x,y},
+            switch(mode)
+            {
+                case TerrainMode::gray:
                 {
-                    gray,
-                    gray,
-                    gray,
-                    255,
-                }
-            );
+                    uint8_t gray = (uint8_t)(255.0f * map.get({x,y}));
+                    scratch.set(
+                        {x,y},
+                        {
+                            gray,
+                            gray,
+                            gray,
+                            255,
+                        }
+                    );
+                } break;
+                case TerrainMode::color:
+                {
+                    TerrainTypeInfo *terrain = terrains;
+                    float height = map.get({x,y});
+                    for (uint32_t i = 0; i < (uint32_t)TerrainType::MAX + 1; ++i)
+                    {
+                        TerrainTypeInfo *ti = terrains + i;
+                        if (height <= ti->height)
+                        {
+                            terrain = ti;
+                            break;
+                        }
+                    }
+                    scratch.set(
+                        {x,y},
+                        {
+                            (uint8_t)(255.0f * terrain->color.x),
+                            (uint8_t)(255.0f * terrain->color.y),
+                            (uint8_t)(255.0f * terrain->color.z),
+                            255,
+                        }
+                    );
+                } break;
+            }
         }
     }
     texture->data = scratch.values;
@@ -635,6 +759,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.octaves = 4;
         perlin.persistence = 0.5f;
         perlin.lacunarity = 2.0f;
+        perlin.height_multiplier = 10.0f;
     }
 
     state->frame_state.delta_t = input->delta_t;
@@ -679,13 +804,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             rebuild |= ImGui::DragFloat("Persistence", &perlin.persistence, 0.001f, 0.001f, 1000.0f, "%0.3f");
             rebuild |= ImGui::DragFloat("Lacunarity", &perlin.lacunarity, 0.001f, 0.001f, 1000.0f, "%0.3f");
             rebuild |= ImGui::DragFloat2("Offset", &perlin.offset.x, 0.01f, -100.0f, 100.0f, "%0.2f");
+            rebuild |= ImGui::DragFloat("Height Multiplier", &perlin.height_multiplier, 0.01f, 0.01f, 1000.0f, "%0.2f");
             ImGui::End();
         }
         if (rebuild)
         {
             rebuild_time = 0;
             generate_noise_map(state->noisemap.array2p(), (uint32_t)perlin.seed, perlin.scale, (uint32_t)perlin.octaves, perlin.persistence, perlin.lacunarity, perlin.offset);
-            noise_map_to_texture(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture);
+            noise_map_to_texture<TerrainMode::color>(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture, state->landmass.terrains);
+            generate_terrain_mesh(state->noisemap.array2p(), state->terrain_mesh_data.mesh_data_p(), &state->test_mesh, perlin.height_multiplier);
         }
 
         if (perlin.show)
@@ -798,9 +925,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     rotate = m4identity();
 
     float _scale = 500.0f;
-    translate.cols[3] = {0, -0.5f, 0, 1.0f};
+    translate.cols[3] = {0, -500.0f, 0, 1.0f};
     scale.cols[0].E[0] = _scale;
-    scale.cols[1].E[1] = 0.5f;
+    scale.cols[1].E[1] = _scale;
     scale.cols[2].E[2] = _scale;
     state->plane_model_matrix = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
 
@@ -810,7 +937,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     scale.cols[1].E[1] = 1.0f;
     scale.cols[2].E[2] = 1.0f;
     rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
-    translate.cols[3] = {0.5f, 2, 0.5f, 1.0f};
+    array2p<float> noise2p = state->noisemap.array2p();
+    v2i middle = {(int32_t)(noise2p.width / 2.0f), (int32_t)(noise2p.height / 2.0f)};
+    float height = noise2p.get(middle) * state->debug.perlin.height_multiplier;
+    translate.cols[3] = {0.5f, height, 0.5f, 1.0f};
     state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     local_translate = m4identity();
@@ -825,6 +955,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     translate = m4translate({0.5f,0.5f,0.5f});
     scale = m4identity();
     state->np_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+    translate = m4identity();
+    state->dynamic_mesh_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     demo_data demoes[] = {
         {
@@ -1468,8 +1600,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     for (uint32_t i = 0; i < foo_count; ++i)
     {
-        auto &&asset_and_loc = foo[i];
+        //auto &&asset_and_loc = foo[i];
         //m4 model = m4mul(asset_and_loc.transform, state->np_model_matrix);
+        /*
         PushMeshFromAsset(&state->three_dee_renderer.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
@@ -1492,8 +1625,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             shadowmap_mesh_flags,
             ShaderType::variance_shadow_map
         );
+        */
     }
 
+    /*
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::mesh_view_matrix,
@@ -1516,13 +1651,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
+    */
 
     PushMeshFromAsset(&state->three_dee_renderer.list,
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::mesh_view_matrix,
-        state->tree_model_matrix,
+        state->dynamic_mesh_model_matrix,
         state->asset_ids.dynamic_mesh_test,
-        -1,
+        state->asset_ids.dynamic_texture_test,
         1,
         -1,
         three_dee_mesh_flags,
@@ -1532,7 +1668,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     PushMeshFromAsset(&state->shadowmap_renderer.list,
         (uint32_t)matrix_ids::light_projection_matrix,
         -1,
-        state->tree_model_matrix,
+        state->dynamic_mesh_model_matrix,
         state->asset_ids.dynamic_mesh_test,
         -1,
         0,

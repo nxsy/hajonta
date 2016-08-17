@@ -205,6 +205,76 @@ array2<H,W,T>::get(int32_t x, int32_t y)
 }
 
 struct
+TerrainMeshDataP
+{
+    array2p<v3> vertices;
+    array2p<v3> normals;
+    array2p<v2> uvs;
+    v3i *triangles;
+    uint32_t *triangle_index;
+
+    void add_triangle(v3i triangle)
+    {
+        triangles[*triangle_index] = triangle;
+        *triangle_index += 1;
+    };
+
+    void
+    create_mesh(Mesh *mesh)
+    {
+        int32_t vertex_count = vertices.width * vertices.height;
+
+        mesh->vertices = {
+            (void *)vertices.values,
+            vertex_count * sizeof(v3),
+        };
+        mesh->indices = {
+            (void *)triangles,
+            *triangle_index * sizeof(uint32_t) * 3,
+        };
+        mesh->normals = {
+            (void *)normals.values,
+            vertex_count * sizeof(v3),
+        };
+        mesh->uvs = {
+            (void *)uvs.values,
+            vertex_count * sizeof(v2),
+        };
+        mesh->num_triangles = *triangle_index;
+        mesh->reload = true;
+    }
+};
+
+template<uint32_t W, uint32_t H>
+struct
+TerrainMeshData
+{
+    array2<W, H, v3> vertices;
+    array2<W, H, v3> normals;
+    array2<W, H, v2> uvs;
+    v3i triangles[(W - 1) * (H - 1) * 2];
+    uint32_t triangle_index;
+
+    void add_triangle(v3i triangle)
+    {
+        triangles[triangle_index++] = triangle;
+    };
+
+    TerrainMeshDataP
+    mesh_data_p()
+    {
+        return {
+            vertices.array2p(),
+            normals.array2p(),
+            uvs.array2p(),
+            (v3i *)triangles,
+            &triangle_index,
+        };
+    }
+};
+
+
+struct
 astar_data
 {
     v2i start_tile;
@@ -255,6 +325,7 @@ debug_state
         float lacunarity;
         int32_t seed;
         v2 offset;
+        float height_multiplier;
     } perlin;
 };
 
@@ -458,6 +529,36 @@ CameraState
     m4 projection;
 };
 
+enum struct
+TerrainType
+{
+    deep_water,
+    water,
+    sand,
+    grass,
+    grass_2,
+    rock,
+    rock_2,
+    snow,
+
+    MAX = snow,
+};
+
+struct
+TerrainTypeInfo
+{
+    TerrainType type;
+    const char *name;
+    float height;
+    v4 color;
+};
+
+struct
+Landmass
+{
+    TerrainTypeInfo terrains[TerrainType::MAX];
+};
+
 struct game_state
 {
     bool initialized;
@@ -486,6 +587,7 @@ struct game_state
     m4 cube_bounds_model_matrix;
     m4 plane_model_matrix;
     m4 tree_model_matrix;
+    m4 dynamic_mesh_model_matrix;
 
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
     ArmatureDescriptor armatures[(uint32_t)ArmatureIds::MAX + 1];
@@ -542,7 +644,10 @@ struct game_state
     Mesh test_mesh;
     DynamicTextureDescriptor test_texture;
 
-    array2<256, 256, float> noisemap;
-    array2<256, 256, v4b> noisemap_scratch;
+    array2<32, 32, float> noisemap;
+    TerrainMeshData<32, 32> terrain_mesh_data;
+    array2<32, 32, v4b> noisemap_scratch;
+
+    Landmass landmass;
 };
 
