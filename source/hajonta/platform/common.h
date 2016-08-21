@@ -362,7 +362,7 @@ DebugEvent
     DebugType type;
 
     uint64_t tsc_cycles;
-    char *guid;
+    const char *guid;
     uint32_t thread_id;
 
     union
@@ -376,7 +376,7 @@ DebugEvent
 struct
 DebugTable
 {
-    std::atomic<uint32_t> event_index_count;
+    std::atomic<int32_t> event_index_count;
     DebugEvent events[2][65536];
 };
 
@@ -407,7 +407,13 @@ uint32_t _h_event_index_count = std::atomic_fetch_add(&GlobalDebugTable->event_i
 #define TIMED_BLOCK__(_guid, _counter, ...) timed_block TimedBlock_##_counter(_guid, ## __VA_ARGS__)
 #define TIMED_BLOCK_(_guid, _counter, ...) TIMED_BLOCK__(_guid, _counter, ## __VA_ARGS__)
 #define TIMED_BLOCK(Name, ...) TIMED_BLOCK_(DEBUG_NAME(Name), __COUNTER__, ## __VA_ARGS__)
+
+#ifdef _MSC_VER
 #define TIMED_FUNCTION(...) TIMED_BLOCK_(DEBUG_NAME(__FUNCTION__), ## __VA_ARGS__)
+#else
+#define TIMED_FUNCTION_(_func, _counter, ...) static char _h_guid_##_counter[255]; static bool _h_initialized_##_counter = false; if (!_h_initialized_##_counter) { snprintf(_h_guid_##_counter, 255, "%s|%d|%d|%s", __FILE__, __LINE__, _counter, __func__); _h_initialized_##_counter =true; } TIMED_BLOCK_(_h_guid_##_counter, _counter)
+#define TIMED_FUNCTION(...) TIMED_FUNCTION_(__func__, __COUNTER__)
+#endif
 
 #define BEGIN_BLOCK_(_guid) {RecordDebugEvent(DebugType::BeginBlock, _guid);}
 #define END_BLOCK_(_guid) {RecordDebugEvent(DebugType::EndBlock, _guid);}
@@ -417,7 +423,7 @@ uint32_t _h_event_index_count = std::atomic_fetch_add(&GlobalDebugTable->event_i
 
 struct timed_block
 {
-    timed_block(char *guid)
+    timed_block(const char *guid)
     {
         BEGIN_BLOCK_(guid);
     }

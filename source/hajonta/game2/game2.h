@@ -637,7 +637,7 @@ TerrainTypeInfo
 struct
 Landmass
 {
-    TerrainTypeInfo terrains[TerrainType::MAX];
+    TerrainTypeInfo terrains[(uint32_t)TerrainType::MAX];
 };
 
 struct game_state

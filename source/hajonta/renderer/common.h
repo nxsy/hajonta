@@ -363,7 +363,7 @@ render_entry_type_QUADS_lookup
 struct
 render_entry_list
 {
-    char *name;
+    const char *name;
     int32_t slot;
     uint32_t depends_on_slots;
 

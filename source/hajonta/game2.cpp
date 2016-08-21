@@ -1805,7 +1805,7 @@ fnv1a_32(uint8_t *buf, uint32_t buf_size)
 TINYFNV1A(10)
 
 DebugProfileEventLocation *
-find_register_event_location(DebugProfileEventLocationHash *hash, char *guid)
+find_register_event_location(DebugProfileEventLocationHash *hash, const char *guid)
 {
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -2017,11 +2017,11 @@ extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
 {
     TIMED_FUNCTION();
     game_state *state = (game_state *)memory->memory;
-    uint32_t index_count = GlobalDebugTable->event_index_count;
+    uint32_t index_count = (uint32_t)GlobalDebugTable->event_index_count;
     uint32_t replacement_index_count = ~(index_count >> 31) << 31;
     index_count = std::atomic_exchange(
         &GlobalDebugTable->event_index_count,
-        replacement_index_count
+        (int32_t)replacement_index_count
     );
     uint32_t index = index_count >> 31;
     index_count &= 0x7FFFFFFF;
