@@ -34,37 +34,14 @@ static hajonta_thread_context *_ctx;
 static float h_pi = 3.14159265358979f;
 static float h_halfpi = h_pi / 2.0f;
 
+DebugTable *GlobalDebugTable;
+
 inline void
 hglErrorAssert(bool skip = false)
 {
-    /*
-    uint32_t remaining_messages;
-    do
-    {
-
-        char message_log[4096];
-        GLenum source;
-        GLenum type;
-        uint32_t id;
-        GLenum severity;
-        GLsizei length;
-        remaining_messages = hglGetDebugMessageLog(1,
-            sizeof(message_log) ,
-            &source,
-            &type,
-            &id,
-            &severity,
-            &length,
-            message_log);
-
-        if (remaining_messages)
-        {
-            _platform_memory->platform_debug_message(_ctx, message_log);
-
-        }
-    } while (remaining_messages);
-    */
-
+#if 0
+    return;
+#else
     GLenum error = hglGetError();
     if (skip)
     {
@@ -113,6 +90,7 @@ hglErrorAssert(bool skip = false)
             hassert(!"Unknown error");
         } break;
     }
+#endif
 }
 
 #if defined(_MSC_VER)
@@ -1012,6 +990,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
 {
     static std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
 
+    _platform_get_thread_id = memory->platform_get_thread_id;
+    GlobalDebugTable = memory->debug_table;
+    TIMED_FUNCTION();
+
     /*
 #if !defined(NEEDS_EGL) && !defined(__APPLE__)
     if (!glCreateProgram)
@@ -1022,7 +1004,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
     memory->render_lists_count = 0;
     renderer_state *state = &_GlobalRendererState;
 
-    memory->imgui_state = ImGui::GetInternalState();
+    memory->imgui_state = ImGui::GetCurrentContext();
     if (!_GlobalRendererState.initialized)
     {
         glsetup_counters = &state->glsetup_counters;
@@ -1265,6 +1247,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
 
 void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 {
+    TIMED_FUNCTION();
     // Setup render state: alpha-blending enabled, no face culling, no depth testing, scissor enabled
     hglEnable(GL_BLEND);
     hglBlendEquation(GL_FUNC_ADD);
@@ -1450,6 +1433,7 @@ get_texture_id_from_asset_descriptor(
     v2 *st0,
     v2 *st1)
 {
+    TIMED_FUNCTION();
     *texture = state->white_texture;
     *st0 = {0, 0};
     *st1 = {1, 1};
@@ -1537,6 +1521,7 @@ get_mesh_from_asset_descriptor(
     asset_descriptor *descriptors,
     int32_t asset_descriptor_id)
 {
+    TIMED_FUNCTION();
     Mesh *mesh = 0;
     bool result = false;
     if (asset_descriptor_id != -1)
@@ -1702,6 +1687,7 @@ draw_mesh_from_asset(
     render_entry_type_mesh_from_asset *mesh_from_asset
 )
 {
+    TIMED_FUNCTION();
     hglErrorAssert();
     hglDisable(GL_BLEND);
     hglEnable(GL_DEPTH_TEST);
@@ -1746,9 +1732,12 @@ draw_mesh_from_asset(
     int32_t end_face = max_faces;
 
     m4 bones[100];
-    for (uint32_t i = 0; i < harray_count(bones); ++i)
     {
-        bones[i] = m4identity();
+        TIMED_BLOCK("bones reset");
+        for (uint32_t i = 0; i < harray_count(bones); ++i)
+        {
+            bones[i] = m4identity();
+        }
     }
 
     ArmatureDescriptor *armature = 0;
@@ -1762,6 +1751,7 @@ draw_mesh_from_asset(
 
     if (armature)
     {
+        TIMED_BLOCK("armature playback");
         ImGui::Begin("Animation");
         ImGui::Checkbox("Animation proceed", &proceed_time);
         ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
@@ -1823,6 +1813,7 @@ draw_mesh_from_asset(
 
     if (mesh->num_bones)
     {
+        TIMED_BLOCK("skinning");
         int32_t first_bone = 0;
         for (uint32_t i = 0; i < mesh->num_bones; ++i)
         {
@@ -2468,12 +2459,16 @@ draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *s
 
 extern "C" RENDERER_RENDER(renderer_render)
 {
+    {
+        TIMED_BLOCK("Wait for vsync");
+        hglErrorAssert(true);
+    }
+    TIMED_FUNCTION();
     _platform_memory = memory;
     _ctx = ctx;
 
     ImGuiIO& io = ImGui::GetIO();
     generations_updated_this_frame = 0;
-    hglErrorAssert(true);
 
     renderer_state *state = &_GlobalRendererState;
     hassert(memory->render_lists_count > 0);
@@ -2484,34 +2479,37 @@ extern "C" RENDERER_RENDER(renderer_render)
     uint32_t render_lists_to_process[10];
     uint32_t render_lists_to_process_count = 0;
 
-    while(render_lists_to_process_count < memory->render_lists_count)
     {
-        for (uint32_t i = 0; i < memory->render_lists_count; ++i)
+        TIMED_BLOCK("Render list sorting");
+        while(render_lists_to_process_count < memory->render_lists_count)
         {
-            render_entry_list *render_list = memory->render_lists[i];
-            if (!render_list->depends_on_slots)
+            for (uint32_t i = 0; i < memory->render_lists_count; ++i)
             {
-                bool handled = false;
-                for (uint32_t j = 0; j < render_lists_to_process_count; ++j)
+                render_entry_list *render_list = memory->render_lists[i];
+                if (!render_list->depends_on_slots)
                 {
-                    if (render_lists_to_process[j] == i)
+                    bool handled = false;
+                    for (uint32_t j = 0; j < render_lists_to_process_count; ++j)
                     {
-                        handled = true;
-                        break;
-                    }
+                        if (render_lists_to_process[j] == i)
+                        {
+                            handled = true;
+                            break;
+                        }
 
-                }
-                if (handled)
-                {
-                    continue;
-                }
-                hassert(render_lists_to_process_count < harray_count(render_lists_to_process));
-                render_lists_to_process[render_lists_to_process_count++] = i;
-                for (uint32_t j = 0; j < memory->render_lists_count; ++j)
-                {
-                    uint32_t inverse = (uint32_t)~(1 << i);
-                    render_entry_list *render_list_to_undepend = memory->render_lists[j];
-                    render_list_to_undepend->depends_on_slots &= inverse;
+                    }
+                    if (handled)
+                    {
+                        continue;
+                    }
+                    hassert(render_lists_to_process_count < harray_count(render_lists_to_process));
+                    render_lists_to_process[render_lists_to_process_count++] = i;
+                    for (uint32_t j = 0; j < memory->render_lists_count; ++j)
+                    {
+                        uint32_t inverse = (uint32_t)~(1 << i);
+                        render_entry_list *render_list_to_undepend = memory->render_lists[j];
+                        render_list_to_undepend->depends_on_slots &= inverse;
+                    }
                 }
             }
         }
@@ -2520,6 +2518,11 @@ extern "C" RENDERER_RENDER(renderer_render)
     uint32_t quads_drawn = 0;
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
+        render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
+        {
+            RecordDebugEvent(DebugType::BeginBlock, render_list->name);
+        }
+
         v2i size = {window->width, window->height};
         hglActiveTexture(GL_TEXTURE0);
         hglBindTexture(GL_TEXTURE_2D, 0);
@@ -2535,8 +2538,6 @@ extern "C" RENDERER_RENDER(renderer_render)
 
         hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
         hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-
-        render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
         uint32_t offset = 0;
         hassert(render_list->element_count > 0);
 
@@ -2553,6 +2554,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         v4 clear_color = {};
         if (framebuffer)
         {
+            TIMED_BLOCK("framebuffer setup");
             if (!framebuffer->_flags.no_clear_each_frame)
             {
                 if (!framebuffer->_flags.cleared_this_frame)
@@ -2781,6 +2783,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         {
             hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
+        END_BLOCK();
     }
 
     if (state->show_debug) {

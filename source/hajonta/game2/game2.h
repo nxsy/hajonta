@@ -294,6 +294,82 @@ astar_data
     uint32_t log_position;
 };
 
+
+struct
+DebugProfileEventLocation
+{
+    char guid[256];
+    uint32_t file_name_starts_at;
+    uint32_t file_name_length;
+    uint32_t line_number;
+    uint32_t name_starts_at;
+};
+
+struct
+DebugProfileEvent
+{
+    DebugProfileEventLocation *location;
+    uint32_t depth;
+    uint64_t start_cycles;
+    uint64_t end_cycles;
+    uint64_t cycles_self;
+    uint64_t cycles_children;
+};
+
+struct
+DebugFrame
+{
+    uint32_t frame_id;
+
+    uint64_t start_cycles;
+    uint64_t end_cycles;
+    float seconds_elapsed;
+
+    uint32_t event_count;
+    DebugProfileEvent events[100];
+
+    uint32_t parent_count;
+    uint32_t parents[10];
+};
+
+struct
+DebugProfileEventLocationHash
+{
+    DebugProfileEventLocation locations[1024];
+};
+
+struct
+DebugSystem
+{
+    DebugProfileEventLocationHash location_hash;
+
+    uint32_t oldest_frame;
+    uint32_t current_frame;
+    DebugFrame frames[256];
+
+    bool show;
+    char *zoom_guid;
+};
+
+inline void
+frame_end(DebugSystem *debug_system, uint64_t cycles, float seconds)
+{
+    DebugFrame *old_frame = debug_system->frames + debug_system->current_frame;
+    hassert(old_frame->parent_count == 0);
+    old_frame->end_cycles = cycles;
+    old_frame->seconds_elapsed = seconds;
+    uint32_t next_frame = (debug_system->current_frame + 1) % harray_count(debug_system->frames);
+    if (next_frame == debug_system->oldest_frame)
+    {
+        debug_system->oldest_frame = (debug_system->oldest_frame + 1) % harray_count(debug_system->frames);
+    }
+    DebugFrame *frame = debug_system->frames + next_frame;
+    frame->event_count = 0;
+    frame->start_cycles = cycles;
+    frame->frame_id = old_frame->frame_id + 1;
+    debug_system->current_frame = next_frame;
+}
+
 struct
 debug_state
 {
@@ -326,7 +402,12 @@ debug_state
         int32_t seed;
         v2 offset;
         float height_multiplier;
+
+        v2 control_point_0;
+        v2 control_point_1;
     } perlin;
+
+    DebugSystem debug_system;
 };
 
 enum struct

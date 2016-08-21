@@ -5,6 +5,8 @@
 
 #include "hajonta/platform/neutral.h"
 
+#include <atomic>
+
 #ifdef HAJONTA_DEBUG
 #define hassert(expression) if(!(expression)) {*(volatile int *)0 = 0;}
 #else
@@ -50,6 +52,9 @@ typedef PLATFORM_EDITOR_LOAD_FILE(platform_editor_load_file_func);
 #define PLATFORM_EDITOR_LOAD_NEARBY_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target, loaded_file existing_file, char *name)
 typedef PLATFORM_EDITOR_LOAD_NEARBY_FILE(platform_editor_load_nearby_file_func);
 
+#define PLATFORM_GET_THREAD_ID(func_name) uint32_t func_name()
+typedef PLATFORM_GET_THREAD_ID(platform_get_thread_id_func);
+
 // Normal means the OS is keeping track of the mouse cursor location.
 // The program still needs to render the cursor, though.
 //
@@ -73,6 +78,7 @@ struct platform_cursor_settings
 
 struct render_entry_list;
 
+struct DebugTable;
 struct platform_memory
 {
     bool initialized;
@@ -82,6 +88,7 @@ struct platform_memory
     bool debug_keyboard;
 
     void *imgui_state;
+    DebugTable *debug_table;
 
     render_entry_list *render_lists[10];
     uint32_t render_lists_count;
@@ -94,6 +101,8 @@ struct platform_memory
     platform_load_asset_func *platform_load_asset;
     platform_editor_load_file_func *platform_editor_load_file;
     platform_editor_load_nearby_file_func *platform_editor_load_nearby_file;
+
+    platform_get_thread_id_func *platform_get_thread_id;
 };
 
 #define BUTTON_ENDED_DOWN(x) (x.ended_down)
@@ -239,6 +248,9 @@ struct game_sound_output
 #define GAME_UPDATE_AND_RENDER(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 
+#define GAME_DEBUG_FRAME_END(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output)
+typedef GAME_DEBUG_FRAME_END(game_debug_frame_end_func);
+
 #define RENDERER_SETUP(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
 typedef RENDERER_SETUP(renderer_setup_func);
 
@@ -315,3 +327,106 @@ glErrorAssert()
     }
 }
 #endif
+
+
+
+// Debug
+
+enum struct
+DebugType
+{
+    FrameMarker,
+    BeginBlock,
+    EndBlock,
+};
+
+struct
+DebugEventData_FrameMarker
+{
+    float seconds;
+};
+
+struct
+DebugEventData_BeginBlock
+{
+};
+
+struct
+DebugEventData_EndBlock
+{
+};
+
+struct
+DebugEvent
+{
+    DebugType type;
+
+    uint64_t tsc_cycles;
+    char *guid;
+    uint32_t thread_id;
+
+    union
+    {
+        DebugEventData_FrameMarker framemarker;
+        DebugEventData_BeginBlock begin_block;
+        DebugEventData_EndBlock end_block;
+    };
+};
+
+struct
+DebugTable
+{
+    std::atomic<uint32_t> event_index_count;
+    DebugEvent events[2][65536];
+};
+
+extern DebugTable *GlobalDebugTable;
+platform_get_thread_id_func *_platform_get_thread_id;
+
+/*
+ * These debug macros from Casey Muratori's Handmade Hero
+ */
+#define RecordDebugEvent(event_type, _guid)  \
+uint32_t _h_event_index_count = std::atomic_fetch_add(&GlobalDebugTable->event_index_count, 1);  \
+        uint32_t _h_event_index = _h_event_index_count & 0x7FFFFFFF;  \
+        hassert(_h_event_index < harray_count(GlobalDebugTable->events[0])); \
+        DebugEvent *_h_event = GlobalDebugTable->events[_h_event_index_count >> 31] + _h_event_index;  \
+        _h_event->tsc_cycles = __rdtsc(); \
+        _h_event->type = event_type; \
+        _h_event->thread_id = _platform_get_thread_id(); \
+        _h_event->guid = _guid;
+
+#define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D
+#define UniqueFileCounterString_(A, B, C, D) UniqueFileCounterString__(A, B, C, D)
+#define DEBUG_NAME(Name) UniqueFileCounterString_(__FILE__, __LINE__, __COUNTER__, Name)
+
+#define FRAME_MARKER(seconds_elapsed) \
+{RecordDebugEvent(DebugType::FrameMarker, DEBUG_NAME("Frame Marker")); \
+    _h_event->framemarker.seconds = seconds_elapsed;}
+
+#define TIMED_BLOCK__(_guid, _counter, ...) timed_block TimedBlock_##_counter(_guid, ## __VA_ARGS__)
+#define TIMED_BLOCK_(_guid, _counter, ...) TIMED_BLOCK__(_guid, _counter, ## __VA_ARGS__)
+#define TIMED_BLOCK(Name, ...) TIMED_BLOCK_(DEBUG_NAME(Name), __COUNTER__, ## __VA_ARGS__)
+#define TIMED_FUNCTION(...) TIMED_BLOCK_(DEBUG_NAME(__FUNCTION__), ## __VA_ARGS__)
+
+#define BEGIN_BLOCK_(_guid) {RecordDebugEvent(DebugType::BeginBlock, _guid);}
+#define END_BLOCK_(_guid) {RecordDebugEvent(DebugType::EndBlock, _guid);}
+
+#define BEGIN_BLOCK(Name) BEGIN_BLOCK_(DEBUG_NAME(Name))
+#define END_BLOCK() END_BLOCK_(DEBUG_NAME("END_BLOCK_"))
+
+struct timed_block
+{
+    timed_block(char *guid)
+    {
+        BEGIN_BLOCK_(guid);
+    }
+
+    ~timed_block()
+    {
+        END_BLOCK();
+    }
+};
+/*
+ * End of debug macros from Handmade Hero
+ */

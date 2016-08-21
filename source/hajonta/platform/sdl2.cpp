@@ -11,6 +11,11 @@
 #endif
 #include "hajonta/platform/common.h"
 
+#include <chrono>
+
+static DebugTable _global_debug_table;
+DebugTable *GlobalDebugTable = &_global_debug_table;
+
 struct sdl2_audio_buffer
 {
     uint8_t bytes[48000*2*2]; // 48000Hz, two samples, 16 bit
@@ -59,6 +64,9 @@ struct sdl2_state
 struct game_code
 {
     game_update_and_render_func *game_update_and_render;
+#ifdef HAJONTA_DEBUG
+    game_debug_frame_end_func *game_debug_frame_end;
+#endif
 
     void *handle;
 };
@@ -263,6 +271,7 @@ sdl_init(sdl2_state *state)
     SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
     state->context = SDL_GL_CreateContext(state->window);
+    SDL_GL_SetSwapInterval(-1);
 
     SDL_AudioSpec wanted = {};
     wanted.freq = 48000;
@@ -298,6 +307,11 @@ PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress)
 {
     void *result = SDL_GL_GetProcAddress(function_name);
     return result;
+}
+
+PLATFORM_GET_THREAD_ID(platform_get_thread_id)
+{
+    return SDL_GetThreadID(0);
 }
 
 PLATFORM_LOAD_ASSET(platform_load_asset)
@@ -349,6 +363,10 @@ bool sdl_load_game_code(sdl2_state *state, game_code *code, const char *filename
     code->handle = SDL_LoadObject(libfile);
     code->game_update_and_render = (game_update_and_render_func *)SDL_LoadFunction(code->handle, "game_update_and_render");
     hassert(code->game_update_and_render);
+#ifdef HAJONTA_DEBUG
+    code->game_debug_frame_end = (game_debug_frame_end_func *)SDL_LoadFunction(code->handle, "game_debug_frame_end");
+    hassert(code->game_debug_frame_end);
+#endif
     return true;
 }
 
@@ -523,6 +541,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 main(int argc, char *argv[])
 #endif
 {
+    _platform_get_thread_id = platform_get_thread_id;
     sdl2_state state = {};
     sdl_init(&state);
 
@@ -537,6 +556,9 @@ main(int argc, char *argv[])
     memory.platform_glgetprocaddress = platform_glgetprocaddress;
     memory.platform_load_asset = platform_load_asset;
     memory.platform_debug_message = platform_debug_message;
+    memory.platform_get_thread_id = platform_get_thread_id;
+
+    memory.debug_table = GlobalDebugTable;
 
     game_input input[2] = {};
     state.new_input = &input[0];
@@ -554,6 +576,7 @@ main(int argc, char *argv[])
         strncpy(state.arg_asset_path, arg_asset, sizeof(state.arg_asset_path));
     }
 
+    std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
     while (!state.stopping)
     {
         state.new_input->delta_t = 1.0f / 60.0f;
@@ -601,9 +624,26 @@ main(int argc, char *argv[])
 
         sdl_queue_sound(&state, &sound_output);
 
+
+#ifdef HAJONTA_DEBUG
+        {
+            //TIMED_BLOCK("Debug Collation");
+
+            // Determine if reload needed
+            // if reload needed, clear all threads out and disable event recording
+            // run debug collation
+            code.game_debug_frame_end((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
+            // reload libraries and re-enable event recording
+        }
+#endif
+
         renderercode.renderer_render((hajonta_thread_context *)&state, &memory, state.new_input);
 
-        SDL_GL_SwapWindow(state.window);
+        {
+            TIMED_BLOCK("Swap");
+            //SDL_RenderPresent(state.renderer);
+            SDL_GL_SwapWindow(state.window);
+        }
 
         game_input *temp_input = state.new_input;
         state.new_input = state.old_input;
@@ -621,6 +661,12 @@ main(int argc, char *argv[])
         {
             state.stopping = 1;
         }
+        auto frame_end_time = std::chrono::steady_clock::now();
+        auto diff = frame_end_time - last_frame_start_time;
+        int64_t duration_us = std::chrono::duration_cast<std::chrono::microseconds>(diff).count();
+        float delta_time = (float)duration_us / 1000 / 1000;
+        FRAME_MARKER(delta_time);
+        last_frame_start_time = frame_end_time;
     }
 
     hassert(!state.stop_reason);

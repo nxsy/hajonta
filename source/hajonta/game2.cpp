@@ -37,6 +37,8 @@ static float h_pi = 3.14159265358979f;
 static float h_halfpi = h_pi / 2.0f;
 static float h_twopi = h_pi * 2.0f;
 
+DebugTable *GlobalDebugTable;
+
 DEMO(demo_b)
 {
     game_state *state = (game_state *)memory->memory;
@@ -132,6 +134,7 @@ show_debug_main_menu(game_state *state)
             if (ImGui::BeginMenu("General"))
             {
                 ImGui::MenuItem("Debug rendering", "", &state->debug.rendering);
+                ImGui::MenuItem("Profiling", "", &state->debug.debug_system.show);
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Movement"))
@@ -350,8 +353,9 @@ initialize(platform_memory *memory, game_state *state)
     state->debug.show_textures = 0;
     state->debug.show_lights = 0;
     state->debug.cull_front = 1;
-    state->debug.show_nature_pack = 1;
+    state->debug.show_nature_pack = 0;
     state->debug.show_camera = 1;
+    state->debug.debug_system.show = 1;
 
     state->camera.distance = 4.0f;
     state->camera.near_ = 1.0f;
@@ -557,8 +561,27 @@ initialize(platform_memory *memory, game_state *state)
     }
 }
 
+v2
+cubic_bezier(v2 p1, v2 p2, float t)
+{
+
+    v2 ap0 = v2mul(p1, t);
+    v2 p1_p2 = v2sub(p2, p1);
+    v2 ap1 = v2add(p1, v2mul(p1_p2, t));
+    v2 p2_p3 = v2sub({1.0f, 1.0f}, p2);
+    v2 ap2 = v2add(p2, v2mul(p2_p3, t));
+
+    v2 ap0_ap1 = v2sub(ap1, ap0);
+    v2 bp0 = v2add(ap0, v2mul(ap0_ap1, t));
+    v2 ap1_ap2 = v2sub(ap2, ap1);
+    v2 bp1 = v2add(ap1, v2mul(ap1_ap2, t));
+
+    v2 bp0_bp1 = v2sub(bp1, bp0);
+    return v2add(bp0, v2mul(bp0_bp1, t));
+}
+
 void
-generate_terrain_mesh(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *mesh, float height_multiplier)
+generate_terrain_mesh(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *mesh, float height_multiplier, v2 cp0, v2 cp1)
 {
     v2 top_left = {
         -(map.width - 1) / 2.0f,
@@ -570,7 +593,12 @@ generate_terrain_mesh(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *me
     {
         for (int32_t x = 0; x < map.width; ++x)
         {
-            mesh_data_p.vertices.values[vertex_index] = {top_left.x + x, map.get({x,y}) * height_multiplier, top_left.y - y};
+            mesh_data_p.vertices.values[vertex_index] =
+            {
+                top_left.x + x,
+                cubic_bezier(cp0, cp1, map.get({x,y})).y * height_multiplier,
+                top_left.y - y
+            };
             mesh_data_p.normals.values[vertex_index] = {0, 1, 0};
             mesh_data_p.uvs.values[vertex_index] = {x/(float)map.width, y/(float)map.height};
 
@@ -720,6 +748,9 @@ noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDes
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
+    _platform_get_thread_id = memory->platform_get_thread_id;
+    GlobalDebugTable = memory->debug_table;
+    TIMED_FUNCTION();
     game_state *state = (game_state *)memory->memory;
     _hidden_state = state;
 
@@ -769,7 +800,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if (memory->imgui_state)
     {
-        ImGui::SetInternalState(memory->imgui_state);
+        ImGui::SetCurrentContext((ImGuiContext *)memory->imgui_state);
     }
     show_debug_main_menu(state);
     show_pq_debug(&state->debug.priority_queue);
@@ -812,7 +843,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             rebuild_time = 0;
             generate_noise_map(state->noisemap.array2p(), (uint32_t)perlin.seed, perlin.scale, (uint32_t)perlin.octaves, perlin.persistence, perlin.lacunarity, perlin.offset);
             noise_map_to_texture<TerrainMode::color>(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture, state->landmass.terrains);
-            generate_terrain_mesh(state->noisemap.array2p(), state->terrain_mesh_data.mesh_data_p(), &state->test_mesh, perlin.height_multiplier);
+            generate_terrain_mesh(
+                state->noisemap.array2p(),
+                state->terrain_mesh_data.mesh_data_p(),
+                &state->test_mesh,
+                perlin.height_multiplier,
+                perlin.control_point_0,
+                perlin.control_point_1);
         }
 
         if (perlin.show)
@@ -939,7 +976,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
     array2p<float> noise2p = state->noisemap.array2p();
     v2i middle = {(int32_t)(noise2p.width / 2.0f), (int32_t)(noise2p.height / 2.0f)};
-    float height = noise2p.get(middle) * state->debug.perlin.height_multiplier;
+
+    float height = cubic_bezier(state->debug.perlin.control_point_0, state->debug.perlin.control_point_1, noise2p.get(middle)).y * state->debug.perlin.height_multiplier;
     translate.cols[3] = {0.5f, height, 0.5f, 1.0f};
     state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
@@ -1747,4 +1785,292 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         ImGui::End();
     }
+}
+
+uint32_t
+fnv1a_32(uint8_t *buf, uint32_t buf_size)
+{
+    uint8_t *pos = buf;
+    uint8_t *end = buf + buf_size;
+    uint32_t hval = 0x811c9dc5;
+    for (uint8_t databyte = *pos; pos < end; ++pos)
+    {
+        hval ^= databyte;
+        hval *= 0x01000193;
+    }
+    return hval;
+}
+
+#define TINYFNV1A(bits) uint32_t fnv1a_##bits(uint8_t *buf, uint32_t buf_size) { uint32_t hash; hash = fnv1a_32(buf, buf_size); hash = ((hash >> bits) ^ hash) & ((1<<bits) - 1); return hash; }
+TINYFNV1A(10)
+
+DebugProfileEventLocation *
+find_register_event_location(DebugProfileEventLocationHash *hash, char *guid)
+{
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4127) // "conditional expression is constant"
+#endif
+    hassert(harray_count(hash->locations) == (1<<10));
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+    uint32_t hash_loc = fnv1a_10((uint8_t *)guid, (uint32_t)strlen(guid));
+
+    DebugProfileEventLocation *first_item = hash->locations + (hash_loc % harray_count(hash->locations));
+    DebugProfileEventLocation *item = first_item;
+    if (first_item->name_starts_at)
+    {
+        do {
+            if (strcmp(guid, item->guid) == 0)
+            {
+                return item;
+            }
+            item = hash->locations + (++hash_loc % harray_count(hash->locations));
+            hassert(item != first_item); // hash full
+        } while (item->name_starts_at);
+    }
+    hassert(strlen(guid) < harray_count(item->guid));
+    strcpy(item->guid, guid);
+    char *between_file_and_number = strchr(item->guid, '|');
+    hassert(between_file_and_number);
+    char *between_number_and_name = strchr(between_file_and_number + 1, '|');
+    hassert(between_number_and_name);
+    item->file_name_starts_at = 0;
+    item->file_name_length = (uint32_t)(between_file_and_number - (item->guid + item->file_name_starts_at));
+    item->name_starts_at = (uint32_t)(between_number_and_name - item->guid + 1);
+    item->line_number = (uint32_t)strtol(between_file_and_number + 1, 0, 10);
+    hassert(item->line_number);
+    return item;
+}
+
+char *
+profiling_graph(uint32_t depth, DebugFrame *frame, int32_t zoom_event_offset)
+{
+    ImGui::PushID((void *)(intptr_t)zoom_event_offset);
+    char *guid_clicked = 0;
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window->SkipItems)
+    {
+        ImGui::PopID();
+        return guid_clicked;
+    }
+    ImGuiContext *g = ImGui::GetCurrentContext();
+    const ImGuiStyle& style = g->Style;
+
+    uint32_t start_at = 0;
+    uint32_t start_depth = 0;
+    uint64_t start;
+    float divisor;
+
+    if (zoom_event_offset < 0)
+    {
+        ImGui::Text("Frame %d, %0.4f ms", frame->frame_id, frame->seconds_elapsed * 1000);
+        divisor = (float)(frame->end_cycles - frame->start_cycles);
+        start = frame->start_cycles;
+    }
+    else
+    {
+        float seconds_per_cycle = frame->seconds_elapsed / (frame->end_cycles - frame->start_cycles);
+        DebugProfileEvent *zoom_event = frame->events + zoom_event_offset;
+        divisor = (float)(zoom_event->end_cycles - zoom_event->start_cycles);
+        ImGui::Text("Event %s, ~%0.4f ms", zoom_event->location->guid, divisor * seconds_per_cycle * 1000);
+        start = zoom_event->start_cycles;
+        start_depth = zoom_event->depth;
+        start_at = (uint32_t)zoom_event_offset;
+    }
+
+    ImGui::PushItemWidth(-1.0f);
+    const ImVec2 graph_size = {
+        ImGui::CalcItemWidth(),
+        style.IndentSpacing * depth,
+    };
+
+    const ImGuiID id = window->GetID("#graph");
+
+    const ImRect frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(graph_size.x, graph_size.y));
+    ImGui::ItemSize(frame_bb, style.FramePadding.y);
+    ImGui::PopItemWidth();
+    if (!ImGui::ItemAdd(frame_bb, &id))
+    {
+        ImGui::PopID();
+        return guid_clicked;
+    }
+    ImGui::RenderFrame(frame_bb.Min, frame_bb.Max, ImGui::GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
+
+    ImVec4 colors[] =
+    {
+        { 0.3f, 0.0f, 0.0f, 0.8f, },
+        { 0.0f, 0.3f, 0.0f, 0.8f, },
+        { 0.0f, 0.0f, 0.3f, 0.8f, },
+        { 0.3f, 0.3f, 0.0f, 0.8f, },
+        { 0.0f, 0.3f, 0.3f, 0.8f, },
+        { 0.3f, 0.0f, 0.3f, 0.8f, },
+        { 0.2f, 0.2f, 0.2f, 0.8f, },
+        { 0.3f, 0.1f, 0.0f, 0.8f, },
+        { 0.0f, 0.3f, 0.1f, 0.8f, },
+        { 0.1f, 0.0f, 0.3f, 0.8f, },
+        { 0.3f, 0.3f, 0.1f, 0.8f, },
+        { 1.0f, 0.3f, 0.3f, 0.8f, },
+        { 0.3f, 1.0f, 0.3f, 0.8f, },
+    };
+
+    for (uint32_t i = start_at; i < frame->event_count; ++i)
+    {
+        ImGui::PushID((void *)(intptr_t)i);
+        const ImGuiID event_id = window->GetID("#box");
+        ImGui::PopID();
+        DebugProfileEvent *profile_event = frame->events + i;
+        uint32_t event_depth = profile_event->depth - start_depth;
+        if (event_depth >= depth)
+        {
+            continue;
+        }
+        float x_start = (profile_event->start_cycles - start) / divisor * graph_size.x;
+        float x_end = (profile_event->end_cycles - start) / divisor * graph_size.x;
+        const ImRect event_bb(
+            frame_bb.Min + ImVec2(x_start, style.IndentSpacing * event_depth),
+            frame_bb.Min + ImVec2(x_end, style.IndentSpacing * (event_depth + 1))
+        );
+
+        bool hovered, held;
+        bool pressed = ImGui::ButtonBehavior(event_bb, event_id, &hovered, &held);
+        if (pressed)
+        {
+            guid_clicked = profile_event->location->guid;
+        }
+
+        ImGui::RenderFrame(
+            event_bb.Min,
+            event_bb.Max,
+            ImGui::GetColorU32(colors[i % harray_count(colors)]),
+            true,
+            style.FrameRounding
+        );
+        //ImGui::Text("Profile event %s: %d self cycles, %d children cycles",
+        //        profile_event->location->guid, profile_event->cycles_self, profile_event->cycles_children);
+        char *label = profile_event->location->guid + profile_event->location->name_starts_at;
+        const ImVec2 label_size = ImGui::CalcTextSize(label, NULL, true);
+        ImGui::RenderTextClipped(event_bb.Min, event_bb.Max, label, NULL, &label_size, ImGuiAlign_Center | ImGuiAlign_VCenter);
+    }
+    ImGui::PopID();
+    return guid_clicked;
+}
+
+void
+show_profiling(DebugSystem *debug_system)
+{
+    // We're on the first frame, no full frames yet
+    if (debug_system->oldest_frame == debug_system->current_frame)
+    {
+        return;
+    }
+
+    if (!debug_system->show)
+    {
+        return;
+    }
+
+    ImGui::Begin("Profiling", &debug_system->show);
+    uint32_t previous_frame_offset = 0;
+    if (debug_system->current_frame == 0)
+    {
+        previous_frame_offset = harray_count(debug_system->frames) - 1;
+    }
+    else
+    {
+        previous_frame_offset = debug_system->current_frame - 1;
+    }
+    previous_frame_offset -= previous_frame_offset % 10;
+    DebugFrame *previous_frame = debug_system->frames + previous_frame_offset;
+    char *new_zoom_guid = profiling_graph(2, previous_frame, -1);
+    if (new_zoom_guid)
+    {
+        debug_system->zoom_guid = new_zoom_guid;
+    }
+    if (debug_system->zoom_guid)
+    {
+        int32_t zoom_offset = -1;
+        for (uint32_t i = 0; i < previous_frame->event_count; ++i)
+        {
+            DebugProfileEvent *profile_event = previous_frame->events + i;
+            if (strcmp(debug_system->zoom_guid, profile_event->location->guid) == 0)
+            {
+                zoom_offset = (int32_t)i;
+                break;
+            }
+        }
+        if (zoom_offset >= 0)
+        {
+            new_zoom_guid = profiling_graph(3, previous_frame, zoom_offset);
+            if (new_zoom_guid)
+            {
+                debug_system->zoom_guid = new_zoom_guid;
+            }
+        }
+
+    }
+    ImGui::End();
+}
+
+extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
+{
+    TIMED_FUNCTION();
+    game_state *state = (game_state *)memory->memory;
+    uint32_t index_count = GlobalDebugTable->event_index_count;
+    uint32_t replacement_index_count = ~(index_count >> 31) << 31;
+    index_count = std::atomic_exchange(
+        &GlobalDebugTable->event_index_count,
+        replacement_index_count
+    );
+    uint32_t index = index_count >> 31;
+    index_count &= 0x7FFFFFFF;
+
+    auto *debug_system = &state->debug.debug_system;
+    auto *current_frame = debug_system->frames + debug_system->current_frame;
+
+    for (uint32_t i = 0; i < index_count; ++i)
+    {
+        DebugEvent *event = GlobalDebugTable->events[index] + i;
+        if (!current_frame->start_cycles)
+        {
+            current_frame->start_cycles = event->tsc_cycles;
+        }
+        switch (event->type)
+        {
+            case DebugType::FrameMarker:
+            {
+                frame_end(debug_system, event->tsc_cycles, event->framemarker.seconds);
+                current_frame = debug_system->frames + debug_system->current_frame;
+            } break;
+            case DebugType::BeginBlock:
+            {
+                uint32_t event_counter = current_frame->event_count++;
+                DebugProfileEvent *profile_event = current_frame->events + event_counter;
+                profile_event->location = find_register_event_location(&debug_system->location_hash, event->guid);
+                profile_event->start_cycles = event->tsc_cycles;
+                profile_event->cycles_self = 0;
+                profile_event->cycles_children = 0;
+                profile_event->depth = current_frame->parent_count;
+                current_frame->parents[current_frame->parent_count++] = event_counter;
+            } break;
+            case DebugType::EndBlock:
+            {
+                uint32_t event_counter = current_frame->parents[--current_frame->parent_count];
+                DebugProfileEvent *profile_event = current_frame->events + event_counter;
+                profile_event->end_cycles = event->tsc_cycles;
+                uint64_t all_cycles = profile_event->end_cycles - profile_event->start_cycles;
+                profile_event->cycles_self = all_cycles - profile_event->cycles_children;
+
+                if (current_frame->parent_count)
+                {
+                    uint32_t parent_event_counter = current_frame->parents[current_frame->parent_count - 1];
+                    DebugProfileEvent *parent_profile_event = current_frame->events + parent_event_counter;
+                    parent_profile_event->cycles_children += all_cycles;
+                }
+            } break;
+        }
+    }
+
+    show_profiling(debug_system);
 }
