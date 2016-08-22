@@ -260,6 +260,7 @@ tile_asset_and_transform(int32_t y, int32_t x, int32_t x_width, int32_t z, int32
 void
 initialize(platform_memory *memory, game_state *state)
 {
+    state->shadowmap_size = memory->shadowmap_size;
     CreatePipeline(state);
     AssetDescriptors *asset_descriptors = &state->assets;
     state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
@@ -1346,7 +1347,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     ImGui::Checkbox("Cull front", &state->debug.cull_front);
     shadowmap_mesh_flags.cull_front = state->debug.cull_front ? (uint32_t)1 : (uint32_t)0;
     MeshFromAssetFlags three_dee_mesh_flags = {};
-    three_dee_mesh_flags.attach_shadowmap = 1;
+    //three_dee_mesh_flags.attach_shadowmap = 1;
     three_dee_mesh_flags.attach_shadowmap_color = 1;
 
     if (state->debug.show_nature_pack) {

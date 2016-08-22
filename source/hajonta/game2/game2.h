@@ -644,6 +644,8 @@ struct game_state
 {
     bool initialized;
 
+    uint32_t shadowmap_size;
+
     SelectedTool selected_tool;
 
     _click_targets<10> click_targets;

@@ -106,6 +106,7 @@ CreatePipeline(game_state *state)
     pipeline_elements.fb_main = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_main = pipeline->framebuffers[pipeline_elements.fb_main];
     fb_main.use_depth_texture = 1;
+    fb_main.no_clear_each_frame = 1;
     pipeline_elements.fb_multisample = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_multisample = pipeline->framebuffers[pipeline_elements.fb_multisample];
     fb_multisample.multisample = 1;
@@ -115,7 +116,10 @@ CreatePipeline(game_state *state)
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
     fb_shadowmap.use_depth_texture = 1;
     fb_shadowmap.use_rg32f_buffer = 1;
-    fb_shadowmap.size = {4096, 4096};
+    fb_shadowmap.size = {
+        state->shadowmap_size,
+        state->shadowmap_size
+    };
     fb_shadowmap.fixed_size = 1;
     fb_shadowmap.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
 
@@ -124,16 +128,18 @@ CreatePipeline(game_state *state)
     fb_sm_blur_x.use_rg32f_buffer = 1;
     fb_sm_blur_x.size = fb_shadowmap.size;
     fb_sm_blur_x.fixed_size = 1;
+    fb_sm_blur_x.no_clear_each_frame = 1;
 
     pipeline_elements.fb_sm_blur_xy = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_xy = pipeline->framebuffers[pipeline_elements.fb_sm_blur_xy];
     fb_sm_blur_xy.use_rg32f_buffer = 1;
     fb_sm_blur_xy.size = fb_shadowmap.size;
     fb_sm_blur_xy.fixed_size = 1;
+    fb_sm_blur_xy.no_clear_each_frame = 1;
 
     pipeline_elements.fb_nature_pack_debug = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_nature_pack_debug = pipeline->framebuffers[pipeline_elements.fb_nature_pack_debug];
-    fb_nature_pack_debug.size = { 512, 512 };
+    fb_nature_pack_debug.size = { 64, 64 };
     fb_nature_pack_debug.fixed_size = 1;
 
     pipeline_elements.r_framebuffer = RenderPipelineAddRenderer(pipeline);

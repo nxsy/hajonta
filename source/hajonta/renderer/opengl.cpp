@@ -253,6 +253,13 @@ struct renderer_state
 
     GLSetupCounters glsetup_counters;
     GLSetupCountersHistory glsetup_counters_history;
+
+    const char *gl_vendor;
+    const char *gl_renderer;
+    bool multisample_disabled;
+    float framebuffer_scale;
+    bool flush_for_profiling;
+    bool crash_on_gl_errors;
 };
 
 int32_t
@@ -374,7 +381,7 @@ draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
     hglUniform1i(uniform_locations[0], 0);
 
     hglDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, (void *)0);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 }
 
 bool
@@ -698,7 +705,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
     hglGenBuffers(1, &skybox->vbo);
     hglGenBuffers(1, &skybox->ibo);
 
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     v3 vertices[] = {
         { 0.000f,  0.000f,  1.000f },
@@ -721,7 +728,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
             skybox->vertices,
             GL_STATIC_DRAW);
 
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     v3i faces[] = {
         { 0, 1, 2},
@@ -747,7 +754,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
     };
     memcpy(skybox->faces, faces, sizeof(faces));
     hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
             sizeof(skybox->faces),
             skybox->faces,
@@ -1010,6 +1017,20 @@ extern "C" RENDERER_SETUP(renderer_setup)
         glsetup_counters = &state->glsetup_counters;
         state->glsetup_counters_history.first = -1;
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
+        state->gl_vendor = (const char *)hglGetString(GL_VENDOR);
+        state->gl_renderer = (const char *)hglGetString(GL_RENDERER);
+        if (strstr(state->gl_renderer, "Intel HD Graphics 4"))
+        {
+            state->multisample_disabled = true;
+            state->framebuffer_scale = 0.5f;
+            memory->shadowmap_size = 256;
+        }
+        else
+        {
+            state->multisample_disabled = false;
+            state->framebuffer_scale = 1.0f;
+            memory->shadowmap_size = 4096;
+        }
         program_init(ctx, memory, &_GlobalRendererState);
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
@@ -1631,7 +1652,7 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     hglDrawElements(GL_TRIANGLES, (GLsizei)quads->entry_count * 6, GL_UNSIGNED_INT, (void *)0);
 
     hglBindVertexArray(0);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 }
 
 v3
@@ -1688,7 +1709,7 @@ draw_mesh_from_asset(
 )
 {
     TIMED_FUNCTION();
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglDisable(GL_BLEND);
     hglEnable(GL_DEPTH_TEST);
     hglEnable(GL_CULL_FACE);
@@ -2067,11 +2088,11 @@ draw_mesh_from_asset(
             hglEnableVertexAttribArray((GLuint)program.a_normal_id);
             hglDisableVertexAttribArray((GLuint)program.a_bone_ids_id);
             hglDisableVertexAttribArray((GLuint)program.a_bone_weights_id);
-            hglErrorAssert();
+            if (state->crash_on_gl_errors) hglErrorAssert();
 
             hglUniform1i(
                 state->phong_no_normal_map_program.u_lightspace_available_id, 0);
-            hglErrorAssert();
+            if (state->crash_on_gl_errors) hglErrorAssert();
 
             a_position_id = program.a_position_id;
             a_texcoord_id = program.a_texcoord_id;
@@ -2095,7 +2116,7 @@ draw_mesh_from_asset(
             hglEnableVertexAttribArray((GLuint)program.a_texcoord_id);
             hglDisableVertexAttribArray((GLuint)program.a_bone_ids_id);
             hglDisableVertexAttribArray((GLuint)program.a_bone_weights_id);
-            hglErrorAssert();
+            if (state->crash_on_gl_errors) hglErrorAssert();
 
             a_position_id = program.a_position_id;
             a_texcoord_id = program.a_texcoord_id;
@@ -2141,7 +2162,7 @@ draw_mesh_from_asset(
         hglUniform1f(
             hglGetUniformLocation(program.program, "light.diffuse_intensity"),
             light.diffuse_intensity);
-        hglErrorAssert();
+        if (state->crash_on_gl_errors) hglErrorAssert();
     }
 
     if (mesh_from_asset->flags.cull_front)
@@ -2290,9 +2311,14 @@ draw_mesh_from_asset(
     }
 
     hglBindTexture(GL_TEXTURE_2D, texture);
-    hglErrorAssert();
-    hglDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
+    if (state->flush_for_profiling) hglFlush();
+    {
+        TIMED_BLOCK("draw elements");
+        hglDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
+        if (state->crash_on_gl_errors) hglErrorAssert();
+        if (state->flush_for_profiling) hglFlush();
+    }
     if (mesh_from_asset->flags.attach_shadowmap)
     {
         hglBindTexture(GL_TEXTURE_2D, shadowmap_texture);
@@ -2303,7 +2329,8 @@ draw_mesh_from_asset(
     hglDisable(GL_DEPTH_TEST);
     hglDepthFunc(GL_ALWAYS);
     hglEnable(GL_BLEND);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
+    if (state->flush_for_profiling) hglFlush();
 }
 
 void
@@ -2351,7 +2378,7 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         ctx, memory, state, descriptors, filter->source_asset_descriptor_id,
         &texture, &st0, &st1);
 
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     struct vertex_format
     {
@@ -2394,13 +2421,13 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     hglBindTexture(GL_TEXTURE_2D, texture);
     hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
     hglBindTexture(GL_TEXTURE_2D, 0);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     hglBindVertexArray(0);
     hglDisable(GL_DEPTH_TEST);
     hglDepthFunc(GL_ALWAYS);
     hglEnable(GL_BLEND);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     return;
 }
@@ -2433,7 +2460,7 @@ draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *s
     v2 st0 = {0, 0};
     v2 st1 = {1, 1};
 
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBuffer(GL_ARRAY_BUFFER, state->skybox.vbo);
     hglVertexAttribPointer((GLuint)program.a_position_id, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
     hglEnableVertexAttribArray((GLuint)program.a_position_id);
@@ -2459,22 +2486,24 @@ draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *s
 
 extern "C" RENDERER_RENDER(renderer_render)
 {
+    renderer_state *state = &_GlobalRendererState;
     {
         TIMED_BLOCK("Wait for vsync");
-        hglErrorAssert(true);
+        if (state->flush_for_profiling) hglFlush();
+        if (state->crash_on_gl_errors) hglErrorAssert();
     }
     TIMED_FUNCTION();
+
     _platform_memory = memory;
     _ctx = ctx;
 
     ImGuiIO& io = ImGui::GetIO();
     generations_updated_this_frame = 0;
 
-    renderer_state *state = &_GlobalRendererState;
     hassert(memory->render_lists_count > 0);
 
     window_data *window = &state->input->window;
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     uint32_t render_lists_to_process[10];
     uint32_t render_lists_to_process_count = 0;
@@ -2554,6 +2583,10 @@ extern "C" RENDERER_RENDER(renderer_render)
         v4 clear_color = {};
         if (framebuffer)
         {
+            v2i framebuffer_size = {
+                framebuffer->size.x * state->framebuffer_scale,
+                framebuffer->size.y * state->framebuffer_scale,
+            };
             TIMED_BLOCK("framebuffer setup");
             if (!framebuffer->_flags.no_clear_each_frame)
             {
@@ -2567,7 +2600,8 @@ extern "C" RENDERER_RENDER(renderer_render)
             GLenum texture_target = GL_TEXTURE_2D;
             uint32_t texture_id = framebuffer->_texture;
             uint32_t multisample_samples = 2;
-            if (framebuffer->_flags.use_multisample_buffer)
+            bool framebuffer_is_multisample = framebuffer->_flags.use_multisample_buffer && !state->multisample_disabled;
+            if (framebuffer_is_multisample)
             {
                 texture_target = GL_TEXTURE_2D_MULTISAMPLE;
             }
@@ -2580,7 +2614,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     hglGenTextures(1, &framebuffer->_texture);
                     texture_id = framebuffer->_texture;
-                    if (framebuffer->_flags.use_multisample_buffer)
+                    if (framebuffer_is_multisample)
                     {
                         hglBindTexture(texture_target, framebuffer->_texture);
                     }
@@ -2592,7 +2626,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     }
                     if (framebuffer->_flags.use_rg32f_buffer)
                     {
-                        hglTexImage2D(texture_target, 0, GL_RGBA32F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, nullptr);
+                        hglTexImage2D(texture_target, 0, GL_RGBA32F, framebuffer_size.x, framebuffer_size.y, 0, GL_RGBA, GL_BYTE, nullptr);
                         hglTexParameterf(texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                         hglTexParameterf(texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                         hglTexParameterf(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -2600,13 +2634,13 @@ extern "C" RENDERER_RENDER(renderer_render)
                     }
                     else
                     {
-                        if (framebuffer->_flags.use_multisample_buffer)
+                        if (framebuffer_is_multisample)
                         {
-                            hglTexImage2DMultisample(texture_target, multisample_samples, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, true);
+                            hglTexImage2DMultisample(texture_target, multisample_samples, GL_RGBA16F, framebuffer_size.x, framebuffer_size.y, true);
                         }
                         else
                         {
-                            hglTexImage2D(texture_target, 0, GL_RGBA16F, framebuffer->size.x, framebuffer->size.y, 0, GL_RGBA, GL_BYTE, nullptr);
+                            hglTexImage2D(texture_target, 0, GL_RGBA16F, framebuffer_size.x, framebuffer_size.y, 0, GL_RGBA, GL_BYTE, nullptr);
                             hglTexParameterf(texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                             hglTexParameterf(texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                             hglTexParameterf(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -2614,43 +2648,43 @@ extern "C" RENDERER_RENDER(renderer_render)
                         }
                     }
 
-                    hglErrorAssert();
+                    if (state->crash_on_gl_errors) hglErrorAssert();
                 }
 
-                hglErrorAssert();
+                if (state->crash_on_gl_errors) hglErrorAssert();
 
                 if (!framebuffer->_flags.use_depth_texture)
                 {
                     hglGenRenderbuffers(1, &framebuffer->_renderbuffer);
                     hglBindRenderbuffer(GL_RENDERBUFFER, framebuffer->_renderbuffer);
-                    if (framebuffer->_flags.use_multisample_buffer)
+                    if (framebuffer_is_multisample)
                     {
-                        hglRenderbufferStorageMultisample(GL_RENDERBUFFER, multisample_samples, GL_DEPTH24_STENCIL8, framebuffer->size.x, framebuffer->size.y);
+                        hglRenderbufferStorageMultisample(GL_RENDERBUFFER, multisample_samples, GL_DEPTH24_STENCIL8, framebuffer_size.x, framebuffer_size.y);
                     }
                     else
                     {
-                        hglRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer->size.x, framebuffer->size.y);
+                        hglRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer_size.x, framebuffer_size.y);
                     }
-                    hglErrorAssert();
+                    if (state->crash_on_gl_errors) hglErrorAssert();
                 }
                 else
                 {
                     hglGenTextures(1, &framebuffer->_renderbuffer);
                     hglBindTexture(texture_target, framebuffer->_renderbuffer);
-                    if (framebuffer->_flags.use_multisample_buffer)
+                    if (framebuffer_is_multisample)
                     {
-                        hglTexImage2DMultisample(texture_target, multisample_samples, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, true);
+                        hglTexImage2DMultisample(texture_target, multisample_samples, GL_DEPTH_COMPONENT16, framebuffer_size.x, framebuffer_size.y, true);
                     }
                     else
                     {
-                        hglTexImage2D(texture_target, 0, GL_DEPTH_COMPONENT16, framebuffer->size.x, framebuffer->size.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+                        hglTexImage2D(texture_target, 0, GL_DEPTH_COMPONENT16, framebuffer_size.x, framebuffer_size.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
                         hglTexParameterf(texture_target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                         hglTexParameterf(texture_target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                         hglTexParameterf(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                         hglTexParameterf(texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                     }
                 }
-                hglErrorAssert();
+                if (state->crash_on_gl_errors) hglErrorAssert();
 
                 FramebufferMakeInitialized(framebuffer);
             }
@@ -2669,7 +2703,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             {
                 hglDrawBuffer(GL_NONE);
             }
-            hglErrorAssert();
+            if (state->crash_on_gl_errors) hglErrorAssert();
 
             if (!framebuffer->_flags.use_depth_texture)
             {
@@ -2679,19 +2713,22 @@ extern "C" RENDERER_RENDER(renderer_render)
             {
                 hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture_target, framebuffer->_renderbuffer, 0);
             }
-            hglErrorAssert();
+            if (state->crash_on_gl_errors) hglErrorAssert();
 
-            hglViewport(0, 0, framebuffer->size.x, framebuffer->size.y);
+            hglViewport(0, 0, framebuffer_size.x, framebuffer_size.y);
             GLenum framebuffer_status = hglCheckFramebufferStatus(GL_FRAMEBUFFER);
             hassert(framebuffer_status == GL_FRAMEBUFFER_COMPLETE);
-            size = framebuffer->size;
+            size = framebuffer_size;
+            if (state->flush_for_profiling) hglFlush();
         }
         hglViewport(0, 0, (GLsizei)size.x, (GLsizei)size.y);
         hglScissor(0, 0, size.x, size.y);
         if (clear)
         {
+            TIMED_BLOCK("clear");
             hglClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
             hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            if (state->flush_for_profiling) hglFlush();
         }
 
         for (uint32_t elements = 0; elements < render_list->element_count; ++elements)
@@ -2774,7 +2811,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     hassert(!"Unhandled render entry type")
                 };
             }
-            hglErrorAssert();
+            if (state->crash_on_gl_errors) hglErrorAssert();
             hassert(element_size > 0);
             offset += element_size;
         }
@@ -2783,6 +2820,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         {
             hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
+        if (state->flush_for_profiling) hglFlush();
         END_BLOCK();
     }
 
@@ -2873,7 +2911,7 @@ extern "C" RENDERER_RENDER(renderer_render)
 
 
     render_draw_lists(draw_data, state);
-    hglErrorAssert();
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     {
         auto history = &state->glsetup_counters_history;

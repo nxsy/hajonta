@@ -103,6 +103,8 @@ struct platform_memory
     platform_editor_load_nearby_file_func *platform_editor_load_nearby_file;
 
     platform_get_thread_id_func *platform_get_thread_id;
+
+    uint32_t shadowmap_size;
 };
 
 #define BUTTON_ENDED_DOWN(x) (x.ended_down)
