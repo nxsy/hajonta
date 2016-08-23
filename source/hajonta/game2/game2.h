@@ -317,6 +317,13 @@ DebugProfileEvent
 };
 
 struct
+OpenGLTimerResult
+{
+    DebugProfileEventLocation *location;
+    uint32_t result;
+};
+
+struct
 DebugFrame
 {
     uint32_t frame_id;
@@ -327,6 +334,9 @@ DebugFrame
 
     uint32_t event_count;
     DebugProfileEvent events[100];
+
+    uint32_t opengl_timer_count;
+    OpenGLTimerResult opengl_timer[20];
 
     uint32_t parent_count;
     uint32_t parents[10];
@@ -344,6 +354,7 @@ DebugSystem
     DebugProfileEventLocationHash location_hash;
 
     uint32_t oldest_frame;
+    uint32_t previous_frame;
     uint32_t current_frame;
     DebugFrame frames[256];
 
@@ -365,8 +376,10 @@ frame_end(DebugSystem *debug_system, uint64_t cycles, float seconds)
     }
     DebugFrame *frame = debug_system->frames + next_frame;
     frame->event_count = 0;
+    frame->opengl_timer_count = 0;
     frame->start_cycles = cycles;
     frame->frame_id = old_frame->frame_id + 1;
+    debug_system->previous_frame = debug_system->current_frame;
     debug_system->current_frame = next_frame;
 }
 

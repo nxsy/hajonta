@@ -340,6 +340,7 @@ DebugType
     FrameMarker,
     BeginBlock,
     EndBlock,
+    OpenGLTimerResult,
 };
 
 struct
@@ -359,6 +360,12 @@ DebugEventData_EndBlock
 };
 
 struct
+DebugEventData_OpenGLTimerResult
+{
+    uint32_t result;
+};
+
+struct
 DebugEvent
 {
     DebugType type;
@@ -372,6 +379,7 @@ DebugEvent
         DebugEventData_FrameMarker framemarker;
         DebugEventData_BeginBlock begin_block;
         DebugEventData_EndBlock end_block;
+        DebugEventData_OpenGLTimerResult opengl_timer_result;
     };
 };
 
@@ -405,6 +413,10 @@ uint32_t _h_event_index_count = std::atomic_fetch_add(&GlobalDebugTable->event_i
 #define FRAME_MARKER(seconds_elapsed) \
 {RecordDebugEvent(DebugType::FrameMarker, DEBUG_NAME("Frame Marker")); \
     _h_event->framemarker.seconds = seconds_elapsed;}
+
+#define OPENGL_TIMER_RESULT(_guid, _result) \
+{RecordDebugEvent(DebugType::OpenGLTimerResult, _guid); \
+    _h_event->opengl_timer_result.result = _result;}
 
 #define TIMED_BLOCK__(_guid, _counter, ...) timed_block TimedBlock_##_counter(_guid, ## __VA_ARGS__)
 #define TIMED_BLOCK_(_guid, _counter, ...) TIMED_BLOCK__(_guid, _counter, ## __VA_ARGS__)

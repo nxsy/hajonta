@@ -164,9 +164,48 @@ struct Skybox
     uint32_t ibo;
 };
 
+struct
+TimerQueryData
+{
+    uint32_t query_count[2];
+    uint32_t query_ids[2][20];
+    const char *guid[2][20];
+    uint32_t buffer;
+};
+
+inline void
+RecordTimerQuery(TimerQueryData *timer_query_data, const char *guid)
+{
+    auto &buffer = timer_query_data->buffer;
+    auto &query_count = timer_query_data->query_count[buffer];
+    auto &query_id = timer_query_data->query_ids[buffer][query_count];
+    timer_query_data->guid[buffer][query_count] = guid;
+    hglBeginQuery(GL_TIME_ELAPSED, query_id);
+    ++query_count;
+}
+
+inline void
+CollectAndSwapTimers(TimerQueryData *timer_query_data)
+{
+    auto &buffer = timer_query_data->buffer;
+    buffer = !buffer;
+
+    for (uint32_t i = 0; i < timer_query_data->query_count[buffer]; ++i)
+    {
+        const char *guid = timer_query_data->guid[buffer][i];
+        uint32_t query_id = timer_query_data->query_ids[buffer][i];
+        uint32_t time_taken;
+        hglGetQueryObjectuiv(query_id, GL_QUERY_RESULT, &time_taken);
+        OPENGL_TIMER_RESULT(guid, time_taken);
+    }
+    timer_query_data->query_count[buffer] = 0;
+}
+
 struct renderer_state
 {
     bool initialized;
+
+    TimerQueryData timer_query_data;
 
     imgui_program_struct imgui_program;
     phong_no_normal_map_program_struct phong_no_normal_map_program;
@@ -1185,6 +1224,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->vsm_lightbleed_compensation = 0.001f;
         state->blur_scale_divisor = 3072.0f;
         state->shadowmap_bias = 0.008f;
+        hglGenQueries(
+            2 * harray_count(state->timer_query_data.query_ids[0]),
+            (uint32_t *)&state->timer_query_data.query_ids
+        );
     }
 
     _GlobalRendererState.input = input;
@@ -1277,6 +1320,7 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
     hglDisable(GL_DEPTH_TEST);
     hglEnable(GL_SCISSOR_TEST);
     hglActiveTexture(GL_TEXTURE0);
+    hglBindTexture(GL_TEXTURE_2D, 0);
     hglUseProgram(state->imgui_program.program);
 
     // Handle cases of screen coordinates != from framebuffer coordinates (e.g. retina displays)
@@ -2552,6 +2596,8 @@ extern "C" RENDERER_RENDER(renderer_render)
             RecordDebugEvent(DebugType::BeginBlock, render_list->name);
         }
 
+        RecordTimerQuery(&state->timer_query_data, render_list->name);
+
         v2i size = {window->width, window->height};
         hglActiveTexture(GL_TEXTURE0);
         hglBindTexture(GL_TEXTURE_2D, 0);
@@ -2690,6 +2736,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             }
 
             hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
+            hassert(framebuffer->_fbo);
             if (!framebuffer->_flags.no_color_buffer)
             {
                 hglFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_target, texture_id, 0);
@@ -2821,6 +2868,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
         if (state->flush_for_profiling) hglFlush();
+        hglEndQuery(GL_TIME_ELAPSED);
         END_BLOCK();
     }
 
@@ -2910,7 +2958,11 @@ extern "C" RENDERER_RENDER(renderer_render)
     ImDrawData *draw_data = ImGui::GetDrawData();
 
 
+    RecordTimerQuery(&state->timer_query_data, DEBUG_NAME("render_draw_lists"));
+    hglBindVertexArray(0);
     render_draw_lists(draw_data, state);
+    hglEndQuery(GL_TIME_ELAPSED);
+
     if (state->crash_on_gl_errors) hglErrorAssert();
 
     {
@@ -2932,6 +2984,8 @@ extern "C" RENDERER_RENDER(renderer_render)
         }
     }
     ResetCounters(glsetup_counters);
+
+    CollectAndSwapTimers(&state->timer_query_data);
 
     input->mouse = state->original_mouse_input;
 

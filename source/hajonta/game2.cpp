@@ -2009,7 +2009,12 @@ show_profiling(DebugSystem *debug_system)
                 debug_system->zoom_guid = new_zoom_guid;
             }
         }
+    }
 
+    for (uint32_t i = 0; i < previous_frame->opengl_timer_count; ++i)
+    {
+        OpenGLTimerResult *timer = previous_frame->opengl_timer + i;
+        ImGui::Text("%s took %f ms", timer->location->guid, (float)timer->result / 1024.0f / 1024.0f);
     }
     ImGui::End();
 }
@@ -2028,7 +2033,12 @@ extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
     index_count &= 0x7FFFFFFF;
 
     auto *debug_system = &state->debug.debug_system;
+    DebugFrame *previous_frame = 0;
     auto *current_frame = debug_system->frames + debug_system->current_frame;
+    if (debug_system->oldest_frame != debug_system->current_frame)
+    {
+        previous_frame = debug_system->frames + debug_system->previous_frame;
+    }
 
     for (uint32_t i = 0; i < index_count; ++i)
     {
@@ -2043,6 +2053,7 @@ extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
             {
                 frame_end(debug_system, event->tsc_cycles, event->framemarker.seconds);
                 current_frame = debug_system->frames + debug_system->current_frame;
+                previous_frame = debug_system->frames + debug_system->previous_frame;
             } break;
             case DebugType::BeginBlock:
             {
@@ -2069,6 +2080,12 @@ extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
                     DebugProfileEvent *parent_profile_event = current_frame->events + parent_event_counter;
                     parent_profile_event->cycles_children += all_cycles;
                 }
+            } break;
+            case DebugType::OpenGLTimerResult:
+            {
+                OpenGLTimerResult *timer = current_frame->opengl_timer + current_frame->opengl_timer_count++;
+                timer->location = find_register_event_location(&debug_system->location_hash, event->guid);
+                timer->result = event->opengl_timer_result.result;
             } break;
         }
     }
