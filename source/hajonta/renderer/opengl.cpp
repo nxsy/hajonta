@@ -12,6 +12,9 @@
 #pragma warning(disable: 4365 4267 4242 4244)
 #endif
 #include "hajonta/renderer/opengl_setup.h"
+#define PAR_SHAPES_T uint32_t
+#define PAR_SHAPES_IMPLEMENTATION
+#include "par_shapes.h"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -157,8 +160,8 @@ struct GLSetupCountersHistory
 
 struct Skybox
 {
-    v3 vertices[12];
-    v3i faces[20];
+    v3 vertices[2145];
+    v3i faces[4032];
 
     uint32_t vbo;
     uint32_t ibo;
@@ -745,21 +748,20 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
     hglGenBuffers(1, &skybox->ibo);
 
     if (state->crash_on_gl_errors) hglErrorAssert();
+    par_shapes_mesh *mesh = par_shapes_create_parametric_sphere(32, 64);
 
-    v3 vertices[] = {
-        { 0.000f,  0.000f,  1.000f },
-        { 0.894f,  0.000f,  0.447f },
-        { 0.276f,  0.851f,  0.447f },
-        {-0.724f,  0.526f,  0.447f },
-        {-0.724f, -0.526f,  0.447f },
-        { 0.276f, -0.851f,  0.447f },
-        { 0.724f,  0.526f, -0.447f },
-        {-0.276f,  0.851f, -0.447f },
-        {-0.894f,  0.000f, -0.447f },
-        {-0.276f, -0.851f, -0.447f },
-        { 0.724f, -0.526f, -0.447f },
-        { 0.000f,  0.000f, -1.000f },
-    };
+    v3 vertices[harray_count(skybox->vertices)];
+    hassert(mesh->npoints == harray_count(vertices));
+    for (uint32_t i = 0; i < harray_count(vertices); ++i)
+    {
+        vertices[i] = {
+            mesh->points[3*i],
+            mesh->points[3*i+1],
+            mesh->points[3*i+2],
+        };
+    }
+    hassert(sizeof(skybox->vertices) == sizeof(vertices));
+    hassert(harray_count(skybox->vertices) == harray_count(vertices));
     memcpy(skybox->vertices, vertices, sizeof(vertices));
     hglBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
     hglBufferData(GL_ARRAY_BUFFER,
@@ -769,28 +771,20 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
 
     if (state->crash_on_gl_errors) hglErrorAssert();
 
-    v3i faces[] = {
-        { 0, 1, 2},
-        { 0, 2, 3},
-        { 0, 3, 4},
-        { 0, 4, 5},
-        { 0, 5, 1},
-        { 6, 11, 7},
-        { 7, 11, 8},
-        { 8, 11, 9},
-        { 9, 11,10},
-        {10, 11, 6},
-        { 1, 6, 2},
-        { 2, 7, 3},
-        { 3, 8, 4},
-        { 4, 9, 5},
-        { 5, 10,1},
-        { 6, 7, 2},
-        { 7, 8, 3},
-        { 8, 9, 4},
-        { 9,10, 5},
-        {10, 6, 1},
-    };
+    v3i faces[harray_count(skybox->faces)];
+    assert(mesh->ntriangles == harray_count(faces));
+    for (uint32_t i = 0; i < harray_count(faces); ++i)
+    {
+        faces[i] = {
+            mesh->triangles[3*i],
+            mesh->triangles[3*i+1],
+            mesh->triangles[3*i+2],
+        };
+    }
+
+    uint32_t num_faces = harray_count(faces);
+    hassert(sizeof(skybox->faces) == sizeof(faces));
+    hassert(harray_count(skybox->faces) == harray_count(faces));
     memcpy(skybox->faces, faces, sizeof(faces));
     hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -1060,7 +1054,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->gl_renderer = (const char *)hglGetString(GL_RENDERER);
         if (strstr(state->gl_renderer, "Intel HD Graphics 4"))
         {
-            state->multisample_disabled = true;
+            state->multisample_disabled = false;
             state->framebuffer_scale = 0.5f;
             memory->shadowmap_size = 256;
         }
@@ -2496,7 +2490,7 @@ draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *s
 
     hglEnable(GL_DEPTH_TEST);
     hglDepthFunc(GL_LESS);
-    hglEnable(GL_CULL_FACE);
+    hglDisable(GL_CULL_FACE);
     hglCullFace(GL_FRONT);
 
     hglBindVertexArray(state->vao);
