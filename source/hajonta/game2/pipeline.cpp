@@ -117,8 +117,8 @@ CreatePipeline(game_state *state)
     fb_shadowmap.use_depth_texture = 1;
     fb_shadowmap.use_rg32f_buffer = 1;
     fb_shadowmap.size = {
-        state->shadowmap_size,
-        state->shadowmap_size
+        (int32_t)state->shadowmap_size,
+        (int32_t)state->shadowmap_size
     };
     fb_shadowmap.fixed_size = 1;
     fb_shadowmap.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};

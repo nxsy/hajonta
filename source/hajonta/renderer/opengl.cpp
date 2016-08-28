@@ -9,7 +9,7 @@
 
 #if defined(_MSC_VER)
 #pragma warning(push, 4)
-#pragma warning(disable: 4365 4267 4242 4244)
+#pragma warning(disable: 4365 4312 4456 4457 4774 4577 4244 4242 4838 4305 4018 4389 4267)
 #endif
 #include "hajonta/renderer/opengl_setup.h"
 #define PAR_SHAPES_T uint32_t
@@ -191,7 +191,7 @@ inline void
 CollectAndSwapTimers(TimerQueryData *timer_query_data)
 {
     auto &buffer = timer_query_data->buffer;
-    buffer = !buffer;
+    buffer = (uint32_t)!buffer;
 
     for (uint32_t i = 0; i < timer_query_data->query_count[buffer]; ++i)
     {
@@ -760,8 +760,15 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
             mesh->points[3*i+2],
         };
     }
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4127)
+#endif
     hassert(sizeof(skybox->vertices) == sizeof(vertices));
     hassert(harray_count(skybox->vertices) == harray_count(vertices));
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
     memcpy(skybox->vertices, vertices, sizeof(vertices));
     hglBindBuffer(GL_ARRAY_BUFFER, skybox->vbo);
     hglBufferData(GL_ARRAY_BUFFER,
@@ -776,15 +783,21 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
     for (uint32_t i = 0; i < harray_count(faces); ++i)
     {
         faces[i] = {
-            mesh->triangles[3*i],
-            mesh->triangles[3*i+1],
-            mesh->triangles[3*i+2],
+            (int32_t)mesh->triangles[3*i],
+            (int32_t)mesh->triangles[3*i+1],
+            (int32_t)mesh->triangles[3*i+2],
         };
     }
 
-    uint32_t num_faces = harray_count(faces);
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4127)
+#endif
     hassert(sizeof(skybox->faces) == sizeof(faces));
     hassert(harray_count(skybox->faces) == harray_count(faces));
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
     memcpy(skybox->faces, faces, sizeof(faces));
     hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skybox->ibo);
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -2624,8 +2637,8 @@ extern "C" RENDERER_RENDER(renderer_render)
         if (framebuffer)
         {
             v2i framebuffer_size = {
-                framebuffer->size.x * state->framebuffer_scale,
-                framebuffer->size.y * state->framebuffer_scale,
+                (int32_t)(framebuffer->size.x * state->framebuffer_scale),
+                (int32_t)(framebuffer->size.y * state->framebuffer_scale),
             };
             TIMED_BLOCK("framebuffer setup");
             if (!framebuffer->_flags.no_clear_each_frame)

@@ -397,7 +397,7 @@ platform_get_thread_id_func *_platform_get_thread_id;
  * These debug macros from Casey Muratori's Handmade Hero
  */
 #define RecordDebugEvent(event_type, _guid)  \
-uint32_t _h_event_index_count = std::atomic_fetch_add(&GlobalDebugTable->event_index_count, 1);  \
+uint32_t _h_event_index_count = (uint32_t)std::atomic_fetch_add(&GlobalDebugTable->event_index_count, 1);  \
         uint32_t _h_event_index = _h_event_index_count & 0x7FFFFFFF;  \
         hassert(_h_event_index < harray_count(GlobalDebugTable->events[0])); \
         DebugEvent *_h_event = GlobalDebugTable->events[_h_event_index_count >> 31] + _h_event_index;  \

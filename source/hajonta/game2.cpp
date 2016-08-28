@@ -2025,7 +2025,7 @@ extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
     game_state *state = (game_state *)memory->memory;
     uint32_t index_count = (uint32_t)GlobalDebugTable->event_index_count;
     uint32_t replacement_index_count = ~(index_count >> 31) << 31;
-    index_count = std::atomic_exchange(
+    index_count = (uint32_t)std::atomic_exchange(
         &GlobalDebugTable->event_index_count,
         (int32_t)replacement_index_count
     );
