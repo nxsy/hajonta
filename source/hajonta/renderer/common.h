@@ -20,6 +20,7 @@ render_entry_type
     framebuffer_blit,
     sky,
 
+    debug_texture_load,
     mesh_from_asset,
 
     MAX = mesh_from_asset,
@@ -36,6 +37,13 @@ render_entry_type_clear
 {
     render_entry_header header;
     v4 color;
+};
+
+struct
+render_entry_type_debug_texture_load
+{
+    render_entry_header header;
+    int32_t asset_descriptor_id;
 };
 
 struct ui2d_push_context;
@@ -628,6 +636,19 @@ PushDescriptors(render_entry_list *list, LightDescriptors lights, ArmatureDescri
         entry->lights = lights;
         entry->armatures = armatures;
      }
+}
+
+inline void
+PushDebugTextureLoad(
+    render_entry_list *list,
+    int32_t asset_descriptor_id
+)
+{
+    render_entry_type_debug_texture_load *entry = PushRenderElement(list, debug_texture_load);
+    if (entry)
+    {
+       entry->asset_descriptor_id = asset_descriptor_id;
+    }
 }
 
 inline void

@@ -333,7 +333,7 @@ DebugFrame
     float seconds_elapsed;
 
     uint32_t event_count;
-    DebugProfileEvent events[100];
+    DebugProfileEvent events[4000];
 
     uint32_t opengl_timer_count;
     OpenGLTimerResult opengl_timer[20];

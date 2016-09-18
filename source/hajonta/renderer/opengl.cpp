@@ -1081,6 +1081,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
         state->generation_id = 1;
+        state->crash_on_gl_errors = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
@@ -2859,6 +2860,16 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(sky, item, header, element_size);
                     draw_sky(ctx, memory, state, matrices, asset_descriptors, item);
+                } break;
+                case render_entry_type::debug_texture_load:
+                {
+                    ExtractRenderElementWithSize(debug_texture_load, item, header, element_size);
+                    v2 st0 = {};
+                    v2 st1 = {};
+                    uint32_t texture = 0;
+                    get_texture_id_from_asset_descriptor(
+                        ctx, memory, state, asset_descriptors, item->asset_descriptor_id,
+                        &texture, &st0, &st1);
                 } break;
                 default:
                 {
