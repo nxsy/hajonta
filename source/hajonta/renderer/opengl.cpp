@@ -298,6 +298,7 @@ struct renderer_state
 
     const char *gl_vendor;
     const char *gl_renderer;
+    const char *gl_version;
     bool multisample_disabled;
     float framebuffer_scale;
     bool flush_for_profiling;
@@ -1065,6 +1066,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
         state->gl_vendor = (const char *)hglGetString(GL_VENDOR);
         state->gl_renderer = (const char *)hglGetString(GL_RENDERER);
+        state->gl_version = (const char *)hglGetString(GL_VERSION);
         if (strstr(state->gl_renderer, "Intel HD Graphics 4"))
         {
             state->multisample_disabled = false;
@@ -1636,6 +1638,87 @@ get_mesh_from_asset_descriptor(
                 result = true;
             } break;
         }
+
+        if (result)
+        {
+            descriptor->load_state = 2;
+            descriptor->mesh_data.num_bones = mesh->num_bones;
+            descriptor->mesh_data.num_ticks = mesh->num_ticks;
+            descriptor->mesh_data.bone_offsets = mesh->bone_offsets;
+            descriptor->mesh_data.bone_parents = mesh->bone_parents;
+            descriptor->mesh_data.default_transforms = mesh->default_transforms;
+            descriptor->mesh_data.animation_ticks = (AnimTick *)mesh->animation_ticks;
+            descriptor->mesh_data.num_animtick_ticks = harray_count(mesh->animation_ticks);
+            descriptor->mesh_data.num_animtick_bones = harray_count(mesh->animation_ticks[0]);
+
+            descriptor->mesh_data.bone_names = (char *)mesh->bone_names;
+            descriptor->mesh_data.num_bonename_bones = harray_count(mesh->bone_names);
+            descriptor->mesh_data.num_bonename_chars = harray_count(mesh->bone_names[0]);
+
+            int32_t first_bone = 0;
+            for (uint32_t i = 0; i < mesh->num_bones; ++i)
+            {
+                if (mesh->bone_parents[i] == -1)
+                {
+                    first_bone = (int32_t)i;
+                    break;
+                }
+            }
+
+            int32_t stack_location = 0;
+
+            int32_t stack[100];
+            stack[0] = first_bone;
+            struct
+            {
+                int32_t bone_id;
+                m4 transform;
+            } parent_list[100];
+            int32_t parent_list_location = 0;
+
+            while (stack_location >= 0)
+            {
+                int32_t bone = stack[stack_location];
+
+                int32_t parent_bone = mesh->bone_parents[bone];
+                --stack_location;
+                while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
+                {
+                    --parent_list_location;
+                }
+                ++parent_list_location;
+
+                m4 parent_matrix = m4identity();
+                if (parent_list_location)
+                {
+                    parent_matrix = parent_list[parent_list_location - 1].transform;
+                }
+
+                m4 scale = m4scale(mesh->default_transforms[bone].scale);
+                m4 translate = m4translate(mesh->default_transforms[bone].translate);
+                m4 rotate = m4rotation(mesh->default_transforms[bone].q);
+                m4 local_matrix = m4mul(translate,m4mul(rotate, scale));
+
+
+                m4 global_transform = m4mul(parent_matrix, local_matrix);
+
+                parent_list[parent_list_location] = {
+                    bone,
+                    global_transform,
+                };
+
+                mesh->default_bones[bone] = m4mul(global_transform, mesh->bone_offsets[bone]);
+
+                for (uint32_t i = 0; i < mesh->num_bones; ++i)
+                {
+                    if (mesh->bone_parents[i] == bone)
+                    {
+                        stack_location++;
+                        stack[stack_location] = (int32_t)i;
+                    }
+                }
+            }
+        }
     }
     return mesh;
 }
@@ -1792,8 +1875,6 @@ draw_mesh_from_asset(
 
     Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
 
-    auto &mesh_descriptor = descriptors[mesh_from_asset->mesh_asset_descriptor_id];
-
     int32_t a_position_id = -1;
     int32_t a_texcoord_id = -1;
     int32_t a_normal_id = -1;
@@ -1804,317 +1885,21 @@ draw_mesh_from_asset(
     int32_t start_face = 0;
     int32_t end_face = max_faces;
 
-    m4 bones[100];
-    {
-        TIMED_BLOCK("bones reset");
-        for (uint32_t i = 0; i < harray_count(bones); ++i)
-        {
-            bones[i] = m4identity();
-        }
-    }
+    m4 *bones = mesh->default_bones;
 
     ArmatureDescriptor *armature = 0;
     if (mesh_from_asset->armature_descriptor_id >= 0)
     {
         armature = armature_descriptors + mesh_from_asset->armature_descriptor_id;
     }
-
-    static bool proceed_time = true;
-    static float playback_speed = 1.0f;
-
     if (armature)
     {
-        TIMED_BLOCK("armature playback");
-        ImGui::Begin("Animation");
-        ImGui::Checkbox("Animation proceed", &proceed_time);
-        ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
-        if (ImGui::Button("Reset to start"))
-        {
-            armature->tick = 0;
-        }
-        if (proceed_time)
-        {
-            armature->tick += 1.0f / 60.0f * 24.0f * 0.75f * playback_speed;
-        }
-        ImGui::Text("Tick %d of %d",
-            (uint32_t)armature->tick % mesh->num_ticks,
-            mesh->num_ticks - 1);
-        ImGui::End();
+        bones = armature->bones;
     }
 
-    bool opened_debug = false;
-    if (mesh_from_asset->flags.debug && state->show_animation_debug)
-    {
-        opened_debug = true;
-        {
-            char label[100];
-            if (mesh_from_asset->armature_descriptor_id >= 0)
-            {
-                snprintf(label, 100, "Mesh debug##%d", mesh_from_asset->armature_descriptor_id);
-            }
-            else
-            {
-                snprintf(label, 100, "Mesh debug##%p", mesh_from_asset);
-            }
-            ImGui::Begin(label, &state->show_animation_debug);
-        }
+    static bool proceed_time = false;
+    static float playback_speed = 1.0f;
 
-        ImGui::Text("%d faces, %d bones", mesh->num_triangles, mesh->num_bones);
-        if (!mesh_descriptor.mesh_debug.flags.initialized)
-        {
-            mesh_descriptor.mesh_debug.end_face = max_faces;
-            mesh_descriptor.mesh_debug.flags.initialized = 1;
-        }
-        if (mesh_descriptor.mesh_debug.start_face > max_faces)
-        {
-            mesh_descriptor.mesh_debug.start_face = 0;
-        }
-        if (mesh_descriptor.mesh_debug.end_face > max_faces)
-        {
-            mesh_descriptor.mesh_debug.end_face = max_faces;
-        }
-        ImGui::DragIntRange2("mesh faces", &mesh_descriptor.mesh_debug.start_face, &mesh_descriptor.mesh_debug.end_face, 5.0f, 0, max_faces);
-        if (ImGui::Button("Mesh debug reset"))
-        {
-            mesh_descriptor.mesh_debug.start_face = 0;
-            mesh_descriptor.mesh_debug.end_face = max_faces;
-        }
-        start_face = mesh_descriptor.mesh_debug.start_face;
-        end_face = mesh_descriptor.mesh_debug.end_face;
-    }
-
-
-    if (mesh->num_bones)
-    {
-        TIMED_BLOCK("skinning");
-        int32_t first_bone = 0;
-        for (uint32_t i = 0; i < mesh->num_bones; ++i)
-        {
-            if (mesh->bone_parents[i] == -1)
-            {
-                first_bone = (int32_t)i;
-                break;
-            }
-        }
-
-        int32_t stack_location = 0;
-
-        int32_t stack[100];
-        stack[0] = first_bone;
-        struct
-        {
-            int32_t bone_id;
-            m4 transform;
-        } parent_list[100];
-        int32_t parent_list_location = 0;
-
-        if (opened_debug)
-        {
-            if (armature)
-            {
-                ImGui::Separator();
-                if (ImGui::Button("Armature reset"))
-                {
-                    MeshBoneDescriptor b = {
-                        {1,1,1},
-                        {0,0,0},
-                        {0,0,0,0},
-                    };
-                    for (uint32_t i = 0; i < armature->count; ++i)
-                    {
-                        armature->bones[i] = b;
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Armature to mesh defaults"))
-                {
-                    MeshBoneDescriptor b = {
-                        {0,0,0},
-                        {0,0,0},
-                        {0,0,0,0},
-                    };
-                    for (uint32_t i = 0; i < armature->count; ++i)
-                    {
-                        armature->bones[i] = b;
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Armature to scale"))
-                {
-                    for (uint32_t i = 0; i < armature->count; ++i)
-                    {
-                        armature->bones[i].scale = {1,1,1};
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("No rotation"))
-                {
-                    for (uint32_t i = 0; i < armature->count; ++i)
-                    {
-                        armature->bones[i].q = {0, 0, 0, 0};
-                    }
-                }
-            }
-
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
-            ImGui::Columns(4);
-            ImGui::Separator();
-
-        }
-
-        while (stack_location >= 0)
-        {
-            int32_t bone = stack[stack_location];
-
-            int32_t parent_bone = mesh->bone_parents[bone];
-            --stack_location;
-            while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
-            {
-                --parent_list_location;
-            }
-            ++parent_list_location;
-
-            m4 parent_matrix = m4identity();
-            if (parent_list_location)
-            {
-                parent_matrix = parent_list[parent_list_location - 1].transform;
-            }
-
-            m4 local_matrix = m4identity();
-
-            if (opened_debug)
-            {
-                char label[200];
-                sprintf(label, "%*s %s", parent_list_location * 2, "", mesh->bone_names[bone]);
-                auto size = ImGui::CalcTextSize("%s", label);
-                ImGui::PushItemWidth(size.x);
-                ImGui::Text("%s", label);
-                ImGui::PopItemWidth();
-                ImGui::NextColumn();
-            }
-
-            if (armature)
-            {
-                MeshBoneDescriptor &d = armature->bones[bone];
-
-                if (mesh->num_ticks && proceed_time)
-                {
-                    d = mesh->animation_ticks[(uint32_t)armature->tick % mesh->num_ticks][bone].transform;
-                }
-                if (d.scale.x == 0)
-                {
-                    d.scale = mesh->default_transforms[bone].scale;
-                    d.translate = mesh->default_transforms[bone].translate;
-                    d.q = mesh->default_transforms[bone].q;
-                    /*
-                    if (d.scale.x > 50)
-                    {
-                        d.scale.x = 1;
-                        d.scale.y = 1;
-                        d.scale.z = 1;
-                    }
-                    if (d.translate.y > 50)
-                    {
-                        d.translate.y = 0;
-                    }
-                    if (d.translate.z > 9)
-                    {
-                        d.translate.z = 0;
-                    }
-                    */
-                    /*
-                    d.q.x = 0;
-                    d.q.y = 0;
-                    d.q.z = 0;
-                    d.q.w = 0;
-                    */
-                }
-                if (opened_debug)
-                {
-                    char label[100];
-                    sprintf(label, "Scale##%d", bone);
-                    ImGui::DragFloat(label, &d.scale.x, 0.01f, 0.01f, 100.0f, "%.2f");
-                    d.scale.y = d.scale.x;
-                    d.scale.z = d.scale.x;
-                    ImGui::NextColumn();
-                    sprintf(label, "Translation##%d", bone);
-                    ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.4f");
-                    ImGui::NextColumn();
-                    sprintf(label, "Rotation##%d", bone);
-                    ImGui::DragFloat4(label, &d.q.x, 0.01f, -100.0f, 100.0f, "%.4f");
-                    ImGui::NextColumn();
-                }
-
-                m4 scale = m4identity();
-
-                scale.cols[0].E[0] = d.scale.x;
-                scale.cols[1].E[1] = d.scale.y;
-                scale.cols[2].E[2] = d.scale.z;
-
-                m4 translate = m4identity();
-                translate.cols[3].x = d.translate.x;
-                translate.cols[3].y = d.translate.y;
-                translate.cols[3].z = d.translate.z;
-
-                m4 rotate = m4rotation(d.q);
-
-                local_matrix = m4mul(translate,m4mul(rotate, scale));
-            }
-            else
-            {
-                if (opened_debug)
-                {
-                    ImGui::Text("Scale: %.2f", mesh->default_transforms[bone].scale.x);
-                    ImGui::NextColumn();
-                    ImGui::Text("Translation: %.2f, %.2f, %0.2f",
-                        mesh->default_transforms[bone].translate.x,
-                        mesh->default_transforms[bone].translate.y,
-                        mesh->default_transforms[bone].translate.z);
-                    ImGui::NextColumn();
-                    ImGui::Text("Rotation: %.2f, %.2f, %.2f, %.2f",
-                        mesh->default_transforms[bone].q.x,
-                        mesh->default_transforms[bone].q.y,
-                        mesh->default_transforms[bone].q.z,
-                        mesh->default_transforms[bone].q.w);
-                    ImGui::NextColumn();
-                }
-                m4 scale = m4scale(mesh->default_transforms[bone].scale);
-                m4 translate = m4translate(mesh->default_transforms[bone].translate);
-                m4 rotate = m4rotation(mesh->default_transforms[bone].q);
-                local_matrix = m4mul(translate,m4mul(rotate, scale));
-            }
-
-
-            m4 global_transform = m4mul(parent_matrix, local_matrix);
-
-            parent_list[parent_list_location] = {
-                bone,
-                global_transform,
-            };
-
-            bones[bone] = m4mul(global_transform, mesh->bone_offsets[bone]);
-
-            for (uint32_t i = 0; i < mesh->num_bones; ++i)
-            {
-                if (mesh->bone_parents[i] == bone)
-                {
-                    stack_location++;
-                    stack[stack_location] = (int32_t)i;
-                }
-            }
-        }
-
-        if (opened_debug)
-        {
-            ImGui::Columns(1);
-            ImGui::Separator();
-            ImGui::PopStyleVar();
-        }
-    }
-    if (opened_debug)
-    {
-        ImGui::End();
-    }
     int32_t num_faces = end_face - start_face;
 
     hglBindVertexArray(state->vao);
@@ -2132,7 +1917,7 @@ draw_mesh_from_asset(
             hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
             hglUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
 
-            hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
+            hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)bones);
             hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh->num_bones);
 
             hglEnableVertexAttribArray((GLuint)program.a_position_id);
@@ -2161,7 +1946,7 @@ draw_mesh_from_asset(
             hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view);
             hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
 
-            hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)&bones);
+            hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)bones);
             hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh->num_bones);
 
             hglEnableVertexAttribArray((GLuint)program.a_position_id);

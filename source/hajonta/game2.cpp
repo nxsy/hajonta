@@ -258,6 +258,7 @@ tile_asset_and_transform(int32_t y, int32_t x, int32_t x_width, int32_t z, int32
     return result;
 }
 
+
 void
 initialize(platform_memory *memory, game_state *state)
 {
@@ -350,7 +351,8 @@ initialize(platform_memory *memory, game_state *state)
 
     auto &armature = state->armatures[(uint32_t)ArmatureIds::test1];
     armature.count = harray_count(state->bones);
-    armature.bones = state->bones;
+    armature.bone_descriptors = state->bones;
+    armature.bones = state->bone_matrices;
 
     state->debug.show_textures = 0;
     state->debug.show_lights = 0;
@@ -746,6 +748,205 @@ noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDes
     }
     texture->data = scratch.values;
     texture->reload = true;
+}
+
+void
+advance_armature(asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t)
+{
+    if (asset->load_state != 2)
+    {
+        return;
+    }
+
+    auto mesh_data = asset->mesh_data;
+
+    static bool proceed_time = false;
+    static float playback_speed = 1.0f;
+    ImGui::Begin("Armature Animation");
+
+    ImGui::Checkbox("Animation proceed", &proceed_time);
+    ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
+    if (ImGui::Button("Reset to start"))
+    {
+        armature->tick = 0;
+    }
+    if (proceed_time)
+    {
+        armature->tick += 1.0f / 60.0f * 24.0f * playback_speed;
+    }
+    ImGui::Text("Tick %d of %d",
+        (uint32_t)armature->tick % mesh_data.num_ticks,
+        mesh_data.num_ticks - 1);
+
+    bool opened_debug = true;
+
+    int32_t first_bone = 0;
+    for (uint32_t i = 0; i < mesh_data.num_bones; ++i)
+    {
+        if (mesh_data.bone_parents[i] == -1)
+        {
+            first_bone = (int32_t)i;
+            break;
+        }
+    }
+
+    int32_t stack_location = 0;
+
+    int32_t stack[100];
+    stack[0] = first_bone;
+    struct
+    {
+        int32_t bone_id;
+        m4 transform;
+    } parent_list[100];
+    int32_t parent_list_location = 0;
+
+    if (opened_debug)
+    {
+        ImGui::Separator();
+        if (ImGui::Button("Armature reset"))
+        {
+            MeshBoneDescriptor b = {
+                {1,1,1},
+                {0,0,0},
+                {0,0,0,0},
+            };
+            for (uint32_t i = 0; i < armature->count; ++i)
+            {
+                armature->bone_descriptors[i] = b;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Armature to mesh defaults"))
+        {
+            MeshBoneDescriptor b = {
+                {0,0,0},
+                {0,0,0},
+                {0,0,0,0},
+            };
+            for (uint32_t i = 0; i < armature->count; ++i)
+            {
+                armature->bone_descriptors[i] = b;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Armature to scale"))
+        {
+            for (uint32_t i = 0; i < armature->count; ++i)
+            {
+                armature->bone_descriptors[i].scale = {1,1,1};
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No rotation"))
+        {
+            for (uint32_t i = 0; i < armature->count; ++i)
+            {
+                armature->bone_descriptors[i].q = {0, 0, 0, 0};
+            }
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
+        ImGui::Columns(4);
+        ImGui::Separator();
+
+    }
+
+    while (stack_location >= 0)
+    {
+        int32_t bone = stack[stack_location];
+
+        int32_t parent_bone = mesh_data.bone_parents[bone];
+        --stack_location;
+        while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
+        {
+            --parent_list_location;
+        }
+        ++parent_list_location;
+
+        m4 parent_matrix = m4identity();
+        if (parent_list_location)
+        {
+            parent_matrix = parent_list[parent_list_location - 1].transform;
+        }
+
+        if (opened_debug)
+        {
+            char label[200];
+            sprintf(label, "%*s %s", parent_list_location * 2, "", mesh_data.bone_names + (bone * mesh_data.num_bonename_chars));
+            auto size = ImGui::CalcTextSize("%s", label);
+            ImGui::PushItemWidth(size.x);
+            ImGui::Text("%s", label);
+            ImGui::PopItemWidth();
+            ImGui::NextColumn();
+        }
+
+        MeshBoneDescriptor &d = armature->bone_descriptors[bone];
+
+        d = mesh_data.animation_ticks[((uint32_t)armature->tick % mesh_data.num_ticks) * mesh_data.num_animtick_bones + bone].transform;
+        if (d.scale.x == 0)
+        {
+            d.scale = mesh_data.default_transforms[bone].scale;
+            d.translate = mesh_data.default_transforms[bone].translate;
+            d.q = mesh_data.default_transforms[bone].q;
+        }
+        if (opened_debug)
+        {
+            char label[100];
+            sprintf(label, "Scale##%d", bone);
+            ImGui::DragFloat(label, &d.scale.x, 0.01f, 0.01f, 100.0f, "%.2f");
+            d.scale.y = d.scale.x;
+            d.scale.z = d.scale.x;
+            ImGui::NextColumn();
+            sprintf(label, "Translation##%d", bone);
+            ImGui::DragFloat3(label, &d.translate.x, 0.01f, -100.0f, 100.0f, "%.4f");
+            ImGui::NextColumn();
+            sprintf(label, "Rotation##%d", bone);
+            ImGui::DragFloat4(label, &d.q.x, 0.01f, -100.0f, 100.0f, "%.4f");
+            ImGui::NextColumn();
+        }
+
+        m4 scale = m4identity();
+
+        scale.cols[0].E[0] = d.scale.x;
+        scale.cols[1].E[1] = d.scale.y;
+        scale.cols[2].E[2] = d.scale.z;
+
+        m4 translate = m4identity();
+        translate.cols[3].x = d.translate.x;
+        translate.cols[3].y = d.translate.y;
+        translate.cols[3].z = d.translate.z;
+
+        m4 rotate = m4rotation(d.q);
+
+        m4 local_matrix = m4mul(translate,m4mul(rotate, scale));
+
+        m4 global_transform = m4mul(parent_matrix, local_matrix);
+
+        parent_list[parent_list_location] = {
+            bone,
+            global_transform,
+        };
+
+        armature->bones[bone] = m4mul(global_transform, mesh_data.bone_offsets[bone]);
+
+        for (uint32_t i = 0; i < mesh_data.num_bones; ++i)
+        {
+            if (mesh_data.bone_parents[i] == bone)
+            {
+                stack_location++;
+                stack[stack_location] = (int32_t)i;
+            }
+        }
+    }
+
+    if (opened_debug)
+    {
+        ImGui::Columns(1);
+        ImGui::Separator();
+        ImGui::PopStyleVar();
+    }
+    ImGui::End();
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -1430,6 +1631,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
     //three_dee_mesh_flags_debug.debug = 1;
+    //
+    advance_armature(state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
 
     PushMeshFromAsset(
         &state->three_dee_renderer.list,

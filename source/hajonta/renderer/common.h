@@ -135,7 +135,8 @@ struct
 ArmatureDescriptor
 {
     uint32_t count;
-    MeshBoneDescriptor *bones;
+    MeshBoneDescriptor *bone_descriptors;
+    m4 *bones;
     float tick;
 };
 
@@ -202,6 +203,7 @@ Mesh
     MeshBoneDescriptor default_transforms[100];
     uint32_t num_ticks;
     AnimTick animation_ticks[100][100];
+    m4 default_bones[100];
 
     bool loaded;
     bool reload;
@@ -332,6 +334,24 @@ asset_descriptor
     };
     int32_t asset_id;
     uint32_t generation_id;
+    int32_t load_state;
+    union
+    {
+        struct
+        {
+            uint32_t num_bones;
+            uint32_t num_ticks;
+            m4 *bone_offsets;
+            int32_t *bone_parents;
+            MeshBoneDescriptor *default_transforms;
+            AnimTick *animation_ticks;
+            uint32_t num_animtick_ticks;
+            uint32_t num_animtick_bones;
+            char *bone_names;
+            uint32_t num_bonename_bones;
+            uint32_t num_bonename_chars;
+        } mesh_data;
+    };
     union
     {
         struct

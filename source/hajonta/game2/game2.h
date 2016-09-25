@@ -688,6 +688,7 @@ struct game_state
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
     ArmatureDescriptor armatures[(uint32_t)ArmatureIds::MAX + 1];
     MeshBoneDescriptor bones[100];
+    m4 bone_matrices[100];
 
     _asset_ids asset_ids;
     AssetDescriptors assets;
