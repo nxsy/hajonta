@@ -1896,32 +1896,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ShaderType::variance_shadow_map
     );
 
-    /*
-    PushMeshFromAsset(&state->three_dee_renderer.list,
-        (uint32_t)matrix_ids::mesh_projection_matrix,
-        (uint32_t)matrix_ids::mesh_view_matrix,
-        state->dynamic_mesh_model_matrix,
-        state->asset_ids.dynamic_mesh_test,
-        state->asset_ids.dynamic_texture_test,
-        1,
-        -1,
-        three_dee_mesh_flags,
-        ShaderType::standard
-    );
-
-    PushMeshFromAsset(&state->shadowmap_renderer.list,
-        (uint32_t)matrix_ids::light_projection_matrix,
-        -1,
-        state->dynamic_mesh_model_matrix,
-        state->asset_ids.dynamic_mesh_test,
-        -1,
-        0,
-        -1,
-        shadowmap_mesh_flags,
-        ShaderType::variance_shadow_map
-    );
-    /* */
-
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->two_dee_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
