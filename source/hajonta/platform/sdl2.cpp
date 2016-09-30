@@ -260,8 +260,6 @@ sdl_init(sdl2_state *state)
         return _fail(state, "SDL_CreateTextureFromSurface failed");
     }
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
@@ -271,7 +269,25 @@ sdl_init(sdl2_state *state)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
-    state->context = SDL_GL_CreateContext(state->window);
+    uint32_t minor = 5;
+    while (minor >= 1)
+    {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
+        state->context = SDL_GL_CreateContext(state->window);
+        if (state->context)
+        {
+            break;
+        }
+        minor--;
+    }
+    if (!state->context)
+    {
+        const char *error = SDL_GetError();
+        hassert(error);
+        sdl_cleanup(state);
+        return _fail(state, "SDL_GL_CreateContext failed");
+    }
     SDL_GL_SetSwapInterval(-1);
 
     SDL_AudioSpec wanted = {};
@@ -544,7 +560,13 @@ main(int argc, char *argv[])
 {
     _platform_get_thread_id = platform_get_thread_id;
     sdl2_state state = {};
-    sdl_init(&state);
+    bool sdl_init_successful = sdl_init(&state);
+    if (!sdl_init_successful)
+    {
+        hassert(state.stop_reason);
+        printf("Failed to initialize graphics: %s", state.stop_reason);
+        return 1;
+    }
 
     platform_memory memory = {};
     memory.size = 256 * 1024 * 1024;
