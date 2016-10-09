@@ -12,7 +12,7 @@ out vec3 v_w_position;
 out vec2 v_texcoord;
 out vec3 v_w_normal;
 
-layout(std140) struct Tex2DAddress
+struct Tex2DAddress
 {
     uint Container;
     float Page;
@@ -23,7 +23,7 @@ layout(std140) uniform CB0
     Tex2DAddress texAddress[100];
 };
 
-layout(std140) struct DrawData
+struct DrawData
 {
     mat4 projection;
     mat4 view;

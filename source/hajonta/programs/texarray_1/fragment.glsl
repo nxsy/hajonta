@@ -4,7 +4,7 @@ precision highp float;
 precision highp int;
 layout(std140, column_major) uniform;
 
-layout(std140) struct Tex2DAddress
+struct Tex2DAddress
 {
     uint Container;
     float Page;
@@ -17,7 +17,7 @@ layout(std140) uniform CB0
 
 uniform int u_draw_data_index;
 
-layout(std140) struct DrawData
+struct DrawData
 {
     mat4 projection;
     mat4 view;
@@ -56,5 +56,9 @@ void main()
     else
     {
         o_color = vec4(1,0,1,1);
+    }
+    if (skip)
+    {
+        o_color = vec4(v_w_normal, 1);
     }
 }

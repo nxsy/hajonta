@@ -352,6 +352,7 @@ TextureSize
     };
 };
 
+#define NUM_TEXARRAY_TEXTURES 10
 struct
 CommandState
 {
@@ -364,9 +365,9 @@ CommandState
     DrawDataBuffer draw_data_buffer;
     CommandLists lists;
 
-    uint32_t textures[10];
-    TextureSize texture_sizes[harray_count(textures)];
-    uint32_t texture_layer_count[harray_count(textures)];
+    uint32_t textures[NUM_TEXARRAY_TEXTURES];
+    TextureSize texture_sizes[NUM_TEXARRAY_TEXTURES];
+    uint32_t texture_layer_count[NUM_TEXARRAY_TEXTURES];
     uint32_t texture_space_max;
 
     uint32_t texture_address_count;
@@ -384,8 +385,8 @@ struct renderer_state
     imgui_program_struct imgui_program;
     phong_no_normal_map_program_struct phong_no_normal_map_program;
     texarray_1_program_struct texarray_1_program;
-    int32_t texarray_1_cb0;
-    int32_t texarray_1_cb1;
+    uint32_t texarray_1_cb0;
+    uint32_t texarray_1_cb1;
     int32_t texarray_1_texcontainer;
     variance_shadow_map_program_struct variance_shadow_map_program;
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
@@ -478,7 +479,7 @@ struct renderer_state
     const char *gl_vendor;
     const char *gl_renderer;
     const char *gl_version;
-    const char *gl_extension_strings[100];
+    const char *gl_extension_strings[1000];
     int gl_uniform_buffer_offset_alignment;
     int gl_max_uniform_block_size;
 
@@ -1396,7 +1397,7 @@ add_asset_file_texaddress_index(hajonta_thread_context *ctx, platform_memory *me
         }
         result = (int32_t)state->texaddress_count;
         ++state->texaddress_count;
-        add_asset_file_texaddress_index_lookup(state, asset_file_id, texaddress_index);
+        add_asset_file_texaddress_index_lookup(state, asset_file_id, (int32_t)texaddress_index);
     }
     return result;
 }
@@ -1535,7 +1536,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         int32_t num_extensions;
         hglGetIntegerv(GL_NUM_EXTENSIONS, &num_extensions);
 
-        for (uint32_t i = 0; i < num_extensions; ++i)
+        for (uint32_t i = 0; i < (uint32_t)num_extensions; ++i)
         {
             hassert(i < harray_count(state->gl_extension_strings));
             const char *extension = state->gl_extension_strings[i] = (const char *)hglGetStringi(GL_EXTENSIONS, i);
@@ -2485,7 +2486,7 @@ draw_mesh_from_asset_v3_boneless(
     auto &command_lists = state->command_state.lists;
     for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
     {
-        key_index = i;
+        key_index = (int32_t)i;
         if (command_lists.keys[i] == key)
         {
             search_result = _SearchResult::found;
@@ -2513,7 +2514,7 @@ draw_mesh_from_asset_v3_boneless(
     cmd.count = 1; // number of instances
     cmd.primCount = 3 * mesh->num_triangles; // number of triangles * 3
     cmd.firstIndex = mesh->v3_boneless.index_offset;
-    cmd.baseVertex = mesh->v3_boneless.vertex_base;
+    cmd.baseVertex = (int32_t)mesh->v3_boneless.vertex_base;
     cmd.baseInstance = 0;
 
     //key.shadowmap_color_asset_descriptor_id = light.shadowmap_color_asset_descriptor_id;
@@ -3313,7 +3314,7 @@ draw_indirect(renderer_state *state)
                 GL_TRIANGLES,
                 command.primCount,
                 GL_UNSIGNED_INT,
-                (void *)(command.firstIndex * 4),
+                (void *)(intptr_t)(command.firstIndex * 4),
                 command.baseVertex);
             //hglErrorAssert();
             //hglDrawArrays(GL_TRIANGLES, 0, 3);
