@@ -5,7 +5,7 @@ set -u
 
 CC=clang
 WARNFLAGS="-Wall -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-missing-braces -Werror -ferror-limit=3 -Wno-unused-function -Wno-c++11-narrowing"
-DEBUG_FLAGS="-DDEBUG -g"
+DEBUG_FLAGS="-DDEBUG -g -O0"
 CPPFLAGS="-std=c++14 -DHAJONTA_DEBUG=1 -DSDL_WITH_SUBDIR=1"
 INCLUDES="-Isource -Ibuild/debug/generated -Ithirdparty/stb -Ithirdparty/imgui -Ithirdparty/par"
 CLANG="clang++"
@@ -27,6 +27,7 @@ ${CLANG} ${CPPFLAGS} ${WARNFLAGS} -o build/debug/program source/hajonta/bootstra
 ( cd build/debug && ./program ../../source hajonta/programs phong_no_normal_map )
 ( cd build/debug && ./program ../../source hajonta/programs variance_shadow_map )
 ( cd build/debug && ./program ../../source hajonta/programs/filters filter_gaussian_7x1 )
+( cd build/debug && ./program ../../source hajonta/programs texarray_1 )
 
 # unit tests
 ${CLANG} ${CPPFLAGS} ${WARNFLAGS} -o build/debug/unit source/hajonta/bootstrap/unit.cpp ${DEBUG_FLAGS} ${INCLUDES}

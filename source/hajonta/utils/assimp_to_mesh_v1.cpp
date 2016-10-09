@@ -42,6 +42,18 @@ struct binary_format_v2
     uint32_t animation_size;
 };
 
+struct binary_format_v3_boneless
+{
+    uint32_t header_size;
+    uint32_t vertexformat;
+    uint32_t vertices_offset;
+    uint32_t vertices_size;
+    uint32_t indices_offset;
+    uint32_t indices_size;
+    uint32_t num_triangles;
+    uint32_t num_vertices;
+};
+
 struct
 BoneAnimationHeader
 {
@@ -68,6 +80,12 @@ BoneWeights
     float weights[4];
 };
 
+struct v2
+{
+    float x;
+    float y;
+};
+
 struct v3
 {
     float x;
@@ -82,6 +100,14 @@ Quaternion
     float y;
     float z;
     float w;
+};
+
+struct
+vertexformat_1
+{
+    v3 position;
+    v3 normal;
+    v2 texcoords;
 };
 
 struct
@@ -168,68 +194,9 @@ full_fwrite(const void *ptr, size_t size, size_t count, FILE *of)
 }
 
 int
-main(int argc, char **argv)
+handle_bone_model(const aiScene *scene, char *outputfile)
 {
-    if (argc < 3)
-    {
-        printf("usage: %s infile outfile\n", argv[0]);
-        return 1;
-    }
-    char *inputfile = argv[1];
-    char *outputfile = argv[2];
-
-    Assimp::Importer importer;
-
-    auto quality = aiProcessPreset_TargetRealtime_MaxQuality;
-    // quality &= ~aiProcess_SplitLargeMeshes;
-
-    importer.SetPropertyInteger(AI_CONFIG_PP_PTV_NORMALIZE, true);
-    //quality |= aiProcess_PreTransformVertices;
-
-    // One node, one mesh
-    quality |= aiProcess_OptimizeGraph;
-    quality |= aiProcess_FlipUVs;
-    quality &= ~aiProcess_Debone;
-
-    // Remove everything but the mesh itself
-    importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, aiComponent_COLORS | aiComponent_LIGHTS | aiComponent_CAMERAS | aiComponent_MATERIALS);
-    quality |= aiProcess_RemoveComponent;
-    // Remove lines and points
-    importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE | aiPrimitiveType_POINT);
-
-    const aiScene* scene = importer.ReadFile(inputfile, quality);
-
-    if(!scene)
-    {
-        // Boo.
-        printf("%s\n", importer.GetErrorString());
-        return 1;
-    }
-
-    if (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
-    {
-        printf("Scene incomplete\n");
-        return 1;
-    }
-    printf("Scene number of meshes: %d\n", scene->mNumMeshes);
-
-    printf("\n");
-
-    aiNode *root = scene->mRootNode;
-    printf("Root name: %s\n", root->mName.C_Str());
-    printf("Root number of children: %d\n", root->mNumChildren);
-    printf("Root number of meshes: %d\n", root->mNumMeshes);
-
-    printf("Root transformation is identity: %d\n", root->mTransformation.IsIdentity());
-
-    printf("\n");
-
-    if (!root->mTransformation.IsIdentity())
-    {
-        printf("root transformation is not identity\n");
-        //return 1;
-    }
-
+    printf("Handle bone model\n");
     binary_format_v2 format = {};
     format.header_size = sizeof(binary_format_v2);
 
@@ -690,3 +657,199 @@ main(int argc, char **argv)
 
     return 0;
 }
+
+int
+handle_boneless_model(const aiScene *scene, const char *outputfile)
+{
+    printf("Handle boneless model\n");
+    binary_format_v3_boneless format = {};
+    format.header_size = sizeof(binary_format_v3_boneless);
+
+    format.vertexformat = 1;
+    format.num_vertices = 0;
+
+    std::unordered_map<std::string, uint32_t> bone_id_lookup;
+    std::vector<std::string> bone_names;
+
+    std::vector<OffsetMatrix> bone_offsets;
+    std::vector<MeshBoneDescriptor> bone_default_transforms;
+
+    for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
+    {
+        aiMesh *mesh = scene->mMeshes[i];
+
+        format.vertices_size += sizeof(vertexformat_1) * mesh->mNumVertices;
+        format.indices_size += sizeof(uint32_t) * 3 * mesh->mNumFaces;
+        format.num_vertices += mesh->mNumVertices;
+        format.num_triangles += mesh->mNumFaces;
+    }
+
+    uint32_t offset = format.vertices_size;
+    format.indices_offset = offset;
+    offset += format.indices_size;
+
+    std::vector<vertexformat_1> vertices;
+    vertices.reserve(format.num_vertices);
+
+    for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
+    {
+        aiMesh *mesh = scene->mMeshes[h];
+        for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
+        {
+            vertexformat_1 vf0;
+            {
+                aiVector3D *v = mesh->mVertices + i;
+                vf0.position = { v->x, v->y, v->z};
+            }
+            {
+                aiVector3D *v = mesh->mNormals + i;
+                vf0.normal = { v->x, v->y, v->z};
+            }
+            {
+                aiVector3D *v = mesh->mTextureCoords[0] + i;
+                vf0.texcoords = { v->x, v->y };
+            }
+            vertices.push_back(vf0);
+        }
+    }
+
+    FILE *of = fopen(outputfile, "wb");
+    char fmt[4] = { 'H', 'J', 'N', 'T' };
+    full_fwrite(&fmt, sizeof(fmt), 1, of);
+    uint32_t version = 3;
+    full_fwrite(&version, sizeof(uint32_t), 1, of);
+    full_fwrite(&format, sizeof(binary_format_v3_boneless), 1, of);
+
+    size_t written = 0;
+    size_t total_written = 0;
+    total_written += written = full_fwrite(&vertices[0], sizeof(vertexformat_1), vertices.size(), of);
+    assert(written == format.vertices_size);
+
+    std::vector<uint32_t> indices;
+    indices.reserve(3 * format.num_triangles);
+
+    uint32_t start_index = 0;
+    for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
+    {
+        aiMesh *mesh = scene->mMeshes[h];
+        for (uint32_t i = 0; i < mesh->mNumFaces; ++i) {
+            aiFace *face = mesh->mFaces + i;
+            if (face->mNumIndices != 3)
+            {
+                printf("Wanted only triangles, got polygon with %d indices\n", face->mNumIndices);
+                return 1;
+            }
+            assert(face->mNumIndices == 3);
+            indices.push_back(start_index + face->mIndices[0]);
+            indices.push_back(start_index + face->mIndices[1]);
+            indices.push_back(start_index + face->mIndices[2]);
+        }
+        start_index += mesh->mNumVertices;
+    }
+
+    assert(total_written == format.indices_offset);
+    total_written += written = full_fwrite(&indices[0], sizeof(uint32_t), indices.size(), of);
+    assert(written == format.indices_size);
+
+    printf("Excepted file size: %d bytes\n", (uint32_t)sizeof(binary_format_v3_boneless) + 4 + 4 + offset);
+    printf("Actual file size: %d bytes\n", (uint32_t)ftell(of));
+    fclose(of);
+
+    return 0;
+}
+
+int
+main(int argc, char **argv)
+{
+    if (argc < 3)
+    {
+        printf("usage: %s infile outfile\n", argv[0]);
+        return 1;
+    }
+    char *inputfile = argv[1];
+    char *outputfile = argv[2];
+
+    Assimp::Importer importer;
+
+    auto quality = aiProcessPreset_TargetRealtime_MaxQuality;
+    // quality &= ~aiProcess_SplitLargeMeshes;
+
+    importer.SetPropertyInteger(AI_CONFIG_PP_PTV_NORMALIZE, false);
+    //quality |= aiProcess_PreTransformVertices;
+    //
+
+    // One node, one mesh
+    quality |= aiProcess_OptimizeGraph;
+    quality |= aiProcess_OptimizeMeshes;  // In MaxQuality already
+    quality |= aiProcess_FlipUVs;
+    quality |= aiProcess_Debone;  // In MaxQuality already, is lossless apparently
+    //quality &= ~aiProcess_Debone;
+
+    // Remove everything but the mesh itself
+    importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, aiComponent_COLORS | aiComponent_LIGHTS | aiComponent_CAMERAS | aiComponent_MATERIALS);
+    quality |= aiProcess_RemoveComponent;
+    // Remove lines and points
+    importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE | aiPrimitiveType_POINT);
+
+    const aiScene* scene = importer.ReadFile(inputfile, quality);
+
+    if(!scene)
+    {
+        // Boo.
+        printf("%s\n", importer.GetErrorString());
+        return 1;
+    }
+
+    if (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
+    {
+        printf("Scene incomplete\n");
+        return 1;
+    }
+
+    bool has_bones = false;
+    for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
+    {
+        aiMesh *mesh = scene->mMeshes[i];
+        if (mesh->mNumBones)
+        {
+            has_bones = true;
+            break;
+        }
+    }
+    if (!has_bones)
+    {
+        quality &= ~aiProcess_OptimizeGraph;
+        quality |= aiProcess_PreTransformVertices;
+        scene = importer.ReadFile(inputfile, quality);
+    }
+
+    printf("Scene number of meshes: %d\n", scene->mNumMeshes);
+
+    printf("\n");
+
+    aiNode *root = scene->mRootNode;
+    printf("Root name: %s\n", root->mName.C_Str());
+    printf("Root number of children: %d\n", root->mNumChildren);
+    printf("Root number of meshes: %d\n", root->mNumMeshes);
+
+    printf("Root transformation is identity: %d\n", root->mTransformation.IsIdentity());
+
+    printf("\n");
+
+    if (!root->mTransformation.IsIdentity())
+    {
+        printf("root transformation is not identity\n");
+        //return 1;
+    }
+
+    if (has_bones)
+    {
+        return handle_bone_model(scene, outputfile);
+    }
+    else
+    {
+        return handle_boneless_model(scene, outputfile);
+    }
+    return 0;
+}
+

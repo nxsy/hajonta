@@ -185,30 +185,53 @@ BoneAnimationHeader
     float ticks_per_second;
 };
 
+enum struct
+MeshFormat {
+    first,
+    v3_boneless,
+};
+
 struct
 Mesh
 {
-    buffer vertices;
-    buffer uvs;
-    buffer normals;
-    buffer indices;
     uint32_t num_triangles;
+    uint32_t vertexformat;
     uint32_t num_bones;
-    buffer bone_ids;
-    buffer bone_weights;
 
-    char bone_names[100][100];
-    int32_t bone_parents[100];
-    m4 bone_offsets[100];
-    MeshBoneDescriptor default_transforms[100];
-    uint32_t num_ticks;
-    AnimTick animation_ticks[100][100];
-    m4 default_bones[100];
+    buffer vertices;
+    buffer indices;
+    MeshFormat mesh_format;
+    union
+    {
+        struct
+        {
+            buffer uvs;
+            buffer normals;
+            buffer bone_ids;
+            buffer bone_weights;
+            char bone_names[100][100];
+            int32_t bone_parents[100];
+            m4 bone_offsets[100];
+            MeshBoneDescriptor default_transforms[100];
+            uint32_t num_ticks;
+            AnimTick animation_ticks[100][100];
+            m4 default_bones[100];
+            uint32_t vbo;
+            uint32_t ibo;
+        };
+        struct
+        {
+            uint32_t vertex_buffer;
+            uint32_t vertex_base;
+            uint32_t vertex_count;
+            uint32_t index_buffer;
+            uint32_t index_offset;
+        } v3_boneless;
+    };
 
     bool loaded;
+    bool dynamic;
     bool reload;
-    uint32_t vbo;
-    uint32_t ibo;
 };
 
 struct MeshFromAssetFlags

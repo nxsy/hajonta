@@ -77,6 +77,7 @@ _asset_ids
     int32_t cube_bounds_mesh;
     int32_t dynamic_mesh_test;
     int32_t dynamic_texture_test;
+    int32_t white_texture;
 };
 
 struct
@@ -419,6 +420,10 @@ debug_state
         v2 control_point_0;
         v2 control_point_1;
     } perlin;
+    struct
+    {
+        bool show;
+    } armature;
 
     DebugSystem debug_system;
 };
@@ -681,6 +686,7 @@ struct game_state
 
     m4 np_model_matrix;
     m4 cube_bounds_model_matrix;
+    m4 cube_bounds_model_matrix_2;
     m4 plane_model_matrix;
     m4 tree_model_matrix;
     m4 dynamic_mesh_model_matrix;

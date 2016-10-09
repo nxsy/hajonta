@@ -25,6 +25,7 @@
 #include "hajonta/programs/variance_shadow_map.h"
 #include "hajonta/programs/filters/filter_gaussian_7x1.h"
 #include "hajonta/programs/sky.h"
+#include "hajonta/programs/texarray_1.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -38,6 +39,86 @@ static float h_pi = 3.14159265358979f;
 static float h_halfpi = h_pi / 2.0f;
 
 DebugTable *GlobalDebugTable;
+
+struct
+vertexformat_1
+{
+    v3 position;
+    v3 normal;
+    v2 texcoords;
+};
+
+typedef struct {
+    GLuint count;
+    GLuint primCount;
+    GLuint firstIndex;
+    GLint  baseVertex;
+    GLuint baseInstance;
+} DrawElementsIndirectCommand;
+
+struct TextureAddress
+{
+    GLuint container_index;
+    GLfloat layer;
+    // std140 -> arrays aligned at 16 bytes
+    GLint reserved[2];
+};
+
+struct
+CommandKey
+{
+    uint32_t count;
+    ShaderType shader_type;
+    uint32_t vertexformat;
+    uint32_t vertex_buffer;
+    uint32_t index_buffer;
+
+    bool operator==(const CommandKey &other) const
+    {
+        return
+            (count == other.count) &&
+            (shader_type == other.shader_type) &&
+            (vertexformat == other.vertexformat) &&
+            (vertex_buffer == other.vertex_buffer) &&
+            (index_buffer == other.index_buffer);
+    }
+};
+
+struct DrawData
+{
+    m4 projection;
+    m4 view;
+    m4 model;
+    int32_t texture_texaddress_index;
+    int32_t shadowmap_texaddress_index;
+    int32_t shadowmap_color_texaddress_index;
+    int32_t pad;
+};
+
+struct DrawDataList
+{
+    DrawData data[100];
+};
+
+struct
+CommandList
+{
+    uint32_t num_commands;
+    DrawElementsIndirectCommand commands[100];
+    union
+    {
+        DrawDataList draw_data_list;
+    };
+};
+
+struct
+CommandLists
+{
+    uint32_t num_command_lists;
+    CommandKey keys[20];
+    CommandList command_lists[20];
+};
+
 
 inline void
 hglErrorAssert(bool skip = false)
@@ -119,6 +200,12 @@ struct asset_file_to_texture
 {
     int32_t asset_file_id;
     int32_t texture_offset;
+};
+
+struct asset_file_to_texaddress_index
+{
+    int32_t asset_file_id;
+    int32_t texaddress_index;
 };
 
 struct asset_file_to_mesh
@@ -204,14 +291,102 @@ CollectAndSwapTimers(TimerQueryData *timer_query_data)
     timer_query_data->query_count[buffer] = 0;
 }
 
+struct
+VertexBuffer
+{
+    uint32_t vbo;
+    uint32_t max_vertices;
+    uint32_t vertex_count;
+    uint32_t vertex_size;
+    // state -> draining, ~3 frames to fully drain?
+};
+
+struct
+IndexBuffer
+{
+    uint32_t ibo;
+    uint32_t max_indices;
+    uint32_t index_count;
+    // state -> draining, ~3 frames to fully drain?
+};
+
+struct
+TextureAddressBuffer
+{
+    // type, uniform, ssbo?
+    union
+    {
+        struct
+        {
+            uint32_t ubo;
+            uint32_t max_addresses;
+            uint32_t address_count;
+        } uniform_buffer;
+    };
+};
+
+struct
+DrawDataBuffer
+{
+    uint32_t ubo;
+    uint32_t max_data;
+    uint32_t data_count;
+};
+
+struct
+TextureSize
+{
+    int32_t width;
+    int32_t height;
+    bool operator==(const TextureSize &other) const
+    {
+        if (width != other.width)
+        {
+            return false;
+        }
+        if (height != other.height)
+        {
+            return false;
+        }
+        return true;
+    };
+};
+
+struct
+CommandState
+{
+    VertexBuffer vertex_buffers[10];
+    IndexBuffer index_buffers[10];
+
+    TextureAddressBuffer texture_address_buffers[10];
+    // new, draining?
+
+    DrawDataBuffer draw_data_buffer;
+    CommandLists lists;
+
+    uint32_t textures[10];
+    TextureSize texture_sizes[harray_count(textures)];
+    uint32_t texture_layer_count[harray_count(textures)];
+    uint32_t texture_space_max;
+
+    uint32_t texture_address_count;
+    TextureAddress texture_addresses[100];
+    uint32_t vao;
+};
+
 struct renderer_state
 {
     bool initialized;
+    CommandState command_state;
 
     TimerQueryData timer_query_data;
 
     imgui_program_struct imgui_program;
     phong_no_normal_map_program_struct phong_no_normal_map_program;
+    texarray_1_program_struct texarray_1_program;
+    int32_t texarray_1_cb0;
+    int32_t texarray_1_cb1;
+    int32_t texarray_1_texcontainer;
     variance_shadow_map_program_struct variance_shadow_map_program;
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
     sky_program_struct sky_program;
@@ -241,8 +416,12 @@ struct renderer_state
 
     uint32_t textures[32];
     uint32_t texture_count;
+    uint32_t texaddresses[32];
+    uint32_t texaddress_count;
     asset_file_to_texture texture_lookup[32];
     uint32_t texture_lookup_count;
+    asset_file_to_texaddress_index texaddress_index_lookup[32];
+    uint32_t texaddress_index_lookup_count;
 
     Mesh meshes[16];
     uint32_t mesh_count;
@@ -299,11 +478,39 @@ struct renderer_state
     const char *gl_vendor;
     const char *gl_renderer;
     const char *gl_version;
+    const char *gl_extension_strings[100];
+    int gl_uniform_buffer_offset_alignment;
+    int gl_max_uniform_block_size;
+
+    int uniform_block_size;
+
+    struct
+    {
+        bool gl_arb_multi_draw_indirect;
+        bool gl_arb_draw_indirect;
+    } gl_extensions;
+
     bool multisample_disabled;
     float framebuffer_scale;
     bool flush_for_profiling;
     bool crash_on_gl_errors;
 };
+
+int32_t
+lookup_asset_file_to_texaddress_index(renderer_state *state, int32_t asset_file_id)
+{
+    int32_t result = -1;
+    for (uint32_t i = 0; i < state->texaddress_index_lookup_count; ++i)
+    {
+        asset_file_to_texaddress_index *lookup = state->texaddress_index_lookup + i;
+        if (lookup->asset_file_id == asset_file_id)
+        {
+            result = lookup->texaddress_index;
+            break;
+        }
+    }
+    return result;
+}
 
 int32_t
 lookup_asset_file_to_texture(renderer_state *state, int32_t asset_file_id)
@@ -345,6 +552,16 @@ add_asset_file_texture_lookup(renderer_state *state, int32_t asset_file_id, int3
     ++state->texture_lookup_count;
     lookup->asset_file_id = asset_file_id;
     lookup->texture_offset = texture_offset;
+}
+
+void
+add_asset_file_texaddress_index_lookup(renderer_state *state, int32_t asset_file_id, int32_t texaddress_index)
+{
+    hassert(state->texaddress_index_lookup_count < harray_count(state->texaddress_index_lookup));
+    asset_file_to_texaddress_index *lookup = state->texaddress_index_lookup + state->texaddress_index_lookup_count;
+    ++state->texaddress_index_lookup_count;
+    lookup->asset_file_id = asset_file_id;
+    lookup->texaddress_index = texaddress_index;
 }
 
 void
@@ -467,6 +684,122 @@ load_texture_asset(
     hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     return true;
 }
+
+bool
+load_texture_array_asset(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    const char *filename,
+    uint8_t *image_buffer,
+    uint32_t image_size,
+    int32_t *x,
+    int32_t *y,
+    uint32_t *texaddress_index
+)
+{
+    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
+        return false;
+    }
+
+    uint32_t actual_size;
+    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
+            x, y, &actual_size);
+
+    TextureSize ts = {*x, *y};
+    TextureSize uts = {0, 0};
+    auto &command_state = state->command_state;
+    enum struct
+    _SearchResult
+    {
+        exhausted,
+        found,
+        notfound,
+    };
+    uint32_t container_index = 0;
+    _SearchResult search_result = _SearchResult::exhausted;
+    for (uint32_t i = 0; i < harray_count(command_state.texture_sizes); ++i)
+    {
+        container_index = i;
+        if (ts == command_state.texture_sizes[i])
+        {
+            search_result = _SearchResult::found;
+            break;
+        }
+        if (uts == command_state.texture_sizes[i])
+        {
+            search_result = _SearchResult::notfound;
+            break;
+        }
+    }
+
+    hglErrorAssert();
+    uint32_t tex = command_state.textures[container_index];
+    switch (search_result)
+    {
+        case _SearchResult::exhausted:
+        {
+            hassert(!"Not enough space for new texture size");
+            // return false;
+        } break;
+        case _SearchResult::found:
+        {
+        } break;
+        case _SearchResult::notfound:
+        {
+            hglErrorAssert();
+            hglGenTextures(1, &tex);
+            hglErrorAssert();
+            command_state.textures[container_index] = tex;
+            command_state.texture_sizes[container_index] = {*x, *y};
+            hglBindTexture(GL_TEXTURE_2D_ARRAY, tex);
+            hglErrorAssert();
+            command_state.texture_space_max = 10;
+            hglTexStorage3D(
+                GL_TEXTURE_2D_ARRAY,
+                1,
+                GL_RGBA8,
+                *x,
+                *y,
+                command_state.texture_space_max);
+            hglErrorAssert();
+        } break;
+    }
+    hglErrorAssert();
+
+    GLuint lod = 0;
+
+    auto &layer = command_state.texture_layer_count[container_index];
+    hglBindTexture(GL_TEXTURE_2D_ARRAY, tex);
+    hglTexSubImage3D(
+        GL_TEXTURE_2D_ARRAY,
+        lod,
+        0,
+        0,
+        layer,
+        *x,
+        *y,
+        1,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        state->bitmap_scratch
+    );
+    hglErrorAssert();
+    auto &ta_count = command_state.texture_address_count;
+    TextureAddress &ta = command_state.texture_addresses[ta_count];
+    ta.container_index = container_index;
+    ta.layer = (float)layer;
+
+    *texaddress_index = ta_count;
+    ++layer;
+    ++ta_count;
+    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return true;
+}
+
 void
 load_texture_asset_failed(
     hajonta_thread_context *ctx,
@@ -565,7 +898,7 @@ load_mesh_asset(
         format.num_triangles = v1_format->num_triangles;
         mesh_buffer += sizeof(binary_format_v1);
     }
-    else
+    else if (version->version == 2)
     {
         struct binary_format_v2
         {
@@ -621,6 +954,38 @@ load_mesh_asset(
         format.animation_size = v2_format->animation_size;
         mesh_buffer += v2_format->header_size;
     }
+    else
+    {
+        struct binary_format_v3_boneless
+        {
+            uint32_t header_size;
+            uint32_t vertexformat;
+            uint32_t vertices_offset;
+            uint32_t vertices_size;
+            uint32_t indices_offset;
+            uint32_t indices_size;
+            uint32_t num_triangles;
+            uint32_t num_vertices;
+        } *v3_format = (binary_format_v3_boneless *)mesh_buffer;
+        format.vertices_offset = v3_format->vertices_offset;
+        format.vertices_size = v3_format->vertices_size;
+        format.indices_offset = v3_format->indices_offset;
+        format.indices_size = v3_format->indices_size;
+        format.num_triangles = v3_format->num_triangles;
+        mesh->mesh_format = MeshFormat::v3_boneless;
+        mesh->vertexformat = v3_format->vertexformat;
+        mesh->v3_boneless.vertex_count = v3_format->num_vertices;
+        mesh_buffer += v3_format->header_size;
+        vertexformat_1 *vf = (vertexformat_1 *)mesh_buffer;
+        vertexformat_1 vf0 = vf[0];
+        vertexformat_1 vf1 = vf[1];
+        vertexformat_1 vf2 = vf[2];
+        vertexformat_1 vf3 = vf[3];
+        vertexformat_1 vf4 = vf[4];
+        vertexformat_1 vf5 = vf[5];
+        vertexformat_1 vf6 = vf[6];
+
+    }
 
     uint8_t *base_offset = mesh_buffer;
 
@@ -643,66 +1008,94 @@ load_mesh_asset(
     };
     offset += format.indices_size;
 
-    memcpy((void *)(m + offset), base_offset + format.texcoords_offset, format.texcoords_size);
-    mesh->uvs = {
-        (void *)(m + offset),
-        format.texcoords_size,
-    };
-    offset += format.texcoords_size;
-
-    memcpy((void *)(m + offset), base_offset + format.normals_offset, format.normals_size);
-    mesh->normals = {
-        (void *)(m + offset),
-        format.normals_size,
-    };
-    offset += format.normals_size;
-
-    memcpy((void *)(m + offset), base_offset + format.bone_ids_offset, format.bone_ids_size);
-    mesh->bone_ids = {
-        (void *)(m + offset),
-        format.bone_ids_size,
-    };
-    offset += format.bone_ids_size;
-
-    memcpy((void *)(m + offset), base_offset + format.bone_weights_offset, format.bone_weights_size);
-    mesh->bone_weights = {
-        (void *)(m + offset),
-        format.bone_weights_size,
-    };
-    offset += format.bone_weights_size;
-
-    int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
-    m4 *bone_offsets = (m4 *)(base_offset + format.bone_offsets_offset);
-    MeshBoneDescriptor *default_transforms = (MeshBoneDescriptor *)(base_offset + format.bone_default_transform_offset);
-    uint8_t *bone_name = base_offset + format.bone_names_offset;
-    for (uint32_t i = 0; i < format.num_bones; ++i)
+    if (format.texcoords_size)
     {
-        mesh->bone_parents[i] = bone_parents[i];
-        mesh->bone_offsets[i] = bone_offsets[i];
-        mesh->default_transforms[i] = default_transforms[i];
-        uint8_t bone_name_length = *bone_name;
-        snprintf(mesh->bone_names[i], bone_name_length, "%*s", bone_name_length, bone_name + 1);
-        bone_name += bone_name_length + 1;
+        memcpy((void *)(m + offset), base_offset + format.texcoords_offset, format.texcoords_size);
+        mesh->uvs = {
+            (void *)(m + offset),
+            format.texcoords_size,
+        };
+        offset += format.texcoords_size;
     }
 
-    mesh->num_ticks = 0;
-    if (format.animation_size)
+    if (format.normals_size)
     {
-        BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
-        AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
-        for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
+        memcpy((void *)(m + offset), base_offset + format.normals_offset, format.normals_size);
+        mesh->normals = {
+            (void *)(m + offset),
+            format.normals_size,
+        };
+        offset += format.normals_size;
+    }
+
+    if (format.bone_ids_size)
+    {
+        memcpy((void *)(m + offset), base_offset + format.bone_ids_offset, format.bone_ids_size);
+        mesh->bone_ids = {
+            (void *)(m + offset),
+            format.bone_ids_size,
+        };
+        offset += format.bone_ids_size;
+    }
+
+    if (format.bone_weights_size)
+    {
+        memcpy((void *)(m + offset), base_offset + format.bone_weights_offset, format.bone_weights_size);
+        mesh->bone_weights = {
+            (void *)(m + offset),
+            format.bone_weights_size,
+        };
+        offset += format.bone_weights_size;
+    }
+
+    if (format.num_bones)
+    {
+        int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
+        m4 *bone_offsets = (m4 *)(base_offset + format.bone_offsets_offset);
+        MeshBoneDescriptor *default_transforms = (MeshBoneDescriptor *)(base_offset + format.bone_default_transform_offset);
+        uint8_t *bone_name = base_offset + format.bone_names_offset;
+        for (uint32_t i = 0; i < format.num_bones; ++i)
         {
-            for (uint32_t j = 0; j < format.num_bones; ++j)
-            {
-                mesh->animation_ticks[i][j].transform = anim_tick->transform;
-                ++anim_tick;
-            }
+            mesh->bone_parents[i] = bone_parents[i];
+            mesh->bone_offsets[i] = bone_offsets[i];
+            mesh->default_transforms[i] = default_transforms[i];
+            uint8_t bone_name_length = *bone_name;
+            snprintf(mesh->bone_names[i], bone_name_length, "%*s", bone_name_length, bone_name + 1);
+            bone_name += bone_name_length + 1;
         }
-        mesh->num_ticks = (uint32_t)bone_animation_header->num_ticks;
+
+        mesh->num_ticks = 0;
+        if (format.animation_size)
+        {
+            BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
+            AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
+            for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
+            {
+                for (uint32_t j = 0; j < format.num_bones; ++j)
+                {
+                    mesh->animation_ticks[i][j].transform = anim_tick->transform;
+                    ++anim_tick;
+                }
+            }
+            mesh->num_ticks = (uint32_t)bone_animation_header->num_ticks;
+        }
     }
     mesh->num_triangles = format.num_triangles;
     mesh->num_bones = format.num_bones;
     return true;
+}
+
+void
+load_program_failed(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    const char *program
+)
+{
+    char msg[1024];
+    sprintf(msg, "Could not load program %s\n", program);
+    memory->platform_fail(ctx, msg);
+    memory->quit = true;
 }
 
 void
@@ -723,7 +1116,12 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
 {
     ui2d_state *ui_state = &state->ui_state;
     ui2d_program_struct *program = &ui_state->ui2d_program;
-    ui2d_program(program, ctx, memory);
+    bool loaded = ui2d_program(program, ctx, memory);
+    if (!loaded)
+    {
+        load_program_failed(ctx, memory, "ui2d");
+        return false;
+    }
 
     hglGenBuffers(1, &ui_state->vbo);
     hglGenBuffers(1, &ui_state->ibo);
@@ -733,7 +1131,7 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
 
     int32_t x, y;
     char filename[] = "ui/slick_arrows/slick_arrow-delta.png";
-    bool loaded = load_texture_asset(ctx, memory, state, filename, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
+    loaded = load_texture_asset(ctx, memory, state, filename, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
     if (!loaded)
     {
         load_texture_asset_failed(ctx, memory, filename);
@@ -813,6 +1211,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
 bool
 program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
 {
+    bool loaded = true;
     {
         imgui_program_struct *program = &state->imgui_program;
         imgui_program(program, ctx, memory);
@@ -860,31 +1259,62 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     {
         phong_no_normal_map_program_struct *program = &state->phong_no_normal_map_program;
-        phong_no_normal_map_program(program, ctx, memory);
+        loaded &= phong_no_normal_map_program(program, ctx, memory);
         state->phong_no_normal_map_tex_id = hglGetUniformLocation(program->program, "tex");
         state->phong_no_normal_map_shadowmap_tex_id = hglGetUniformLocation(program->program, "shadowmap_tex");
         state->phong_no_normal_map_shadowmap_color_tex_id = hglGetUniformLocation(program->program, "shadowmap_color_tex");
     }
 
     {
+        texarray_1_program_struct *program = &state->texarray_1_program;
+        loaded &= texarray_1_program(program, ctx, memory);
+        state->texarray_1_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
+        hglUniformBlockBinding(
+            state->texarray_1_program.program,
+            0,
+            state->texarray_1_cb0);
+        state->texarray_1_cb1 = hglGetUniformBlockIndex(program->program, "CB1");
+        hglUniformBlockBinding(
+            state->texarray_1_program.program,
+            1,
+            state->texarray_1_cb1);
+        state->texarray_1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
+    }
+
+    {
         variance_shadow_map_program_struct *program = &state->variance_shadow_map_program;
-        variance_shadow_map_program(program, ctx, memory);
+        loaded &= variance_shadow_map_program(program, ctx, memory);
         state->variance_shadow_map_tex_id = hglGetUniformLocation(program->program, "tex");
     }
 
     {
         filter_gaussian_7x1_program_struct *program = &state->filter_gaussian_7x1_program;
-        filter_gaussian_7x1_program(program, ctx, memory);
+        loaded &= filter_gaussian_7x1_program(program, ctx, memory);
         state->filter_gaussian_7x1_tex_id = hglGetUniformLocation(program->program, "tex");
     }
 
     {
         sky_program_struct *program = &state->sky_program;
-        sky_program(program, ctx, memory);
+        loaded &= sky_program(program, ctx, memory);
         populate_skybox(ctx, memory, state, &state->skybox);
     }
 
-    return true;
+    auto &command_state = state->command_state;
+    hglGenVertexArrays(1, &command_state.vao);
+    hglGenBuffers(1, &command_state.vertex_buffers[0].vbo);
+    hglGenBuffers(1, &command_state.index_buffers[0].ibo);
+    hglGenBuffers(1, &command_state.texture_address_buffers[0].uniform_buffer.ubo);
+    hglGenBuffers(1, &command_state.draw_data_buffer.ubo);
+
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
+    hglBufferData(GL_UNIFORM_BUFFER, sizeof(command_state.texture_addresses), (void *)0, GL_DYNAMIC_DRAW);
+    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.draw_data_buffer.ubo);
+    hglBufferData(GL_UNIFORM_BUFFER, sizeof(DrawDataList), (void *)0, GL_DYNAMIC_DRAW);
+    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    return loaded;
 }
 
 int32_t
@@ -935,6 +1365,38 @@ add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, ren
         result = (int32_t)state->texture_count;
         ++state->texture_count;
         add_asset_file_texture_lookup(state, asset_file_id, (int32_t)state->textures[result]);
+    }
+    return result;
+}
+
+int32_t
+add_asset_file_texaddress_index(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
+{
+    int32_t result = lookup_asset_file_to_texaddress_index(state, asset_file_id);
+    if (result < 0)
+    {
+        hassert(state->texaddress_count < harray_count(state->texaddresses));
+        int32_t x, y;
+        asset_file *asset_file0 = state->asset_files + asset_file_id;
+        uint32_t texaddress_index;
+        bool loaded = load_texture_array_asset(
+            ctx,
+            memory,
+            state,
+            asset_file0->asset_file_path,
+            state->asset_scratch,
+            sizeof(state->asset_scratch),
+            &x,
+            &y,
+            &texaddress_index);
+        if (!loaded)
+        {
+            load_texture_asset_failed(ctx, memory, asset_file0->asset_file_path);
+            return false;
+        }
+        result = (int32_t)state->texaddress_count;
+        ++state->texaddress_count;
+        add_asset_file_texaddress_index_lookup(state, asset_file_id, texaddress_index);
     }
     return result;
 }
@@ -1067,6 +1529,27 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->gl_vendor = (const char *)hglGetString(GL_VENDOR);
         state->gl_renderer = (const char *)hglGetString(GL_RENDERER);
         state->gl_version = (const char *)hglGetString(GL_VERSION);
+        hglGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &state->gl_uniform_buffer_offset_alignment);
+        hglGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &state->gl_max_uniform_block_size);
+        state->uniform_block_size = state->gl_max_uniform_block_size;
+        int32_t num_extensions;
+        hglGetIntegerv(GL_NUM_EXTENSIONS, &num_extensions);
+
+        for (uint32_t i = 0; i < num_extensions; ++i)
+        {
+            hassert(i < harray_count(state->gl_extension_strings));
+            const char *extension = state->gl_extension_strings[i] = (const char *)hglGetStringi(GL_EXTENSIONS, i);
+            state->gl_extension_strings[i] = extension;
+            if (strcmp(extension, "GL_ARB_multi_draw_indirect") == 0)
+            {
+                state->gl_extensions.gl_arb_multi_draw_indirect = true;
+            }
+            if (strcmp(extension, "GL_ARB_draw_indirect") == 0)
+            {
+                state->gl_extensions.gl_arb_draw_indirect = true;
+            }
+        }
+
         if (strstr(state->gl_renderer, "Intel HD Graphics 4"))
         {
             state->multisample_disabled = false;
@@ -1079,7 +1562,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
             state->framebuffer_scale = 1.0f;
             memory->shadowmap_size = 4096;
         }
-        program_init(ctx, memory, &_GlobalRendererState);
+        bool loaded = program_init(ctx, memory, &_GlobalRendererState);
+        hassert(loaded);
         hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
         _GlobalRendererState.initialized = true;
         state->generation_id = 1;
@@ -1207,6 +1691,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "blockfigureRigged6_mesh", "testing/human_low.hjm");
         add_asset(state, "blockfigureRigged6_texture", "testing/blockfigureRigged6.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "cube_bounds_mesh", "testing/cube_bounds.hjm");
+        add_asset(state, "white_texture", "testing/white.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -1245,6 +1730,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
     ImGuiIO& io = ImGui::GetIO();
 
     io.DisplaySize = ImVec2((float)input->window.width, (float)input->window.height);
+    io.FontGlobalScale = 1.0f / state->framebuffer_scale;
     io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
 
     std::chrono::steady_clock::time_point this_frame_start_time = std::chrono::steady_clock::now();
@@ -1497,6 +1983,75 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 }
 
 void
+get_texaddress_index_from_asset_descriptor(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    asset_descriptor *descriptors,
+    int32_t asset_descriptor_id,
+    // out
+    int32_t *texaddress_index,
+    v2 *st0,
+    v2 *st1)
+{
+    TIMED_FUNCTION();
+    *st0 = {0, 0};
+    *st1 = {1, 1};
+
+    if (asset_descriptor_id != -1)
+    {
+        asset_descriptor *descriptor = descriptors + asset_descriptor_id;
+        switch (descriptor->type)
+        {
+            case asset_descriptor_type::name:
+            {
+                update_asset_descriptor_asset_id(state, descriptor);
+                if (descriptor->asset_id >= 0)
+                {
+                    asset *descriptor_asset = state->assets + descriptor->asset_id;
+                    *st0 = descriptor_asset->st0;
+                    *st1 = descriptor_asset->st1;
+                    int32_t asset_file_id = descriptor_asset->asset_file_id;
+                    int32_t idx = lookup_asset_file_to_texaddress_index(state, asset_file_id);
+                    if (idx < 0)
+                    {
+                        idx = add_asset_file_texaddress_index(ctx, memory, state, asset_file_id);
+                    }
+                    if (idx >= 0)
+                    {
+                        *texaddress_index = idx;
+                    }
+                }
+            } break;
+            case asset_descriptor_type::framebuffer:
+            {
+                //if (FramebufferInitialized(descriptor->framebuffer))
+                //{
+                //    *texture = descriptor->framebuffer->_texture;
+                //}
+                hassert(!"Not implemented");
+            } break;
+            case asset_descriptor_type::framebuffer_depth:
+            {
+                //if (FramebufferInitialized(descriptor->framebuffer))
+                //{
+                //    *texture = descriptor->framebuffer->_renderbuffer;
+                //}
+                hassert(!"Not implemented");
+            } break;
+            case asset_descriptor_type::dynamic_mesh:
+            {
+                hassert(!"Not a texture asset type");
+            } break;
+            case asset_descriptor_type::dynamic_texture:
+            {
+                hassert(!"Not implemented");
+            } break;
+        }
+    }
+}
+
+void
 get_texture_id_from_asset_descriptor(
     hajonta_thread_context *ctx,
     platform_memory *memory,
@@ -1635,6 +2190,7 @@ get_mesh_from_asset_descriptor(
             case asset_descriptor_type::dynamic_mesh:
             {
                 mesh = (Mesh *)descriptor->ptr;
+                hassert(mesh->dynamic);
                 result = true;
             } break;
         }
@@ -1832,6 +2388,214 @@ calculate_camera_position(m4 view)
 }
 
 void
+draw_mesh_from_asset_v3_boneless(
+    hajonta_thread_context *ctx,
+    platform_memory *memory,
+    renderer_state *state,
+    m4 *matrices,
+    asset_descriptor *descriptors,
+    LightDescriptor *light_descriptors,
+    ArmatureDescriptor *armature_descriptors,
+    render_entry_type_mesh_from_asset *mesh_from_asset,
+    Mesh *mesh
+)
+{
+    auto &command_state = state->command_state;
+
+    bool debug = false;
+    if (mesh_from_asset->mesh_asset_descriptor_id == 84)
+    {
+        debug = true;
+    }
+
+    if (!mesh->loaded)
+    {
+        uint32_t vertex_buffer_id = 0;
+        uint32_t index_buffer_id = 0;
+        auto &vertex_buffer = command_state.vertex_buffers[vertex_buffer_id];
+        auto &index_buffer = command_state.index_buffers[index_buffer_id];
+        uint32_t vertex_base = vertex_buffer.vertex_count;
+        uint32_t index_offset = index_buffer.index_count;
+        hglErrorAssert();
+        mesh->v3_boneless.vertex_buffer = vertex_buffer_id;
+        mesh->v3_boneless.vertex_base = vertex_base;
+        mesh->v3_boneless.index_buffer = index_buffer_id;
+        mesh->v3_boneless.index_offset = index_offset;
+        hglBindBuffer(GL_ARRAY_BUFFER,
+            vertex_buffer.vbo);
+        if (!vertex_buffer.max_vertices)
+        {
+            vertex_buffer.vertex_size = sizeof(vertexformat_1);
+            vertex_buffer.max_vertices = 100000;
+            hglBufferData(GL_ARRAY_BUFFER,
+                vertex_buffer.vertex_size * vertex_buffer.max_vertices,
+                (void *)0,
+                GL_DYNAMIC_DRAW);
+        }
+        hglErrorAssert();
+        hassert(vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count == mesh->vertices.size);
+        hglErrorAssert();
+        hglBufferSubData(GL_ARRAY_BUFFER,
+            vertex_buffer.vertex_size * vertex_buffer.vertex_count,
+            vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count,
+            mesh->vertices.data);
+        hglErrorAssert();
+        vertex_buffer.vertex_count += mesh->v3_boneless.vertex_count;
+        hglErrorAssert();
+        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+            command_state.index_buffers[0].ibo);
+        hglErrorAssert();
+        if (!index_buffer.max_indices)
+        {
+            index_buffer.max_indices = 100000;
+            hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                3 * 4 * index_buffer.max_indices,
+                (void *)0,
+                GL_DYNAMIC_DRAW);
+        }
+        hglErrorAssert();
+        hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
+        hglErrorAssert();
+        hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
+            4 * index_buffer.index_count,
+            4 * mesh->num_triangles * 3,
+            mesh->indices.data);
+        hglErrorAssert();
+        index_buffer.index_count += mesh->num_triangles * 3;
+        mesh->loaded = true;
+    }
+
+    hglErrorAssert();
+    CommandKey key = {};
+    key.shader_type = mesh_from_asset->shader_type;
+    key.vertexformat = mesh->vertexformat;
+    key.vertex_buffer = mesh->v3_boneless.vertex_buffer;
+    key.index_buffer = mesh->v3_boneless.index_buffer;
+    key.count = 0;
+
+    enum struct
+    _SearchResult
+    {
+        exhausted,
+        found,
+        notfound,
+    };
+    _SearchResult search_result = _SearchResult::notfound;
+    int32_t key_index = -1;
+    auto &command_lists = state->command_state.lists;
+    for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
+    {
+        key_index = i;
+        if (command_lists.keys[i] == key)
+        {
+            search_result = _SearchResult::found;
+            break;
+        }
+    }
+    if (search_result != _SearchResult::found)
+    {
+        if (key_index < (int32_t)harray_count(command_lists.keys) - 1)
+        {
+            ++key_index;
+            ++command_lists.num_command_lists;
+            command_lists.keys[key_index] = key;
+            search_result = _SearchResult::found;
+        }
+        else
+        {
+            search_result = _SearchResult::exhausted;
+            hassert(!"Not enough space for new command list");
+        }
+    }
+    auto &command_list = command_lists.command_lists[key_index];
+
+    auto &cmd = command_list.commands[command_list.num_commands];
+    cmd.count = 1; // number of instances
+    cmd.primCount = 3 * mesh->num_triangles; // number of triangles * 3
+    cmd.firstIndex = mesh->v3_boneless.index_offset;
+    cmd.baseVertex = mesh->v3_boneless.vertex_base;
+    cmd.baseInstance = 0;
+
+    //key.shadowmap_color_asset_descriptor_id = light.shadowmap_color_asset_descriptor_id;
+    v2 st0 = {};
+    v2 st1 = {};
+    int32_t texture_texaddress_index = -1;
+    hglErrorAssert();
+    if (debug)
+    {
+        hassert(debug);
+    }
+    get_texaddress_index_from_asset_descriptor(
+        ctx,
+        memory,
+        state,
+        descriptors,
+        mesh_from_asset->texture_asset_descriptor_id,
+        &texture_texaddress_index,
+        &st0,
+        &st1);
+    hglErrorAssert();
+    int32_t shadowmap_texaddress_index = -1;
+    int32_t shadowmap_color_texaddress_index = -1;
+    /*
+    if (mesh_from_asset->flags.attach_shadowmap)
+    {
+        hassert(!"Not implemented");
+        auto &light = light_descriptors[0];
+        get_texaddress_index_from_asset_descriptor(
+            ctx,
+            memory,
+            state,
+            descriptors,
+            light.shadowmap_asset_descriptor_id,
+            &shadowmap_texaddress_index,
+            &st0,
+            &st1);
+        get_texaddress_index_from_asset_descriptor(
+            ctx,
+            memory,
+            state,
+            descriptors,
+            light.shadowmap_color_asset_descriptor_id,
+            &shadowmap_color_texaddress_index,
+            &st0,
+            &st1);
+    }
+    else
+    */
+    {
+        shadowmap_texaddress_index = -1;
+        shadowmap_color_texaddress_index = -1;
+    }
+
+    m4 &projection = matrices[mesh_from_asset->projection_matrix_id];
+    m4 view;
+    if (mesh_from_asset->view_matrix_id >= 0)
+    {
+        view = matrices[mesh_from_asset->view_matrix_id];
+    }
+    else
+    {
+        view = m4identity();
+    }
+    m4 &model = mesh_from_asset->model_matrix;
+
+    auto &draw_data = command_list.draw_data_list.data[command_list.num_commands];
+
+    draw_data.texture_texaddress_index = texture_texaddress_index;
+    draw_data.shadowmap_texaddress_index = shadowmap_texaddress_index;
+    draw_data.shadowmap_color_texaddress_index = shadowmap_color_texaddress_index;
+    draw_data.projection = projection;
+    draw_data.view = view;
+    draw_data.model = model;
+
+    hglErrorAssert();
+    ++command_list.num_commands;
+
+    return;
+}
+
+void
 draw_mesh_from_asset(
     hajonta_thread_context *ctx,
     platform_memory *memory,
@@ -1844,6 +2608,22 @@ draw_mesh_from_asset(
 )
 {
     TIMED_FUNCTION();
+
+    Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
+    if (mesh->mesh_format == MeshFormat::v3_boneless || mesh->vertexformat)
+    {
+        return draw_mesh_from_asset_v3_boneless(
+            ctx,
+            memory,
+            state,
+            matrices,
+            descriptors,
+            light_descriptors,
+            armature_descriptors,
+            mesh_from_asset,
+            mesh);
+    }
+
     if (state->crash_on_gl_errors) hglErrorAssert();
     hglDisable(GL_BLEND);
     hglEnable(GL_DEPTH_TEST);
@@ -1872,8 +2652,6 @@ draw_mesh_from_asset(
     get_texture_id_from_asset_descriptor(
         ctx, memory, state, descriptors, mesh_from_asset->texture_asset_descriptor_id,
         &texture, &st0, &st1);
-
-    Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
 
     int32_t a_position_id = -1;
     int32_t a_texcoord_id = -1;
@@ -2321,6 +3099,234 @@ draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *s
     hglBindVertexArray(0);
 }
 
+void
+append_command(
+    renderer_state *state,
+    CommandKey *key,
+    DrawElementsIndirectCommand cmd
+)
+{
+    /*
+    auto &lists = state->command_state.lists;
+    for (uint32_t i = 0; i < lists.num_command_lists; ++i)
+    {
+
+    }
+    target_shader_texture_vertexformat_commands cmds;
+    uint32_t index = cmds.num_commands++;
+    commands[index] = cmd;
+    */
+}
+
+void
+draw_indirect(renderer_state *state)
+{
+    hglErrorAssert();
+    auto &command_state = state->command_state;
+    auto &command_lists = command_state.lists;
+
+    auto &program = state->texarray_1_program;
+
+    hglDisable(GL_BLEND);
+    hglEnable(GL_DEPTH_TEST);
+    hglDepthFunc(GL_LESS);
+    hglEnable(GL_CULL_FACE);
+
+    hglUseProgram(program.program);
+    //hglErrorAssert();
+    hglBindVertexArray(command_state.vao);
+    //hglErrorAssert();
+
+    hglBindBufferBase(
+        GL_UNIFORM_BUFFER,
+        0, // state->texarray_1_cb0,
+        command_state.texture_address_buffers[0].uniform_buffer.ubo);
+    //hglErrorAssert();
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
+    //hglErrorAssert();
+    GLvoid* p = hglMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
+    memcpy(p, command_state.texture_addresses, sizeof(command_state.texture_addresses));
+    hglUnmapBuffer(GL_UNIFORM_BUFFER);
+    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+    /*
+    hglBufferSubData(
+        GL_UNIFORM_BUFFER,
+        0,
+        sizeof(command_state.texture_addresses),
+        command_state.texture_addresses);
+    */
+    //hglErrorAssert();
+
+    static int32_t texcontainer_textures[harray_count(command_state.textures)] =
+    {
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+    };
+
+    hglUniform1iv(state->texarray_1_texcontainer, harray_count(texcontainer_textures), texcontainer_textures);
+    for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
+    {
+        hglActiveTexture(GL_TEXTURE0 + i);
+        hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
+    }
+    hglActiveTexture(GL_TEXTURE0);
+
+    for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
+    {
+        //hglErrorAssert();
+        CommandKey &command_key = command_lists.keys[i];
+        auto &command_list = command_lists.command_lists[i];
+
+        //hglErrorAssert();
+        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+            command_state.index_buffers[command_key.index_buffer].ibo);
+        //hglErrorAssert();
+        hglBindBuffer(
+            GL_ARRAY_BUFFER,
+            command_state.vertex_buffers[command_key.vertex_buffer].vbo);
+        hglVertexAttribPointer((GLuint)state->texarray_1_program.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, position));
+        hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_position_id);
+        hglVertexAttribPointer((GLuint)state->texarray_1_program.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, texcoords));
+        hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_texcoord_id);
+        hglVertexAttribPointer((GLuint)state->texarray_1_program.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, normal));
+        hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_normal_id);
+        //hglErrorAssert();
+
+        hglBindBufferBase(
+            GL_UNIFORM_BUFFER,
+            1, // state->texarray_1_cb1,
+            command_state.draw_data_buffer.ubo);
+        hglBindBuffer(
+            GL_UNIFORM_BUFFER,
+            command_state.draw_data_buffer.ubo);
+        hglBufferSubData(
+            GL_UNIFORM_BUFFER,
+            0,
+            sizeof(DrawDataList),
+            command_list.draw_data_list.data);
+        hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        /*
+        hglErrorAssert();
+        for (uint32_t j = 0; j < 4; ++j)
+        {
+            hglVertexAttribPointer((GLuint)state->texarray_1_program.a_projection_id + j, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribDivisorData), (uint8_t *)offsetof(VertexAttribDivisorData, projection) + sizeof(v4) * j);
+            hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_projection_id + j);
+            hglVertexAttribDivisor((GLuint)state->texarray_1_program.a_projection_id + j, 1);
+            hglVertexAttribPointer((GLuint)state->texarray_1_program.a_view_matrix_id + j, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribDivisorData), (uint8_t *)offsetof(VertexAttribDivisorData, view) + sizeof(v4) * j);
+            hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_view_matrix_id + j);
+            hglVertexAttribDivisor((GLuint)state->texarray_1_program.a_view_matrix_id + j, 1);
+            hglVertexAttribPointer((GLuint)state->texarray_1_program.a_model_matrix_id + j, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribDivisorData), (uint8_t *)offsetof(VertexAttribDivisorData, model) + sizeof(v4) * j);
+            hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_model_matrix_id + j);
+            hglVertexAttribDivisor((GLuint)state->texarray_1_program.a_model_matrix_id + j, 1);
+        }
+        */
+        //hglErrorAssert();
+
+        ImGui::Text(
+            "Key %d: count %d, shader_type %s, vertexformat %d, "
+            "vertex_buffer %d, index_buffer %d",
+            i,
+            command_key.count,
+            (uint32_t)command_key.shader_type == 0 ? "standard" : "variance_shadow_map",
+            command_key.vertexformat,
+            command_key.vertex_buffer,
+            command_key.index_buffer);
+        for (uint32_t j = 0; j < command_list.num_commands; ++j)
+        {
+            ImGui::Text(
+                "Command %d in list %d",
+                j,
+                i);
+
+            auto &command = command_list.commands[j];
+            ImGui::Text(
+                "Instance count %d, primitive count %d, first index %d, baseVertex %d",
+                command.count,
+                command.primCount,
+                command.firstIndex,
+                command.baseVertex);
+            auto &draw_data = command_list.draw_data_list.data[j];
+
+            auto texture_texaddress_index = draw_data.texture_texaddress_index;
+
+            if (texture_texaddress_index >= 0)
+            {
+                TextureAddress ta = command_state.texture_addresses[texture_texaddress_index];
+                TextureSize ts = command_state.texture_sizes[ta.container_index];
+                ImGui::Text(
+                    "Texture address %d, container %d, layer %f, size %dx%d",
+                    texture_texaddress_index,
+                    ta.container_index,
+                    ta.layer,
+                    ts.width,
+                    ts.height);
+            }
+            /*
+            hglDrawElementsInstancedBaseVertex(
+                GL_TRIANGLES,
+                command.count,
+                GL_UNSIGNED_INT,
+                (void *)(command.firstIndex + sizeof(uint32_t)),
+                command.primCount,
+                command.baseVertex);
+            */
+            //hglErrorAssert();
+
+            /*
+            for (uint32_t k = 0; k < 4; ++k)
+            {
+                hglVertexAttribPointer(
+                    (GLuint)state->texarray_1_program.a_projection_id + k,
+                    4,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    sizeof(VertexAttribDivisorData),
+                    (uint8_t *)offsetof(VertexAttribDivisorData, projection) + sizeof(v4) * k + sizeof(VertexAttribDivisorData) * j);
+                hglVertexAttribPointer(
+                    (GLuint)state->texarray_1_program.a_view_matrix_id + k,
+                    4,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    sizeof(VertexAttribDivisorData),
+                    (uint8_t *)offsetof(VertexAttribDivisorData, view) + sizeof(v4) * k + sizeof(VertexAttribDivisorData) * j);
+                hglVertexAttribPointer(
+                    (GLuint)state->texarray_1_program.a_model_matrix_id + k,
+                    4,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    sizeof(VertexAttribDivisorData),
+                    (uint8_t *)offsetof(VertexAttribDivisorData, model) + sizeof(v4) * k + sizeof(VertexAttribDivisorData) * j);
+            }
+            */
+
+            hglUniform1i(program.u_draw_data_index_id, j);
+            hglDrawElementsBaseVertex(
+                GL_TRIANGLES,
+                command.primCount,
+                GL_UNSIGNED_INT,
+                (void *)(command.firstIndex * 4),
+                command.baseVertex);
+            //hglErrorAssert();
+            //hglDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+        command_list.num_commands = 0;
+        //hglErrorAssert();
+    }
+    //hglBindVertexArray(0);
+    //hglUseProgram(0);
+    //hglErrorAssert();
+}
+
+
 extern "C" RENDERER_RENDER(renderer_render)
 {
     renderer_state *state = &_GlobalRendererState;
@@ -2382,6 +3388,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     }
 
     uint32_t quads_drawn = 0;
+    uint32_t meshes_drawn[1000] = {};
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
         render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
@@ -2629,6 +3636,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::mesh_from_asset:
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
+                    ++meshes_drawn[item->mesh_asset_descriptor_id];
                     draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, item);
                 } break;
                 case render_entry_type::apply_filter:
@@ -2665,6 +3673,8 @@ extern "C" RENDERER_RENDER(renderer_render)
             hassert(element_size > 0);
             offset += element_size;
         }
+
+        draw_indirect(state);
 
         if (framebuffer)
         {
@@ -2791,6 +3801,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     CollectAndSwapTimers(&state->timer_query_data);
 
     input->mouse = state->original_mouse_input;
+    (void)meshes_drawn;
 
     return true;
 };

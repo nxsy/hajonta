@@ -68,11 +68,12 @@ add_asset(AssetDescriptors *asset_descriptors, const char *name, bool debug = fa
 }
 
 int32_t
-add_dynamic_mesh_asset(AssetDescriptors *asset_descriptors, void *ptr, bool debug = false)
+add_dynamic_mesh_asset(AssetDescriptors *asset_descriptors, Mesh *ptr, bool debug = false)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
     {
+        hassert(ptr->dynamic);
         asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::dynamic_mesh;
         asset_descriptors->descriptors[asset_descriptors->count].ptr = ptr;
         result = (int32_t)asset_descriptors->count;
@@ -155,6 +156,7 @@ show_debug_main_menu(game_state *state)
             ImGui::MenuItem("Show camera", "", &state->debug.show_camera);
             ImGui::MenuItem("Show nature pack", "", &state->debug.show_nature_pack);
             ImGui::MenuItem("Show perlin", "", &state->debug.perlin.show);
+            ImGui::MenuItem("Show armature", "", &state->debug.armature.show);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -310,6 +312,7 @@ initialize(platform_memory *memory, game_state *state)
 
     state->asset_ids.knp_palette = add_asset(asset_descriptors, "knp_palette");
     state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
+    state->asset_ids.white_texture = add_asset(asset_descriptors, "white_texture");
 
     state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
 
@@ -358,8 +361,8 @@ initialize(platform_memory *memory, game_state *state)
     state->debug.show_lights = 0;
     state->debug.cull_front = 1;
     state->debug.show_nature_pack = 0;
-    state->debug.show_camera = 1;
-    state->debug.debug_system.show = 1;
+    state->debug.show_camera = 0;
+    state->debug.debug_system.show = 0;
 
     state->camera.distance = 4.0f;
     state->camera.near_ = 1.0f;
@@ -504,6 +507,7 @@ initialize(platform_memory *memory, game_state *state)
         state->asset_class_names[i] = state->asset_classes[i].name;
     }
 
+    state->test_mesh.dynamic = true;
     state->asset_ids.dynamic_mesh_test = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh);
     state->asset_ids.dynamic_texture_test = add_dynamic_texture_asset(asset_descriptors, &state->test_texture);
 
@@ -751,7 +755,7 @@ noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDes
 }
 
 void
-advance_armature(asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t)
+advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t)
 {
     if (asset->load_state != 2)
     {
@@ -762,24 +766,25 @@ advance_armature(asset_descriptor *asset, ArmatureDescriptor *armature, float de
 
     static bool proceed_time = false;
     static float playback_speed = 1.0f;
-    ImGui::Begin("Armature Animation");
-
-    ImGui::Checkbox("Animation proceed", &proceed_time);
-    ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
-    if (ImGui::Button("Reset to start"))
+    bool opened_debug = state->debug.armature.show;
+    if (opened_debug)
     {
-        armature->tick = 0;
+        ImGui::Begin("Armature Animation");
+
+        ImGui::Checkbox("Animation proceed", &proceed_time);
+        ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
+        if (ImGui::Button("Reset to start"))
+        {
+            armature->tick = 0;
+        }
+        ImGui::Text("Tick %d of %d",
+            (uint32_t)armature->tick % mesh_data.num_ticks,
+            mesh_data.num_ticks - 1);
     }
     if (proceed_time)
     {
         armature->tick += 1.0f / 60.0f * 24.0f * playback_speed;
     }
-    ImGui::Text("Tick %d of %d",
-        (uint32_t)armature->tick % mesh_data.num_ticks,
-        mesh_data.num_ticks - 1);
-
-    bool opened_debug = true;
-
     int32_t first_bone = 0;
     for (uint32_t i = 0; i < mesh_data.num_bones; ++i)
     {
@@ -945,8 +950,8 @@ advance_armature(asset_descriptor *asset, ArmatureDescriptor *armature, float de
         ImGui::Columns(1);
         ImGui::Separator();
         ImGui::PopStyleVar();
+        ImGui::End();
     }
-    ImGui::End();
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -968,6 +973,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         //par_shapes_scale(state->par_mesh, 10, 10, 10);
         par_shapes_translate(state->par_mesh, 0, 3.0f, 0);
         auto &mesh = state->test_mesh;
+        mesh.dynamic = true;
         auto &par_mesh = *state->par_mesh;
 
         mesh.vertices = {
@@ -989,7 +995,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
         auto &perlin = state->debug.perlin;
         perlin.scale = 27.6f;
-        perlin.show = true;
+        perlin.show = false;
         perlin.octaves = 4;
         perlin.persistence = 0.5f;
         perlin.lacunarity = 2.0f;
@@ -1187,9 +1193,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     local_translate = m4identity();
     rotate = m4identity();
     translate = m4identity();
-    translate.cols[3] = {0.5f,0.5f,0.5f,1};
+    translate.cols[3] = {0.5f,2.1f,0.5f,1};
     scale = m4identity();
     state->cube_bounds_model_matrix = m4mul(translate,m4mul(rotate, local_translate));
+    translate.cols[3] = {-0.5f,2.1f,-0.5f,1};
+    state->cube_bounds_model_matrix_2 = m4mul(translate,m4mul(rotate, local_translate));
 
     local_translate = m4identity();
     rotate = m4identity();
@@ -1632,7 +1640,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
     //three_dee_mesh_flags_debug.debug = 1;
     //
-    advance_armature(state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
+    advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
 
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
@@ -1915,7 +1923,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     );
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
-    /*
     {
         MeshFromAssetFlags flags = {};
         flags.depth_disabled = 1;
@@ -1925,14 +1932,30 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             (uint32_t)matrix_ids::mesh_view_matrix,
             state->cube_bounds_model_matrix,
             state->asset_ids.cube_bounds_mesh,
-            -1,
+            state->asset_ids.white_texture,
             0,
             -1,
             flags,
             ShaderType::standard
         );
     }
-    */
+
+    {
+        MeshFromAssetFlags flags = {};
+        flags.depth_disabled = 1;
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            state->cube_bounds_model_matrix_2,
+            state->asset_ids.cube_bounds_mesh,
+            state->asset_ids.white_texture,
+            0,
+            -1,
+            flags,
+            ShaderType::standard
+        );
+    }
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);
