@@ -21,6 +21,7 @@ PipelineInit(RenderPipeline *pipeline, AssetDescriptors *asset_descriptors)
         framebuffer->framebuffer._flags.use_multisample_buffer = framebuffer->multisample;
         framebuffer->framebuffer._flags.use_depth_texture = framebuffer->use_depth_texture;
         framebuffer->framebuffer._flags.use_rg32f_buffer = framebuffer->use_rg32f_buffer;
+        framebuffer->framebuffer._flags.use_texarray = framebuffer->use_texarray;
         framebuffer->framebuffer._flags.no_clear_each_frame = framebuffer->no_clear_each_frame;
         framebuffer->framebuffer.clear_color = framebuffer->clear_color;
     }
@@ -123,6 +124,20 @@ CreatePipeline(game_state *state)
     fb_shadowmap.fixed_size = 1;
     fb_shadowmap.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
 
+    {
+        pipeline_elements.fb_shadowmap_texarray = RenderPipelineAddFramebuffer(pipeline);
+        auto &fb_shadowmap_texarray = pipeline->framebuffers[pipeline_elements.fb_shadowmap_texarray];
+        //fb_shadowmap_texarray.use_depth_texture = 1;
+        //fb_shadowmap_texarray.use_rg32f_buffer = 1;
+        fb_shadowmap_texarray.use_texarray = 1;
+        fb_shadowmap_texarray.size = {
+            (int32_t)state->shadowmap_size,
+            (int32_t)state->shadowmap_size
+        };
+        fb_shadowmap_texarray.fixed_size = 1;
+        fb_shadowmap_texarray.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
+    }
+
     pipeline_elements.fb_sm_blur_x = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_x = pipeline->framebuffers[pipeline_elements.fb_sm_blur_x];
     fb_sm_blur_x.use_rg32f_buffer = 1;
@@ -139,7 +154,7 @@ CreatePipeline(game_state *state)
 
     pipeline_elements.fb_nature_pack_debug = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_nature_pack_debug = pipeline->framebuffers[pipeline_elements.fb_nature_pack_debug];
-    fb_nature_pack_debug.size = { 64, 64 };
+    fb_nature_pack_debug.size = { 512, 512 };
     fb_nature_pack_debug.fixed_size = 1;
 
     pipeline_elements.r_framebuffer = RenderPipelineAddRenderer(pipeline);
@@ -220,6 +235,17 @@ CreatePipeline(game_state *state)
         ApplyFilterType::gaussian_7x1_y,
     };
 
+    pipeline_elements.r_shadowmap_texarray_blit = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *shadowmap_texarray_blit = pipeline->entries + pipeline_elements.r_shadowmap_texarray_blit;
+    pipeline_elements.rl_shadowmap_texarray_blit.list.name = DEBUG_NAME("texarray_blit");
+    *shadowmap_texarray_blit = {
+        &pipeline_elements.rl_shadowmap_texarray_blit.list,
+        pipeline_elements.rl_shadowmap_texarray_blit.buffer,
+        sizeof(pipeline_elements.rl_shadowmap_texarray_blit.buffer),
+        pipeline_elements.fb_shadowmap_texarray,
+        pipeline_elements.fb_sm_blur_xy,
+    };
+
     pipeline_elements.r_two_dee = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *two_dee = pipeline->entries + pipeline_elements.r_two_dee;
     state->two_dee_renderer.list.name = DEBUG_NAME("two_dee");
@@ -253,6 +279,7 @@ CreatePipeline(game_state *state)
         -1,
     };
 
+    PipelineAddDependency(pipeline, pipeline_elements.r_shadowmap_texarray_blit, pipeline_elements.r_sm_blur_xy);
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee, pipeline_elements.r_sm_blur_xy);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_xy, pipeline_elements.r_sm_blur_x);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_x, pipeline_elements.r_shadowmap);

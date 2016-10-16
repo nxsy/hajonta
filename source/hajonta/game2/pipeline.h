@@ -28,6 +28,7 @@ RenderPipelineFramebuffer
         uint32_t multisample:1;
         uint32_t use_depth_texture:1;
         uint32_t use_rg32f_buffer:1;
+        uint32_t use_texarray:1;
         uint32_t no_clear_each_frame:1;
     };
 };
@@ -50,7 +51,7 @@ struct
 RenderPipeline
 {
     uint8_t entry_count;
-    RenderPipelineEntry entries[10];
+    RenderPipelineEntry entries[20];
     uint8_t framebuffer_count;
     RenderPipelineFramebuffer framebuffers[10];
 
@@ -70,12 +71,14 @@ GamePipelineElements
     RenderPipelineFramebufferId fb_sm_blur_x;
     RenderPipelineFramebufferId fb_sm_blur_xy;
     RenderPipelineFramebufferId fb_nature_pack_debug;
+    RenderPipelineFramebufferId fb_shadowmap_texarray;
 
     RenderPipelineRendererId r_framebuffer;
     RenderPipelineRendererId r_multisample;
     RenderPipelineRendererId r_sky;
     RenderPipelineRendererId r_three_dee;
     RenderPipelineRendererId r_shadowmap;
+    RenderPipelineRendererId r_shadowmap_texarray_blit;
     RenderPipelineRendererId r_sm_blur_x;
     RenderPipelineRendererId r_sm_blur_xy;
     RenderPipelineRendererId r_two_dee;
@@ -84,6 +87,7 @@ GamePipelineElements
 
     _render_list<1024 * 100> rl_nature_pack_debug;
     _render_list<2 * 1024 * 1024> rl_sky;
+    _render_list<1024 * 100> rl_shadowmap_texarray_blit;
 };
 
 struct

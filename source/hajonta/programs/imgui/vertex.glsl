@@ -4,6 +4,7 @@ uniform mat4 u_view_matrix;
 uniform mat4 u_model_matrix;
 
 uniform float u_use_color;
+uniform int u_texaddress_index;
 
 in vec3 a_position;
 in vec2 a_uv;

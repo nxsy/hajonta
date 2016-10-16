@@ -1543,14 +1543,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         shadowmap_view_matrix = m4lookat(eye, target, up);
     }
     state->matrices[(uint32_t)matrix_ids::light_projection_matrix] = m4mul(shadowmap_projection_matrix, shadowmap_view_matrix);
+    state->light_projection_matrix = m4mul(shadowmap_projection_matrix, shadowmap_view_matrix);
 
     auto &light = state->lights[(uint32_t)LightIds::sun];
-    light.shadowmap_matrix_id = (uint32_t)matrix_ids::light_projection_matrix;
+    //light.shadowmap_matrix_id = (uint32_t)matrix_ids::light_projection_matrix;
+    light.shadowmap_matrix = state->light_projection_matrix;
     {
         auto fb_shadowmap = state->render_pipeline.framebuffers[state->pipeline_elements.fb_shadowmap];
         light.shadowmap_asset_descriptor_id = fb_shadowmap.depth_asset_descriptor;
         auto fb_sm_blur_xy = state->render_pipeline.framebuffers[state->pipeline_elements.fb_sm_blur_xy];
         light.shadowmap_color_asset_descriptor_id = fb_sm_blur_xy.asset_descriptor;
+        auto fb_shadowmap_texarray = state->render_pipeline.framebuffers[state->pipeline_elements.fb_shadowmap_texarray];
+        light.shadowmap_color_texaddress_asset_descriptor_id = fb_shadowmap_texarray.asset_descriptor;
     }
 
     MeshFromAssetFlags shadowmap_mesh_flags = {};
@@ -1920,6 +1924,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {(float)input->window.width, (float)input->window.height},
             {1,1,1,1}, 0,
             state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_main].asset_descriptor
+    );
+    PushQuad(&state->framebuffer_renderer.list, {100,100},
+            {200, 200},
+            {1,1,1,1}, 0,
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_shadowmap].asset_descriptor
+    );
+
+    PushQuad(&state->framebuffer_renderer.list, {400,100},
+            {200, 200},
+            {1,1,1,1}, 0,
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_shadowmap_texarray].asset_descriptor
     );
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 

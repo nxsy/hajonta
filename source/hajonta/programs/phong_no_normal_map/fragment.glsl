@@ -281,6 +281,14 @@ void main()
         }
     }
     o_color.a = material_color.a;
+    if (!do_not_skip)
+    {
+        o_color = vec4(
+            light.ambient_intensity + v_w_position.y / 5,
+            light.ambient_intensity + v_w_position.y / 5,
+            light.ambient_intensity + v_w_position.y / 5,
+            1);
+    }
     if (o_color.a < 0.001)
     {
         discard;

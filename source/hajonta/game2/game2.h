@@ -690,6 +690,7 @@ struct game_state
     m4 plane_model_matrix;
     m4 tree_model_matrix;
     m4 dynamic_mesh_model_matrix;
+    m4 light_projection_matrix;
 
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
     ArmatureDescriptor armatures[(uint32_t)ArmatureIds::MAX + 1];

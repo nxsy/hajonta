@@ -113,7 +113,9 @@ LightDescriptor
 
     int32_t shadowmap_asset_descriptor_id;
     int32_t shadowmap_color_asset_descriptor_id;
-    uint32_t shadowmap_matrix_id;
+    int32_t shadowmap_texarray_asset_descriptor_id;
+    int32_t shadowmap_color_texaddress_asset_descriptor_id;
+    m4 shadowmap_matrix;
 };
 
 struct
@@ -299,6 +301,7 @@ struct FramebufferFlags
     unsigned int no_color_buffer:1;
     unsigned int use_depth_texture:1;
     unsigned int use_rg32f_buffer:1;
+    unsigned int use_texarray:1;
     unsigned int use_multisample_buffer:1;
     unsigned int no_clear_each_frame:1;
     unsigned int cleared_this_frame:1;
