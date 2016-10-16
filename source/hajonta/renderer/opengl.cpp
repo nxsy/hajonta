@@ -370,18 +370,51 @@ LightsBuffer
     uint32_t ubo;
 };
 
+#define TEXTURE_FORMATS \
+    X(rgba8, GL_RGBA8, GL_RGBA) \
+    X(srgba, GL_SRGB8_ALPHA8, GL_RGBA) \
+    X(rg32f, GL_RG32F, GL_RG) \
+    X(rgba16f, GL_RGBA16F, GL_RGBA)
+
+enum struct
+TextureFormat
+{
+#define X(a, ...) a,
+TEXTURE_FORMATS
+#undef X
+};
+
 struct
-TextureSize
+TextureFormatConfig
+{
+    const char *name;
+    uint32_t internal_format;
+} texture_format_configs[] =
+{
+#define X(name, internal_format, ...) { #name, internal_format },
+TEXTURE_FORMATS
+#undef X
+};
+
+struct
+TextureConfig
 {
     int32_t width;
     int32_t height;
-    bool operator==(const TextureSize &other) const
+    TextureFormat format;
+
+    inline
+    bool operator==(const TextureConfig &other) const
     {
         if (width != other.width)
         {
             return false;
         }
         if (height != other.height)
+        {
+            return false;
+        }
+        if (format != other.format)
         {
             return false;
         }
@@ -405,7 +438,7 @@ CommandState
     CommandLists lists;
 
     uint32_t textures[NUM_TEXARRAY_TEXTURES];
-    TextureSize texture_sizes[NUM_TEXARRAY_TEXTURES];
+    TextureConfig texture_configs[NUM_TEXARRAY_TEXTURES];
     uint32_t texture_layer_count[NUM_TEXARRAY_TEXTURES];
     uint32_t texture_space_max;
 
@@ -721,7 +754,7 @@ load_texture_asset(
         hglBindTexture(GL_TEXTURE_2D, *tex);
     }
 
-    hglTexImage2D(target, 0, GL_RGBA,
+    hglTexImage2D(target, 0, GL_SRGB8_ALPHA8,
         *x, *y, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
     hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -732,10 +765,10 @@ load_texture_asset(
 }
 
 uint32_t
-container_index_for_size(CommandState *_command_state, int32_t x, int32_t y)
+container_index_for_size(CommandState *_command_state, int32_t x, int32_t y, TextureFormat format)
 {
-    TextureSize ts = {x, y};
-    TextureSize uts = {0, 0};
+    TextureConfig ts = {x, y, format};
+    TextureConfig uts = {0, 0, (TextureFormat)0};
     auto &command_state = *_command_state;
     enum struct
     _SearchResult
@@ -746,15 +779,15 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y)
     };
     uint32_t container_index = 0;
     _SearchResult search_result = _SearchResult::exhausted;
-    for (uint32_t i = 0; i < harray_count(command_state.texture_sizes); ++i)
+    for (uint32_t i = 0; i < harray_count(command_state.texture_configs); ++i)
     {
         container_index = i;
-        if (ts == command_state.texture_sizes[i])
+        if (ts == command_state.texture_configs[i])
         {
             search_result = _SearchResult::found;
             break;
         }
-        if (uts == command_state.texture_sizes[i])
+        if (uts == command_state.texture_configs[i])
         {
             search_result = _SearchResult::notfound;
             break;
@@ -779,14 +812,14 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y)
             hglGenTextures(1, &tex);
             hglErrorAssert();
             command_state.textures[container_index] = tex;
-            command_state.texture_sizes[container_index] = {x, y};
+            command_state.texture_configs[container_index] = ts;
             hglBindTexture(GL_TEXTURE_2D_ARRAY, tex);
             hglErrorAssert();
             command_state.texture_space_max = 10;
             hglTexStorage3D(
                 GL_TEXTURE_2D_ARRAY,
                 1,
-                GL_RGBA8,
+                texture_format_configs[(uint32_t)format].internal_format,
                 x,
                 y,
                 command_state.texture_space_max);
@@ -798,9 +831,9 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y)
 }
 
 uint32_t
-new_texaddress(CommandState *command_state, int32_t x, int32_t y)
+new_texaddress(CommandState *command_state, int32_t x, int32_t y, TextureFormat format)
 {
-    uint32_t container_index = container_index_for_size(command_state, x, y);
+    uint32_t container_index = container_index_for_size(command_state, x, y, format);
     auto &layer = command_state->texture_layer_count[container_index];
 
     auto &ta_count = command_state->texture_address_count;
@@ -836,7 +869,8 @@ load_texture_array_asset(
             x, y, &actual_size);
 
     auto &command_state = state->command_state;
-    uint32_t container_index = container_index_for_size(&command_state, *x, *y);
+    TextureFormat format = TextureFormat::srgba;
+    uint32_t container_index = container_index_for_size(&command_state, *x, *y, format);
     auto &tex = command_state.textures[container_index];
     GLuint lod = 0;
 
@@ -1282,6 +1316,7 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
 bool
 program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
 {
+    hglEnable(GL_FRAMEBUFFER_SRGB);
     bool loaded = true;
     {
         imgui_program_struct *program = &state->imgui_program;
@@ -3332,15 +3367,11 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
     hglEnable(GL_CULL_FACE);
 
     hglUseProgram(program.program);
-    //hglErrorAssert();
     hglBindVertexArray(command_state.vao);
-    //hglErrorAssert();
-    //
     hglUniform1f(program.u_bias_id, state->shadowmap_bias);
     hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
     hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
 
-    //
     for (uint32_t i = 0; i < light_descriptors.count; ++i)
     {
         auto &light = light_descriptors.descriptors[i];
@@ -3376,22 +3407,13 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         GL_UNIFORM_BUFFER,
         0, // state->texarray_1_cb0,
         command_state.texture_address_buffers[0].uniform_buffer.ubo);
-    //hglErrorAssert();
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
-    //hglErrorAssert();
-    GLvoid* p = hglMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
-    memcpy(p, command_state.texture_addresses, sizeof(command_state.texture_addresses));
-    hglUnmapBuffer(GL_UNIFORM_BUFFER);
-    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    /*
     hglBufferSubData(
         GL_UNIFORM_BUFFER,
         0,
         sizeof(command_state.texture_addresses),
         command_state.texture_addresses);
-    */
-    //hglErrorAssert();
-    //
+
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
         2, // state->texarray_1_cb2,
@@ -3427,33 +3449,15 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
     }
 
-    /*
-    hglActiveTexture(GL_TEXTURE0 + harray_count(command_state.textures));
-    hglBindTexture(GL_TEXTURE_2D, shadowmap_texture);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-
-    hglActiveTexture(GL_TEXTURE0 + harray_count(command_state.textures) + 1);
-    hglBindTexture(GL_TEXTURE_2D, shadowmap_color_texture);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-
-    hglUniform1i(state->texarray_1_shadowmap_tex_id, harray_count(command_state.textures));
-    hglUniform1i(state->texarray_1_shadowmap_color_tex_id, harray_count(command_state.textures) + 1);
-    */
-
     hglActiveTexture(GL_TEXTURE0);
 
     for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
     {
-        //hglErrorAssert();
         CommandKey &command_key = command_lists.keys[i];
         auto &command_list = command_lists.command_lists[i];
 
-        //hglErrorAssert();
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[command_key.index_buffer].ibo);
-        //hglErrorAssert();
         hglBindBuffer(
             GL_ARRAY_BUFFER,
             command_state.vertex_buffers[command_key.vertex_buffer].vbo);
@@ -3463,7 +3467,6 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_texcoord_id);
         hglVertexAttribPointer((GLuint)state->texarray_1_program.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, normal));
         hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_normal_id);
-        //hglErrorAssert();
 
         hglBindBufferBase(
             GL_UNIFORM_BUFFER,
@@ -3479,99 +3482,9 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
             command_list.draw_data_list.data);
         hglBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        /*
-        hglErrorAssert();
-        for (uint32_t j = 0; j < 4; ++j)
-        {
-            hglVertexAttribPointer((GLuint)state->texarray_1_program.a_projection_id + j, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribDivisorData), (uint8_t *)offsetof(VertexAttribDivisorData, projection) + sizeof(v4) * j);
-            hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_projection_id + j);
-            hglVertexAttribDivisor((GLuint)state->texarray_1_program.a_projection_id + j, 1);
-            hglVertexAttribPointer((GLuint)state->texarray_1_program.a_view_matrix_id + j, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribDivisorData), (uint8_t *)offsetof(VertexAttribDivisorData, view) + sizeof(v4) * j);
-            hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_view_matrix_id + j);
-            hglVertexAttribDivisor((GLuint)state->texarray_1_program.a_view_matrix_id + j, 1);
-            hglVertexAttribPointer((GLuint)state->texarray_1_program.a_model_matrix_id + j, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribDivisorData), (uint8_t *)offsetof(VertexAttribDivisorData, model) + sizeof(v4) * j);
-            hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_model_matrix_id + j);
-            hglVertexAttribDivisor((GLuint)state->texarray_1_program.a_model_matrix_id + j, 1);
-        }
-        */
-        //hglErrorAssert();
-
-        ImGui::Text(
-            "Key %d: count %d, shader_type %s, vertexformat %d, "
-            "vertex_buffer %d, index_buffer %d",
-            i,
-            command_key.count,
-            (uint32_t)command_key.shader_type == 0 ? "standard" : "variance_shadow_map",
-            command_key.vertexformat,
-            command_key.vertex_buffer,
-            command_key.index_buffer);
         for (uint32_t j = 0; j < command_list.num_commands; ++j)
         {
-            ImGui::Text(
-                "Command %d in list %d",
-                j,
-                i);
-
             auto &command = command_list.commands[j];
-            ImGui::Text(
-                "Instance count %d, primitive count %d, first index %d, baseVertex %d",
-                command.count,
-                command.primCount,
-                command.firstIndex,
-                command.baseVertex);
-            auto &draw_data = command_list.draw_data_list.data[j];
-
-            auto texture_texaddress_index = draw_data.texture_texaddress_index;
-
-            if (texture_texaddress_index >= 0)
-            {
-                TextureAddress ta = command_state.texture_addresses[texture_texaddress_index];
-                TextureSize ts = command_state.texture_sizes[ta.container_index];
-                ImGui::Text(
-                    "Texture address %d, container %d, layer %f, size %dx%d",
-                    texture_texaddress_index,
-                    ta.container_index,
-                    ta.layer,
-                    ts.width,
-                    ts.height);
-            }
-            /*
-            hglDrawElementsInstancedBaseVertex(
-                GL_TRIANGLES,
-                command.count,
-                GL_UNSIGNED_INT,
-                (void *)(command.firstIndex + sizeof(uint32_t)),
-                command.primCount,
-                command.baseVertex);
-            */
-            //hglErrorAssert();
-
-            /*
-            for (uint32_t k = 0; k < 4; ++k)
-            {
-                hglVertexAttribPointer(
-                    (GLuint)state->texarray_1_program.a_projection_id + k,
-                    4,
-                    GL_FLOAT,
-                    GL_FALSE,
-                    sizeof(VertexAttribDivisorData),
-                    (uint8_t *)offsetof(VertexAttribDivisorData, projection) + sizeof(v4) * k + sizeof(VertexAttribDivisorData) * j);
-                hglVertexAttribPointer(
-                    (GLuint)state->texarray_1_program.a_view_matrix_id + k,
-                    4,
-                    GL_FLOAT,
-                    GL_FALSE,
-                    sizeof(VertexAttribDivisorData),
-                    (uint8_t *)offsetof(VertexAttribDivisorData, view) + sizeof(v4) * k + sizeof(VertexAttribDivisorData) * j);
-                hglVertexAttribPointer(
-                    (GLuint)state->texarray_1_program.a_model_matrix_id + k,
-                    4,
-                    GL_FLOAT,
-                    GL_FALSE,
-                    sizeof(VertexAttribDivisorData),
-                    (uint8_t *)offsetof(VertexAttribDivisorData, model) + sizeof(v4) * k + sizeof(VertexAttribDivisorData) * j);
-            }
-            */
 
             hglUniform1i(program.u_draw_data_index_id, j);
             hglDrawElementsBaseVertex(
@@ -3580,18 +3493,12 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
                 GL_UNSIGNED_INT,
                 (void *)(intptr_t)(command.firstIndex * 4),
                 command.baseVertex);
-            //hglErrorAssert();
-            //hglDrawArrays(GL_TRIANGLES, 0, 3);
         }
         command_list.num_commands = 0;
-        //hglErrorAssert();
     }
-    //hglBindVertexArray(0);
-    //hglUseProgram(0);
-    //hglErrorAssert();
 }
 
-enum class
+enum struct
 FramebufferTextureTargets
 {
     two_dee,
@@ -3680,7 +3587,13 @@ framebuffer_initialize_color_buffer_texarray(
     v2i framebuffer_size,
     uint32_t multisample_samples)
 {
-    framebuffer->_texture = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y);
+    TextureFormat format = TextureFormat::rgba16f;
+    if (framebuffer->_flags.use_rg32f_buffer)
+    {
+        format = TextureFormat::rg32f;
+
+    }
+    framebuffer->_texture = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y, format);
 }
 
 
@@ -3692,7 +3605,7 @@ framebuffer_initialize_depth_buffer_texarray(
     v2i framebuffer_size,
     uint32_t multisample_samples)
 {
-    framebuffer->_renderbuffer = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y);
+    framebuffer->_renderbuffer = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y, TextureFormat::rgba16f);
 }
 
 void
@@ -4156,6 +4069,23 @@ extern "C" RENDERER_RENDER(renderer_render)
             }
         }
         ImGui::End();
+    }
+
+    auto &command_state = state->command_state;
+    for (uint32_t i = 0; i < harray_count(command_state.texture_configs); ++i)
+    {
+        TextureConfig ts = command_state.texture_configs[i];
+        if (ts.width)
+        {
+            ImGui::Text(
+                "Texture container %d, size %dx%d, format %s",
+                i,
+                ts.width,
+                ts.height,
+                texture_format_configs[(uint32_t)ts.format].name
+                );
+
+        }
     }
 
     if (ImGui::BeginMainMenuBar())

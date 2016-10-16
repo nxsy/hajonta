@@ -128,7 +128,7 @@ CreatePipeline(game_state *state)
         pipeline_elements.fb_shadowmap_texarray = RenderPipelineAddFramebuffer(pipeline);
         auto &fb_shadowmap_texarray = pipeline->framebuffers[pipeline_elements.fb_shadowmap_texarray];
         //fb_shadowmap_texarray.use_depth_texture = 1;
-        //fb_shadowmap_texarray.use_rg32f_buffer = 1;
+        fb_shadowmap_texarray.use_rg32f_buffer = 1;
         fb_shadowmap_texarray.use_texarray = 1;
         fb_shadowmap_texarray.size = {
             (int32_t)state->shadowmap_size,

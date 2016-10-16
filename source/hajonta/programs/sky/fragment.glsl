@@ -61,11 +61,4 @@ void main()
     // ---------------------------------------------------------
     // End of Sean O'Neil's atmospheric scattering from GPU Gems
     // ---------------------------------------------------------
-
-    o_color = vec4(
-        pow(o_color.r, 1/2.2),
-        pow(o_color.g, 1/2.2),
-        pow(o_color.b, 1/2.2),
-        1
-    );
 }
