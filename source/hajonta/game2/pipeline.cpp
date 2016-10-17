@@ -246,28 +246,6 @@ CreatePipeline(game_state *state)
         pipeline_elements.fb_sm_blur_xy,
     };
 
-    pipeline_elements.r_two_dee = RenderPipelineAddRenderer(pipeline);
-    RenderPipelineEntry *two_dee = pipeline->entries + pipeline_elements.r_two_dee;
-    state->two_dee_renderer.list.name = DEBUG_NAME("two_dee");
-    *two_dee = {
-        &state->two_dee_renderer.list,
-        state->two_dee_renderer.buffer,
-        sizeof(state->two_dee_renderer.buffer),
-        -1,
-        -1,
-    };
-
-    pipeline_elements.r_two_dee_debug = RenderPipelineAddRenderer(pipeline);
-    RenderPipelineEntry *two_dee_debug = pipeline->entries + pipeline_elements.r_two_dee_debug;
-    state->two_dee_debug_renderer.list.name = DEBUG_NAME("two_dee_debug");
-    *two_dee_debug = {
-        &state->two_dee_debug_renderer.list,
-        state->two_dee_debug_renderer.buffer,
-        sizeof(state->two_dee_debug_renderer.buffer),
-        -1,
-        -1,
-    };
-
     pipeline_elements.r_nature_pack_debug = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *nature_pack_debug = pipeline->entries + pipeline_elements.r_nature_pack_debug;
     pipeline_elements.rl_nature_pack_debug.list.name = DEBUG_NAME("nature_pack_debug");

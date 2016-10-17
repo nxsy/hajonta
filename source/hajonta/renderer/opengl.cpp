@@ -803,7 +803,6 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y, Tex
         }
     }
 
-    hglErrorAssert();
     uint32_t tex = command_state.textures[container_index];
     switch (search_result)
     {
@@ -817,13 +816,10 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y, Tex
         } break;
         case _SearchResult::notfound:
         {
-            hglErrorAssert();
             hglGenTextures(1, &tex);
-            hglErrorAssert();
             command_state.textures[container_index] = tex;
             command_state.texture_configs[container_index] = ts;
             hglBindTexture(GL_TEXTURE_2D_ARRAY, tex);
-            hglErrorAssert();
             command_state.texture_space_max = 10;
             hglTexStorage3D(
                 GL_TEXTURE_2D_ARRAY,
@@ -832,10 +828,8 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y, Tex
                 x,
                 y,
                 command_state.texture_space_max);
-            hglErrorAssert();
         } break;
     }
-    hglErrorAssert();
     return container_index;
 }
 
@@ -898,7 +892,6 @@ load_texture_array_asset(
         GL_UNSIGNED_BYTE,
         state->bitmap_scratch
     );
-    hglErrorAssert();
     auto &ta_count = command_state.texture_address_count;
     TextureAddress &ta = command_state.texture_addresses[ta_count];
     ta.container_index = container_index;
@@ -2668,7 +2661,6 @@ draw_mesh_from_asset_v3_boneless(
         auto &index_buffer = command_state.index_buffers[index_buffer_id];
         uint32_t vertex_base = vertex_buffer.vertex_count;
         uint32_t index_offset = index_buffer.index_count;
-        hglErrorAssert();
         mesh->v3_boneless.vertex_buffer = vertex_buffer_id;
         mesh->v3_boneless.vertex_base = vertex_base;
         mesh->v3_boneless.index_buffer = index_buffer_id;
@@ -2684,19 +2676,14 @@ draw_mesh_from_asset_v3_boneless(
                 (void *)0,
                 GL_DYNAMIC_DRAW);
         }
-        hglErrorAssert();
         hassert(vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count == mesh->vertices.size);
-        hglErrorAssert();
         hglBufferSubData(GL_ARRAY_BUFFER,
             vertex_buffer.vertex_size * vertex_buffer.vertex_count,
             vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count,
             mesh->vertices.data);
-        hglErrorAssert();
         vertex_buffer.vertex_count += mesh->v3_boneless.vertex_count;
-        hglErrorAssert();
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[0].ibo);
-        hglErrorAssert();
         if (!index_buffer.max_indices)
         {
             index_buffer.max_indices = 100000;
@@ -2705,19 +2692,15 @@ draw_mesh_from_asset_v3_boneless(
                 (void *)0,
                 GL_DYNAMIC_DRAW);
         }
-        hglErrorAssert();
         hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
-        hglErrorAssert();
         hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
             4 * index_buffer.index_count,
             4 * mesh->num_triangles * 3,
             mesh->indices.data);
-        hglErrorAssert();
         index_buffer.index_count += mesh->num_triangles * 3;
         mesh->loaded = true;
     }
 
-    hglErrorAssert();
     CommandKey key = {};
     key.shader_type = mesh_from_asset->shader_type;
     key.vertexformat = mesh->vertexformat;
@@ -2776,7 +2759,6 @@ draw_mesh_from_asset_v3_boneless(
     v2 st0 = {};
     v2 st1 = {};
     int32_t texture_texaddress_index = -1;
-    hglErrorAssert();
     if (debug)
     {
         hassert(debug);
@@ -2790,7 +2772,6 @@ draw_mesh_from_asset_v3_boneless(
         &texture_texaddress_index,
         &st0,
         &st1);
-    hglErrorAssert();
     int32_t shadowmap_texaddress_index = -1;
     int32_t shadowmap_color_texaddress_index = -1;
     int32_t light_index = 0;
@@ -2853,7 +2834,6 @@ draw_mesh_from_asset_v3_boneless(
     draw_data.camera_position = camera_position;
     draw_data.lightspace_matrix = lightspace_matrix;
 
-    hglErrorAssert();
     ++command_list.num_commands;
 
     return;
@@ -3386,7 +3366,7 @@ append_command(
 void
 draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 {
-    hglErrorAssert();
+    TIMED_FUNCTION();
     auto &command_state = state->command_state;
     auto &command_lists = command_state.lists;
 

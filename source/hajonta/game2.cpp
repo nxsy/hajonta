@@ -321,7 +321,6 @@ initialize(platform_memory *memory, game_state *state)
     state->furniture_to_asset[(uint32_t)FurnitureType::wall] = state->asset_ids.bottom_wall;
 
     hassert(state->asset_ids.familiar > 0);
-    build_map(state, &state->map);
 
     PipelineInit(&state->render_pipeline, asset_descriptors);
 
@@ -1251,8 +1250,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
          demoes[state->active_demo].func(ctx, memory, input, sound_output, &demo_ctx);
     }
 
-    v2 acceleration = {};
-
     for (uint32_t i = 0;
             i < harray_count(input->controllers);
             ++i)
@@ -1264,269 +1261,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         game_controller_state *controller = &input->controllers[i];
         game_buttons *buttons = &controller->buttons;
-        switch (state->mode)
-        {
-            case game_mode::normal:
-            {
-                if (BUTTON_ENDED_DOWN(buttons->move_up))
-                {
-                    acceleration.y += 1.0f;
-                }
-                if (BUTTON_ENDED_DOWN(buttons->move_down))
-                {
-                    acceleration.y -= 1.0f;
-                }
-                if (BUTTON_ENDED_DOWN(buttons->move_left))
-                {
-                    acceleration.x -= 1.0f;
-                }
-                if (BUTTON_ENDED_DOWN(buttons->move_right))
-                {
-                    acceleration.x += 1.0f;
-                }
-                if (BUTTON_WENT_DOWN(buttons->start))
-                {
-                    state->mode = game_mode::movement_history;
-                    state->history_playback.slice = state->player_history.current_slice;
-                    state->history_playback.frame = state->player_history.slices[state->player_history.current_slice].num_data - 1;
-                }
-            } break;
-
-            case game_mode::movement_history:
-            {
-                if (BUTTON_DOWN_REPETITIVELY(buttons->move_left, &state->repeat_count, 10))
-                {
-                    if (state->history_playback.frame != 0)
-                    {
-                        --state->history_playback.frame;
-                    }
-                    else
-                    {
-                        if (state->history_playback.slice != state->player_history.start_slice)
-                        {
-                            if (state->history_playback.slice == 0)
-                            {
-                                state->history_playback.slice = harray_count(state->player_history.slices) - 1;
-                            }
-                            else
-                            {
-                                --state->history_playback.slice;
-                            }
-                            state->history_playback.frame = harray_count(state->player_history.slices[0].data) - 1;
-                            hassert(harray_count(state->player_history.slices[0].data) == state->player_history.slices[state->history_playback.slice].num_data);
-                        }
-                    }
-                }
-
-                if (BUTTON_DOWN_REPETITIVELY(buttons->move_right, &state->repeat_count, 10))
-                {
-                    if (state->history_playback.frame != harray_count(state->player_history.slices[0].data) - 1)
-                    {
-                        if (state->history_playback.slice != state->player_history.current_slice)
-                        {
-                            ++state->history_playback.frame;
-                        }
-                        else if (state->history_playback.frame != state->player_history.slices[state->player_history.current_slice].num_data - 1)
-                        {
-                            ++state->history_playback.frame;
-                        }
-                    }
-                    else
-                    {
-                        if (state->history_playback.slice != state->player_history.current_slice)
-                        {
-                            ++state->history_playback.slice;
-                            state->history_playback.slice %= harray_count(state->player_history.slices);
-                            state->history_playback.frame = 0;
-                        }
-                    }
-                }
-                if (BUTTON_WENT_DOWN(buttons->start))
-                {
-                    state->mode = game_mode::normal;
-                }
-            } break;
-
-            case game_mode::pathfinding:
-            {
-
-            } break;
-        }
-
         if (BUTTON_WENT_DOWN(buttons->back))
         {
-            if (state->player_movement.position.x == 0 && state->player_movement.position.y == 0)
-            {
-                memory->quit = true;
-            }
-            state->player_movement.position = {0,0};
-            state->player_movement.velocity = {0,0};
-            state->mode = game_mode::normal;
+            memory->quit = true;
         }
-    }
-
-    if (BUTTON_WENT_UP(input->mouse.buttons.left))
-    {
-        bool mouse_free = true;
-        for (uint32_t i = 0; i < state->click_targets.target_count; ++i)
-        {
-            rectangle2 r = state->click_targets.targets[i];
-            if (point_in_rectangle(state->frame_state.mouse_position, r))
-            {
-                mouse_free = false;
-                break;
-            }
-        }
-        if (mouse_free)
-        {
-            int32_t t_x = (int32_t)floorf((input->mouse.x - input->window.width / 2.0f) / state->pixel_size);
-            int32_t t_y = (int32_t)floorf((input->window.height  / 2.0f - input->mouse.y) / state->pixel_size);
-            state->debug.selected_tile = {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y};
-            v2i &tile = state->debug.selected_tile;
-
-            if (state->selected_tool.type == ToolType::furniture)
-            {
-                if (furniture_terrain_compatible(&state->map, state->selected_tool.furniture_type, tile))
-                {
-                    add_furniture_job(state, &state->map, {MAP_WIDTH / 2 + t_x, MAP_HEIGHT / 2 + t_y}, state->selected_tool.furniture_type);
-                }
-            }
-        }
-    }
-
-    clear_click_targets(&state->click_targets);
-
-    ImGui::Text("Selected_tile is %d, %d", state->debug.selected_tile.x, state->debug.selected_tile.y);
-
-    v2 familiar_acceleration = calculate_familiar_acceleration(state);
-
-    ImGui::DragFloat("Acceleration multiplier", (float *)&state->acceleration_multiplier, 0.1f, 50.0f);
-    acceleration = v2mul(acceleration, state->acceleration_multiplier);
-
-    switch (state->mode)
-    {
-        case game_mode::normal:
-        case game_mode::movement_history:
-        {
-
-            struct {
-                entity_movement *entity_movement;
-                movement_history *entity_history;
-                movement_history_playback *entity_playback;
-                bool *show_window;
-                const char *name;
-                v2 acceleration;
-            } movements[] = {
-                {
-                    &state->player_movement,
-                    &state->player_history,
-                    &state->history_playback,
-                    &state->debug.player_movement,
-                    "player",
-                    acceleration,
-                },
-                {
-                    &state->familiar_movement,
-                    &state->familiar_history,
-                    &state->history_playback,
-                    &state->debug.familiar_movement,
-                    "familiar",
-                    familiar_acceleration,
-                },
-            };
-
-            for (auto &&m : movements)
-            {
-                movement_data m_data;
-                m_data.position = m.entity_movement->position;
-                m_data.velocity = m.entity_movement->velocity;
-                m_data.acceleration = m.acceleration;
-                m_data.delta_t = input->delta_t;
-
-                char window_name[100];
-                sprintf(window_name, "Movement of %s", m.name);
-                bool opened_window = false;
-                if (*m.show_window)
-                {
-                    ImGui::Begin(window_name, m.show_window);
-                    opened_window = true;
-                }
-
-                switch (state->mode)
-                {
-                    case game_mode::movement_history:
-                    {
-                        if (*m.show_window)
-                        {
-                            ImGui::Text("Movement playback: Slice %d, frame %d", state->history_playback.slice, state->history_playback.frame);
-                        }
-                        m_data = load_movement_history(m.entity_history, m.entity_playback);
-                    } break;
-                    case game_mode::normal:
-                    {
-                        save_movement_history(m.entity_history, m_data, *m.show_window);
-                    } break;
-                    case game_mode::pathfinding: break;
-                }
-                movement_data data_out = apply_movement(&state->map, m_data, *m.show_window);
-                if (opened_window)
-                {
-                    ImGui::End();
-                }
-                m.entity_movement->position = data_out.position;
-                m.entity_movement->velocity = data_out.velocity;
-            }
-        } break;
-        case game_mode::pathfinding: break;
-    };
-
-    draw_map(&state->map, &state->two_dee_renderer.list, &state->two_dee_debug_renderer.list, state->debug.selected_tile);
-
-    v3 player_size = { 1.0f, 2.0f, 0 };
-    v3 player_position = {state->player_movement.position.x - 0.5f, state->player_movement.position.y, 0};
-    PushQuad(&state->two_dee_renderer.list, player_position, player_size, {1,1,1,1}, 1, state->asset_ids.player);
-
-    v3 player_position2 = {state->player_movement.position.x - 0.2f, state->player_movement.position.y, 0};
-    v3 player_size2 = {0.4f, 0.1f, 0};
-    PushQuad(&state->two_dee_renderer.list, player_position2, player_size2, {1,1,1,0.4f}, 1, -1);
-
-    v3 familiar_size = { 1.0f, 2.0f, 0 };
-    v3 familiar_position = {state->familiar_movement.position.x - 0.5f, state->familiar_movement.position.y, 0};
-    PushQuad(&state->two_dee_renderer.list, familiar_position, familiar_size, {1,1,1,1}, 1, state->asset_ids.familiar);
-
-    v3 familiar_position2 = {state->familiar_movement.position.x - 0.2f, state->familiar_movement.position.y, 0};
-    v3 familiar_size2 = {0.4f, 0.1f, 0};
-    PushQuad(&state->two_dee_renderer.list, familiar_position2, familiar_size2, {1,1,1,0.4f}, 1, -1);
-
-    for (uint32_t i = 0; i < (uint32_t)FurnitureType::MAX; ++i)
-    {
-        FurnitureType type = (FurnitureType)(i + 1);
-        v3 quad_bl = { i * 96.0f + 16.0f, 16.0f, 0.0f };
-        v3 quad_size = { 80.0f, 80.0f };
-        rectangle2 cl = { {quad_bl.x, quad_bl.y}, {quad_size.x, quad_size.y}};
-        add_click_target(&state->click_targets, cl);
-        v4 opacity = {0.1f, 0.1f, 0.1f, 0.7f};
-        if (point_in_rectangle(state->frame_state.mouse_position, cl))
-        {
-             opacity = {0.3f, 0.3f, 0.3f, 0.9f};
-            if (BUTTON_WENT_UP(input->mouse.buttons.left))
-            {
-                state->selected_tool.type = ToolType::furniture;
-                state->selected_tool.furniture_type = type;
-            }
-        }
-        if (state->selected_tool.type == ToolType::furniture)
-        {
-             if (state->selected_tool.furniture_type == type)
-             {
-                 opacity = {0.7f, 0.7f, 0.3f, 0.9f};
-             }
-        }
-        PushQuad(&state->two_dee_renderer.list, quad_bl, quad_size, opacity, 0, -1);
-
-        quad_bl = { i * 96.0f + 24.0f, 24.0f, 0.0f };
-        quad_size = { 64.0f, 64.0f };
-        PushQuad(&state->two_dee_renderer.list, quad_bl, quad_size, {1,1,1,1}, 0, state->furniture_to_asset[(uint32_t)type]);
     }
 
     m4 shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f, {-ratio * 7.0f, -7.0f}, {ratio * 7.0f, 7.0f});
@@ -1908,10 +1646,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ShaderType::variance_shadow_map
     );
 
-    v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
-    v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->two_dee_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
-
     {
         PushClear(&state->pipeline_elements.rl_sky.list, {1.0f, 1.0f, 0.4f, 1.0f});
         PushSky(&state->pipeline_elements.rl_sky.list,
@@ -1936,6 +1670,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {1,1,1,1}, 0,
             state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_shadowmap_texarray].asset_descriptor
     );
+
+    v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
+    v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
     {
