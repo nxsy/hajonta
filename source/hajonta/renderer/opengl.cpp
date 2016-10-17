@@ -26,6 +26,7 @@
 #include "hajonta/programs/filters/filter_gaussian_7x1.h"
 #include "hajonta/programs/sky.h"
 #include "hajonta/programs/texarray_1.h"
+#include "hajonta/programs/texarray_1_vsm.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -136,6 +137,8 @@ CommandList
 {
     uint32_t num_commands;
     DrawElementsIndirectCommand commands[100];
+    bool _vao_initialized;
+    uint32_t vao;
     union
     {
         DrawDataList draw_data_list;
@@ -466,6 +469,12 @@ struct renderer_state
     int32_t texarray_1_texcontainer;
     int32_t texarray_1_shadowmap_tex_id;
     int32_t texarray_1_shadowmap_color_tex_id;
+
+    texarray_1_vsm_program_struct texarray_1_vsm_program;
+    uint32_t texarray_1_vsm_cb0;
+    uint32_t texarray_1_vsm_cb1;
+    int32_t texarray_1_vsm_texcontainer;
+
     variance_shadow_map_program_struct variance_shadow_map_program;
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
     sky_program_struct sky_program;
@@ -1404,6 +1413,23 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         state->texarray_1_shadowmap_tex_id = hglGetUniformLocation(program->program, "shadowmap_tex");
         state->texarray_1_shadowmap_color_tex_id = hglGetUniformLocation(program->program, "shadowmap_color_tex");
     }
+
+    {
+        texarray_1_vsm_program_struct *program = &state->texarray_1_vsm_program;
+        loaded &= texarray_1_vsm_program(program, ctx, memory);
+        state->texarray_1_vsm_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
+        hglUniformBlockBinding(
+            state->texarray_1_vsm_program.program,
+            0,
+            state->texarray_1_vsm_cb0);
+        state->texarray_1_vsm_cb1 = hglGetUniformBlockIndex(program->program, "CB1");
+        hglUniformBlockBinding(
+            state->texarray_1_vsm_program.program,
+            1,
+            state->texarray_1_vsm_cb1);
+        state->texarray_1_vsm_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
+    }
+
     hglFlush();
     hglErrorAssert();
 
@@ -3364,18 +3390,78 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
     auto &command_state = state->command_state;
     auto &command_lists = command_state.lists;
 
-    auto &program = state->texarray_1_program;
-
     hglDisable(GL_BLEND);
     hglEnable(GL_DEPTH_TEST);
     hglDepthFunc(GL_LESS);
     hglEnable(GL_CULL_FACE);
 
-    hglUseProgram(program.program);
-    hglBindVertexArray(command_state.vao);
-    hglUniform1f(program.u_bias_id, state->shadowmap_bias);
-    hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
-    hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
+    bool found_commands = false;
+    ShaderType shader_type = {};
+    for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
+    {
+        CommandKey &command_key = command_lists.keys[i];
+        auto &command_list = command_lists.command_lists[i];
+
+        if (command_list.num_commands)
+        {
+            found_commands = true;
+            shader_type = command_key.shader_type;
+            break;
+        }
+    }
+    if (!found_commands)
+    {
+        return;
+    }
+
+    uint32_t program_data_index = 0;
+    struct
+    {
+        int32_t texcontainer_uniform;
+        int32_t draw_data_index_uniform;
+        int32_t a_position_id;
+        int32_t a_texcoord_id;
+        int32_t a_normal_id;
+    } program_data[] =
+    {
+        {
+            state->texarray_1_texcontainer,
+            state->texarray_1_program.u_draw_data_index_id,
+            state->texarray_1_program.a_position_id,
+            state->texarray_1_program.a_texcoord_id,
+            state->texarray_1_program.a_normal_id,
+        },
+        {
+            state->texarray_1_vsm_texcontainer,
+            state->texarray_1_vsm_program.u_draw_data_index_id,
+            state->texarray_1_vsm_program.a_position_id,
+            state->texarray_1_vsm_program.a_texcoord_id,
+            -1,
+        },
+    };
+
+    switch (shader_type)
+    {
+        case ShaderType::standard:
+        {
+            program_data_index = 0;
+            auto &program = state->texarray_1_program;
+
+            hglUseProgram(program.program);
+            hglUniform1f(program.u_bias_id, state->shadowmap_bias);
+            hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
+            hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
+
+        } break;
+        case ShaderType::variance_shadow_map:
+        {
+            program_data_index = 1;
+            auto &program = state->texarray_1_vsm_program;
+            hglUseProgram(program.program);
+        } break;
+    }
+
+    auto &pd = program_data[program_data_index];
 
     for (uint32_t i = 0; i < light_descriptors.count; ++i)
     {
@@ -3410,7 +3496,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
-        0, // state->texarray_1_cb0,
+        0,
         command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglBufferSubData(
@@ -3421,7 +3507,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
-        2, // state->texarray_1_cb2,
+        2,
         command_state.lights_buffer.ubo);
     hglBindBuffer(
         GL_UNIFORM_BUFFER,
@@ -3446,8 +3532,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         8,
         9,
     };
-
-    hglUniform1iv(state->texarray_1_texcontainer, harray_count(texcontainer_textures), texcontainer_textures);
+    hglUniform1iv(pd.texcontainer_uniform, harray_count(texcontainer_textures), texcontainer_textures);
     for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
     {
         hglActiveTexture(GL_TEXTURE0 + i);
@@ -3465,6 +3550,30 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         {
             continue;
         }
+
+        if (!command_list._vao_initialized)
+        {
+            hglGenVertexArrays(1, &command_list.vao);
+            hglBindVertexArray(command_list.vao);
+            hglBindBuffer(
+                GL_ARRAY_BUFFER,
+                command_state.vertex_buffers[command_key.vertex_buffer].vbo);
+            hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, position));
+            hglEnableVertexAttribArray((GLuint)pd.a_position_id);
+            hglVertexAttribPointer((GLuint)pd.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, texcoords));
+            hglEnableVertexAttribArray((GLuint)pd.a_texcoord_id);
+            if (pd.a_normal_id >= 0)
+            {
+                hglVertexAttribPointer((GLuint)pd.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, normal));
+                hglEnableVertexAttribArray((GLuint)pd.a_normal_id);
+            }
+            command_list._vao_initialized = true;
+        }
+        else
+        {
+            hglBindVertexArray(command_list.vao);
+        }
+
         ImGui::Text(
             "Command list %d, size %d, shader_type %s, vertexformat %d, vertex_buffer %d, index_buffer %d",
             i,
@@ -3477,19 +3586,10 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[command_key.index_buffer].ibo);
-        hglBindBuffer(
-            GL_ARRAY_BUFFER,
-            command_state.vertex_buffers[command_key.vertex_buffer].vbo);
-        hglVertexAttribPointer((GLuint)state->texarray_1_program.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, position));
-        hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_position_id);
-        hglVertexAttribPointer((GLuint)state->texarray_1_program.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, texcoords));
-        hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_texcoord_id);
-        hglVertexAttribPointer((GLuint)state->texarray_1_program.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, normal));
-        hglEnableVertexAttribArray((GLuint)state->texarray_1_program.a_normal_id);
 
         hglBindBufferBase(
             GL_UNIFORM_BUFFER,
-            1, // state->texarray_1_cb1,
+            1,
             command_state.draw_data_buffer.ubo);
         hglBindBuffer(
             GL_UNIFORM_BUFFER,
@@ -3505,7 +3605,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         {
             auto &command = command_list.commands[j];
 
-            hglUniform1i(program.u_draw_data_index_id, j);
+            hglUniform1i(pd.draw_data_index_uniform, j);
             hglDrawElementsBaseVertex(
                 GL_TRIANGLES,
                 command.primCount,

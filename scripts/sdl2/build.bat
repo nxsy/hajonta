@@ -8,6 +8,7 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no 
 .\program.exe ..\source hajonta\programs sky
 .\program.exe ..\source hajonta\programs phong_no_normal_map
 .\program.exe ..\source hajonta\programs texarray_1
+.\program.exe ..\source hajonta\programs texarray_1_vsm
 .\program.exe ..\source hajonta\programs variance_shadow_map
 .\program.exe ..\source hajonta\programs\filters filter_gaussian_7x1
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
