@@ -157,13 +157,27 @@ render_entry_type_descriptors
     ArmatureDescriptors armatures;
 };
 
+#define SHADER_TYPES \
+    X(standard) \
+    X(variance_shadow_map)
+
 enum struct
 ShaderType
 {
-    standard,
-    variance_shadow_map,
+#define X(n) n,
+SHADER_TYPES
+#undef X
+};
 
-    MAX = variance_shadow_map,
+struct
+ShaderTypeConfig
+{
+    const char *name;
+} shader_type_configs[] =
+{
+#define X(n) { #n },
+SHADER_TYPES
+#undef X
 };
 
 struct

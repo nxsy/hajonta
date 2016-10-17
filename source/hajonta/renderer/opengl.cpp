@@ -2625,6 +2625,7 @@ draw_mesh_from_asset_v3_boneless(
     Mesh *mesh
 )
 {
+    TIMED_FUNCTION();
     auto &command_state = state->command_state;
 
     bool debug = false;
@@ -2713,8 +2714,12 @@ draw_mesh_from_asset_v3_boneless(
         key_index = (int32_t)i;
         if (command_lists.keys[i] == key)
         {
-            search_result = _SearchResult::found;
-            break;
+            auto &command_list = command_lists.command_lists[i];
+            if (command_list.num_commands < harray_count(command_list.commands))
+            {
+                search_result = _SearchResult::found;
+                break;
+            }
         }
     }
     if (search_result != _SearchResult::found)
@@ -2840,8 +2845,6 @@ draw_mesh_from_asset(
     render_entry_type_mesh_from_asset *mesh_from_asset
 )
 {
-    TIMED_FUNCTION();
-
     Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
     if (mesh->mesh_format == MeshFormat::v3_boneless || mesh->vertexformat)
     {
@@ -2856,6 +2859,8 @@ draw_mesh_from_asset(
             mesh_from_asset,
             mesh);
     }
+
+    TIMED_FUNCTION();
 
     if (state->crash_on_gl_errors) hglErrorAssert();
     hglDisable(GL_BLEND);
@@ -3455,6 +3460,20 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
     {
         CommandKey &command_key = command_lists.keys[i];
         auto &command_list = command_lists.command_lists[i];
+
+        if (!command_list.num_commands)
+        {
+            continue;
+        }
+        ImGui::Text(
+            "Command list %d, size %d, shader_type %s, vertexformat %d, vertex_buffer %d, index_buffer %d",
+            i,
+            command_list.num_commands,
+            shader_type_configs[(uint32_t)command_key.shader_type].name,
+            command_key.vertexformat,
+            command_key.vertex_buffer,
+            command_key.index_buffer
+            );
 
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[command_key.index_buffer].ibo);
@@ -4084,7 +4103,6 @@ extern "C" RENDERER_RENDER(renderer_render)
                 ts.height,
                 texture_format_configs[(uint32_t)ts.format].name
                 );
-
         }
     }
 
