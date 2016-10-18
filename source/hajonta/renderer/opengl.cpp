@@ -1871,6 +1871,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
     if (!_GlobalRendererState.initialized)
     {
         glsetup_counters = &state->glsetup_counters;
+        for (uint32_t i = 0; i < 6; ++i)
+        {
+            state->gl_debug_toggles[i] = 1;
+        }
         state->glsetup_counters_history.first = -1;
         load_glfuncs(ctx, memory->platform_glgetprocaddress);
         if (state->crash_on_gl_errors) hglErrorAssert();
@@ -3580,6 +3584,7 @@ append_command(
     */
 }
 
+static bool multi_draw_enabled = true;
 void
 draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 {
@@ -3874,7 +3879,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
             0,
             sizeof(command_list.commands),
             command_list.commands);
-        if (state->gl_extensions.gl_arb_multi_draw_indirect)
+        if (state->gl_extensions.gl_arb_multi_draw_indirect && multi_draw_enabled)
         {
             hglUniform1i(pd.draw_data_index_uniform, 0);
             hglMultiDrawElementsIndirect(
@@ -4456,6 +4461,7 @@ extern "C" RENDERER_RENDER(renderer_render)
 
     if (state->show_gl_debug) {
         ImGui::Begin("OpenGL debug", &state->show_gl_debug);
+        ImGui::Checkbox("Multi-draw", &multi_draw_enabled);
 
         if (ImGui::Button("Graphs..."))
             ImGui::OpenPopup("graphs");
@@ -4486,8 +4492,32 @@ extern "C" RENDERER_RENDER(renderer_render)
                 if (state->gl_debug_toggles[i])
                 {
                     auto name_and_offset = counter_names_and_offsets[i];
-                    ImGui::PlotLines(name_and_offset.name,
-                        (float *)((uint8_t *)history->entries + name_and_offset.offset), values_count, history->first, nullptr, 0.0, FLT_MAX, ImVec2(600,150), sizeof(GLSetupCounters));
+                    float *values = (float *)((uint8_t *)history->entries + name_and_offset.offset);
+                    int32_t _max = INT_MIN;
+                    int32_t _min = INT_MAX;
+                    int32_t _total = 0;
+                    for (int32_t j = 0; j < values_count; ++j)
+                    {
+                        int32_t _value = (int32_t)(values[j * sizeof(GLSetupCounters) / sizeof(float)]);
+                        hassert(_value >= 0);
+                        _total += _value;
+                        _max = max(_max, _value);
+                        _min = min(_min, _value);
+                    }
+                    int32_t _avg = _total / values_count;
+                    sprintf(name_and_offset.overlay, "max %d, min %d, avg %d",
+                        _max, _min, _avg);
+                    ImGui::PlotLines(
+                        name_and_offset.name, // label
+                        values,
+                        values_count, // number of values
+                        history->first, // offset of first value
+                        name_and_offset.overlay, // overlay text
+                        0.0, // scale_min
+                        FLT_MAX, // scale_max
+                        ImVec2(600,150), // size
+                        sizeof(GLSetupCounters) // stride
+                    );
                 }
             }
         }

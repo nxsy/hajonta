@@ -63,6 +63,7 @@ ResetCounters(GLSetupCounters *counters)
 struct GLCounterNamesAndOffsets {
     const char *name;
     uint32_t offset;
+    char overlay[100];
 } counter_names_and_offsets[] =
 {
 )EOF");
