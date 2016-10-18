@@ -29,6 +29,7 @@ struct DrawData
     int light_index;
     mat4 lightspace_matrix;
     vec3 camera_position;
+    int bone_offset;
 };
 
 layout(std140) uniform CB1

@@ -92,7 +92,7 @@ main(int argc, char **argv)
     sprintf(buffer, "struct %s_program_struct\n{\n    GLuint program;\n", program_name);
     fwrite(buffer, 1, strlen(buffer), p);
 
-    char structbuffer[2048] = {};
+    char structbuffer[4096] = {};
     char *start_of_next_write = structbuffer;
     char uniforms[32][128] = {};
     char attribs[32][128] = {};

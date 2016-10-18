@@ -140,6 +140,7 @@ ArmatureDescriptor
     MeshBoneDescriptor *bone_descriptors;
     m4 *bones;
     float tick;
+    bool proceed_time;
 };
 
 struct
@@ -205,6 +206,7 @@ enum struct
 MeshFormat {
     first,
     v3_boneless,
+    v3_bones,
 };
 
 struct
@@ -234,7 +236,7 @@ Mesh
             m4 default_bones[100];
             uint32_t vbo;
             uint32_t ibo;
-        };
+        } legacy;
         struct
         {
             uint32_t vertex_buffer;
@@ -243,6 +245,21 @@ Mesh
             uint32_t index_buffer;
             uint32_t index_offset;
         } v3_boneless;
+        struct
+        {
+            uint32_t vertex_buffer;
+            uint32_t vertex_base;
+            uint32_t vertex_count;
+            uint32_t index_buffer;
+            uint32_t index_offset;
+            char bone_names[100][100];
+            int32_t bone_parents[100];
+            m4 bone_offsets[100];
+            MeshBoneDescriptor default_transforms[100];
+            uint32_t num_ticks;
+            AnimTick animation_ticks[100][100];
+            m4 default_bones[100];
+        } v3_bones;
     };
 
     bool loaded;

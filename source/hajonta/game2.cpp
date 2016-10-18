@@ -305,6 +305,7 @@ initialize(platform_memory *memory, game_state *state)
     state->asset_ids.cube_texture = add_asset(asset_descriptors, "cube_texture");
 
     state->asset_ids.blocky_advanced_mesh = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh");
+    state->asset_ids.blocky_advanced_mesh2 = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh2");
     state->asset_ids.blocky_advanced_texture = add_asset(asset_descriptors, "kenney_blocky_advanced_cowboy_texture");
 
     state->asset_ids.blockfigureRigged6_mesh = add_asset(asset_descriptors, "blockfigureRigged6_mesh");
@@ -351,10 +352,19 @@ initialize(platform_memory *memory, game_state *state)
     light.diffuse_intensity = 1.0f;
     light.attenuation_constant = 1.0f;
 
-    auto &armature = state->armatures[(uint32_t)ArmatureIds::test1];
-    armature.count = harray_count(state->bones);
-    armature.bone_descriptors = state->bones;
-    armature.bones = state->bone_matrices;
+    {
+        auto &armature = state->armatures[(uint32_t)ArmatureIds::test1];
+        armature.count = harray_count(state->bones);
+        armature.bone_descriptors = state->bones;
+        armature.bones = state->bone_matrices;
+    }
+
+    {
+        auto &armature = state->armatures[(uint32_t)ArmatureIds::test2];
+        armature.count = harray_count(state->bones2);
+        armature.bone_descriptors = state->bones2;
+        armature.bones = state->bone_matrices2;
+    }
 
     state->debug.show_textures = 0;
     state->debug.show_lights = 0;
@@ -763,14 +773,15 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
     auto mesh_data = asset->mesh_data;
 
-    static bool proceed_time = false;
     static float playback_speed = 1.0f;
     bool opened_debug = state->debug.armature.show;
     if (opened_debug)
     {
-        ImGui::Begin("Armature Animation");
+        char label[100];
+        sprintf(label, "Armature Animation##%p", armature);
+        ImGui::Begin(label);
 
-        ImGui::Checkbox("Animation proceed", &proceed_time);
+        ImGui::Checkbox("Animation proceed", &armature->proceed_time);
         ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
         if (ImGui::Button("Reset to start"))
         {
@@ -780,7 +791,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
             (uint32_t)armature->tick % mesh_data.num_ticks,
             mesh_data.num_ticks - 1);
     }
-    if (proceed_time)
+    if (armature->proceed_time)
     {
         armature->tick += 1.0f / 60.0f * 24.0f * playback_speed;
     }
@@ -887,7 +898,10 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
         MeshBoneDescriptor &d = armature->bone_descriptors[bone];
 
-        d = mesh_data.animation_ticks[((uint32_t)armature->tick % mesh_data.num_ticks) * mesh_data.num_animtick_bones + bone].transform;
+        if (armature->proceed_time)
+        {
+            d = mesh_data.animation_ticks[((uint32_t)armature->tick % mesh_data.num_ticks) * mesh_data.num_animtick_bones + bone].transform;
+        }
         if (d.scale.x == 0)
         {
             d.scale = mesh_data.default_transforms[bone].scale;
@@ -931,6 +945,24 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
             bone,
             global_transform,
         };
+
+        if (opened_debug)
+        {
+            m4 bone_offset = mesh_data.bone_offsets[bone];
+            for (uint32_t i = 0; i < 4; ++i)
+            {
+                ImGui::Text("%0.3f %0.3f %0.3f %0.3f",
+                    bone_offset.cols[0].E[i],
+                    bone_offset.cols[1].E[i],
+                    bone_offset.cols[2].E[i],
+                    bone_offset.cols[3].E[i]);
+
+            }
+            ImGui::NextColumn();
+            ImGui::NextColumn();
+            ImGui::NextColumn();
+            ImGui::NextColumn();
+        }
 
         armature->bones[bone] = m4mul(global_transform, mesh_data.bone_offsets[bone]);
 
@@ -983,11 +1015,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             (void *)par_mesh.triangles,
             par_mesh.ntriangles * sizeof(uint32_t) * 3,
         };
-        mesh.normals = {
+        mesh.legacy.normals = {
             (void *)par_mesh.normals,
             par_mesh.npoints * sizeof(float) * 3,
         };
-        mesh.uvs = {
+        mesh.legacy.uvs = {
             (void *)par_mesh.tcoords,
             par_mesh.npoints * sizeof(float) * 2,
         };
@@ -1170,7 +1202,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     rotate = m4identity();
 
     float _scale = 500.0f;
-    translate.cols[3] = {0, -500.0f, 0, 1.0f};
+    translate.cols[3] = {0, -500.0f, -500.0f, 1.0f};
     scale.cols[0].E[0] = _scale;
     scale.cols[1].E[1] = _scale;
     scale.cols[2].E[2] = _scale;
@@ -1188,6 +1220,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     //float height = cubic_bezier(state->debug.perlin.control_point_0, state->debug.perlin.control_point_1, noise2p.get(middle)).y * state->debug.perlin.height_multiplier;
     translate.cols[3] = {0.5f, 2.1f, 0.5f, 1.0f};
     state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+    translate.cols[3] = {1.5f, 2.1f, 1.5f, 1.0f};
+    state->tree_model_matrix2 = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     local_translate = m4identity();
     rotate = m4identity();
@@ -1383,6 +1417,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     //three_dee_mesh_flags_debug.debug = 1;
     //
     advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
+    advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t);
 
     PushMeshFromAsset(
         &state->three_dee_renderer.list,
@@ -1406,6 +1441,32 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blocky_advanced_texture,
         0,
         (int32_t)ArmatureIds::test1,
+        shadowmap_mesh_flags,
+        ShaderType::variance_shadow_map
+    );
+
+    PushMeshFromAsset(
+        &state->three_dee_renderer.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
+        state->tree_model_matrix2,
+        state->asset_ids.blocky_advanced_mesh2,
+        state->asset_ids.blocky_advanced_texture,
+        1,
+        (int32_t)ArmatureIds::test2,
+        three_dee_mesh_flags_debug,
+        ShaderType::standard
+    );
+
+    PushMeshFromAsset(
+        &state->shadowmap_renderer.list,
+        (uint32_t)matrix_ids::light_projection_matrix,
+        -1,
+        state->tree_model_matrix2,
+        state->asset_ids.blocky_advanced_mesh2,
+        state->asset_ids.blocky_advanced_texture,
+        0,
+        (int32_t)ArmatureIds::test2,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );

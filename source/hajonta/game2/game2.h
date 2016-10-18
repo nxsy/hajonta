@@ -70,6 +70,7 @@ _asset_ids
     int32_t cube_mesh;
     int32_t cube_texture;
     int32_t blocky_advanced_mesh;
+    int32_t blocky_advanced_mesh2;
     int32_t blocky_advanced_texture;
     int32_t blockfigureRigged6_mesh;
     int32_t blockfigureRigged6_texture;
@@ -233,11 +234,11 @@ TerrainMeshDataP
             (void *)triangles,
             *triangle_index * sizeof(uint32_t) * 3,
         };
-        mesh->normals = {
+        mesh->legacy.normals = {
             (void *)normals.values,
             vertex_count * sizeof(v3),
         };
-        mesh->uvs = {
+        mesh->legacy.uvs = {
             (void *)uvs.values,
             vertex_count * sizeof(v2),
         };
@@ -555,6 +556,7 @@ enum struct matrix_ids
     chest_model_matrix,
     plane_model_matrix,
     tree_model_matrix,
+    tree_model_matrix2,
     light_projection_matrix,
     np_model_matrix,
     mesh_model_matrix,
@@ -574,8 +576,9 @@ enum struct
 ArmatureIds
 {
     test1,
+    test2,
 
-    MAX = test1,
+    MAX = test2,
 };
 
 struct
@@ -689,13 +692,16 @@ struct game_state
     m4 cube_bounds_model_matrix_2;
     m4 plane_model_matrix;
     m4 tree_model_matrix;
+    m4 tree_model_matrix2;
     m4 dynamic_mesh_model_matrix;
     m4 light_projection_matrix;
 
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
     ArmatureDescriptor armatures[(uint32_t)ArmatureIds::MAX + 1];
     MeshBoneDescriptor bones[100];
+    MeshBoneDescriptor bones2[100];
     m4 bone_matrices[100];
+    m4 bone_matrices2[100];
 
     _asset_ids asset_ids;
     AssetDescriptors assets;
