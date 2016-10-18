@@ -1,9 +1,10 @@
-#version 330
+#version 410 core
 
 uniform sampler2DArray TexContainer[10];
 
 in vec2 v_texcoord;
 in vec4 v_position;
+flat in uint v_draw_id;
 
 out vec4 o_color;
 
@@ -36,11 +37,10 @@ layout(std140) uniform CB1
 {
     DrawData draw_data[100];
 };
-uniform int u_draw_data_index;
 
 void main()
 {
-    DrawData dd = draw_data[u_draw_data_index];
+    DrawData dd = draw_data[v_draw_id];
     Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
     vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
     float transparency = texture(TexContainer[addr.Container], texCoord).a;

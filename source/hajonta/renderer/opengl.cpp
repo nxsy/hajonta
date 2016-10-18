@@ -394,6 +394,14 @@ BoneDataBuffer
 };
 
 struct
+IndirectBuffer
+{
+    uint32_t ubo;
+    uint32_t max_data;
+    uint32_t data_count;
+};
+
+struct
 LightsBuffer
 {
     uint32_t ubo;
@@ -463,6 +471,7 @@ CommandState
 
     DrawDataBuffer draw_data_buffer;
     BoneDataBuffer bone_data_buffer;
+    IndirectBuffer indirect_buffer;
     LightList light_list;
     LightsBuffer lights_buffer;
     CommandLists lists;
@@ -1613,6 +1622,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     hglGenBuffers(1, &command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglGenBuffers(1, &command_state.draw_data_buffer.ubo);
     hglGenBuffers(1, &command_state.bone_data_buffer.ubo);
+    hglGenBuffers(1, &command_state.indirect_buffer.ubo);
     hglGenBuffers(1, &command_state.lights_buffer.ubo);
     hglFlush();
     hglErrorAssert();
@@ -1637,6 +1647,10 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.bone_data_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(BoneDataList), (void *)0, GL_DYNAMIC_DRAW);
+    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.indirect_buffer.ubo);
+    hglBufferData(GL_UNIFORM_BUFFER, sizeof(DrawElementsIndirectCommand) * 100, (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
     hglFlush();
     hglErrorAssert();
@@ -1847,6 +1861,12 @@ extern "C" RENDERER_SETUP(renderer_setup)
     memory->render_lists_count = 0;
     renderer_state *state = &_GlobalRendererState;
 
+    if (_GlobalRendererState.initialized)
+    {
+        // OpenGL hooks for OBS, ..., can introduce errors between frames...
+        if (state->crash_on_gl_errors) hglErrorAssert(true);
+    }
+
     memory->imgui_state = ImGui::GetCurrentContext();
     if (!_GlobalRendererState.initialized)
     {
@@ -1901,7 +1921,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         hglErrorAssert();
         _GlobalRendererState.initialized = true;
         state->generation_id = 1;
-        state->crash_on_gl_errors = 1;
+        state->crash_on_gl_errors = 0;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
@@ -2020,7 +2040,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Wood_Fence_Broken_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Broken_01.hjm");
         add_mesh_asset(state, "knp_Wood_Fence_Gate_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Gate_01.hjm");
 
-        add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced2.hjm");
+        add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced3.hjm");
         add_mesh_asset(state, "kenney_blocky_advanced_mesh2", "testing/kenney/blocky_advanced3.hjm");
         add_asset(state, "kenney_blocky_advanced_cowboy_texture", "testing/kenney/skin_exclusiveCowboy.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "blockfigureRigged6_mesh", "testing/human_low.hjm");
@@ -3021,8 +3041,8 @@ draw_mesh_from_asset_v3_bones(
     auto &command_list = command_lists.command_lists[key_index];
 
     auto &cmd = command_list.commands[command_list.num_commands];
-    cmd.count = 1; // number of instances
-    cmd.primCount = 3 * mesh->num_triangles; // number of triangles * 3
+    cmd.count = 3 * mesh->num_triangles; // number of triangles * 3
+    cmd.primCount = 1; // number of instances
     cmd.firstIndex = mesh->v3_bones.index_offset;
     cmd.baseVertex = (int32_t)mesh->v3_bones.vertex_base;
     cmd.baseInstance = 0;
@@ -3249,8 +3269,8 @@ draw_mesh_from_asset_v3_boneless(
     auto &command_list = command_lists.command_lists[key_index];
 
     auto &cmd = command_list.commands[command_list.num_commands];
-    cmd.count = 1; // number of instances
-    cmd.primCount = 3 * mesh->num_triangles; // number of triangles * 3
+    cmd.count = 3 * mesh->num_triangles; // number of triangles * 3
+    cmd.primCount = 1; // number of instances
     cmd.firstIndex = mesh->v3_boneless.index_offset;
     cmd.baseVertex = (int32_t)mesh->v3_boneless.vertex_base;
     cmd.baseInstance = 0;
@@ -3353,357 +3373,40 @@ draw_mesh_from_asset(
 )
 {
     Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
-    if (mesh->mesh_format == MeshFormat::v3_bones)
+    switch(mesh->mesh_format)
     {
-        return draw_mesh_from_asset_v3_bones(
-            ctx,
-            memory,
-            state,
-            matrices,
-            descriptors,
-            light_descriptors,
-            armature_descriptors,
-            mesh_from_asset,
-            mesh);
-    }
-    else if (mesh->mesh_format == MeshFormat::v3_boneless || mesh->vertexformat)
-    {
-        return draw_mesh_from_asset_v3_boneless(
-            ctx,
-            memory,
-            state,
-            matrices,
-            descriptors,
-            light_descriptors,
-            armature_descriptors,
-            mesh_from_asset,
-            mesh);
-    }
-
-    TIMED_FUNCTION();
-
-    if (state->crash_on_gl_errors) hglErrorAssert();
-    hglDisable(GL_BLEND);
-    hglEnable(GL_DEPTH_TEST);
-    hglEnable(GL_CULL_FACE);
-    if (!mesh_from_asset->flags.depth_disabled)
-    {
-        hglDepthFunc(GL_LESS);
-    }
-    m4 projection = matrices[mesh_from_asset->projection_matrix_id];
-    m4 view;
-    if (mesh_from_asset->view_matrix_id >= 0)
-    {
-        view = matrices[mesh_from_asset->view_matrix_id];
-    }
-    else
-    {
-        view = m4identity();
-    }
-    m4 &model = mesh_from_asset->model_matrix;
-
-    v3 camera_position = calculate_camera_position(view);
-
-    v2 st0 = {};
-    v2 st1 = {};
-    uint32_t texture = 0;
-    get_texture_id_from_asset_descriptor(
-        ctx, memory, state, descriptors, mesh_from_asset->texture_asset_descriptor_id,
-        &texture, &st0, &st1);
-
-    int32_t a_position_id = -1;
-    int32_t a_texcoord_id = -1;
-    int32_t a_normal_id = -1;
-    int32_t a_bone_ids_id = -1;
-    int32_t a_bone_weights_id = -1;
-
-    int32_t max_faces = (int32_t)mesh->num_triangles;
-    int32_t start_face = 0;
-    int32_t end_face = max_faces;
-
-    m4 *bones = mesh->legacy.default_bones;
-
-    ArmatureDescriptor *armature = 0;
-    if (mesh_from_asset->armature_descriptor_id >= 0)
-    {
-        armature = armature_descriptors + mesh_from_asset->armature_descriptor_id;
-    }
-    if (armature)
-    {
-        bones = armature->bones;
-    }
-
-    static bool proceed_time = false;
-    static float playback_speed = 1.0f;
-
-    int32_t num_faces = end_face - start_face;
-
-    hglBindVertexArray(state->vao);
-    switch (mesh_from_asset->shader_type)
-    {
-        case ShaderType::standard:
+        case MeshFormat::v3_bones:
         {
-            auto &program = state->phong_no_normal_map_program;
-            hglUseProgram(program.program);
-            hglUniform1i(state->phong_no_normal_map_tex_id, 0);
-            hglUniform1i(state->phong_no_normal_map_shadowmap_tex_id, 1);
-            hglUniform1i(state->phong_no_normal_map_shadowmap_color_tex_id, 2);
-            hglUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-            hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view);
-            hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
-            hglUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
-
-            hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)bones);
-            hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh->num_bones);
-
-            hglEnableVertexAttribArray((GLuint)program.a_position_id);
-            hglEnableVertexAttribArray((GLuint)program.a_texcoord_id);
-            hglEnableVertexAttribArray((GLuint)program.a_normal_id);
-            hglDisableVertexAttribArray((GLuint)program.a_bone_ids_id);
-            hglDisableVertexAttribArray((GLuint)program.a_bone_weights_id);
-            if (state->crash_on_gl_errors) hglErrorAssert();
-
-            hglUniform1i(
-                state->phong_no_normal_map_program.u_lightspace_available_id, 0);
-            if (state->crash_on_gl_errors) hglErrorAssert();
-
-            a_position_id = program.a_position_id;
-            a_texcoord_id = program.a_texcoord_id;
-            a_normal_id = program.a_normal_id;
-            a_bone_ids_id = program.a_bone_ids_id;
-            a_bone_weights_id = program.a_bone_weights_id;
+            return draw_mesh_from_asset_v3_bones(
+                ctx,
+                memory,
+                state,
+                matrices,
+                descriptors,
+                light_descriptors,
+                armature_descriptors,
+                mesh_from_asset,
+                mesh);
         } break;
-        case ShaderType::variance_shadow_map:
+        case MeshFormat::v3_boneless:
         {
-            auto &program = state->variance_shadow_map_program;
-            hglUseProgram(program.program);
-            hglUniform1i(state->variance_shadow_map_tex_id, 0);
-            hglUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-            hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view);
-            hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model);
-
-            hglUniformMatrix4fv(program.u_bones_id, 100, GL_FALSE, (float *)bones);
-            hglUniform1i(program.u_bones_enabled_id, (int32_t)mesh->num_bones);
-
-            hglEnableVertexAttribArray((GLuint)program.a_position_id);
-            hglEnableVertexAttribArray((GLuint)program.a_texcoord_id);
-            hglDisableVertexAttribArray((GLuint)program.a_bone_ids_id);
-            hglDisableVertexAttribArray((GLuint)program.a_bone_weights_id);
-            if (state->crash_on_gl_errors) hglErrorAssert();
-
-            a_position_id = program.a_position_id;
-            a_texcoord_id = program.a_texcoord_id;
-            a_bone_ids_id = program.a_bone_ids_id;
-            a_bone_weights_id = program.a_bone_weights_id;
+            return draw_mesh_from_asset_v3_boneless(
+                ctx,
+                memory,
+                state,
+                matrices,
+                descriptors,
+                light_descriptors,
+                armature_descriptors,
+                mesh_from_asset,
+                mesh);
+        } break;
+        case MeshFormat::first:
+        {
+            hassert(!"Unreachable");
         } break;
     }
-
-    uint32_t shadowmap_texture = 0;
-
-    if (mesh_from_asset->lights_mask == 1)
-    {
-        auto &light = light_descriptors[0];
-        auto &program = state->phong_no_normal_map_program;
-
-        v4 position_or_direction;
-
-        switch (light.type)
-        {
-            case LightType::directional:
-            {
-                v3 direction = light.direction;
-                direction = v3normalize(direction);
-
-                position_or_direction = {
-                    direction.x,
-                    direction.y,
-                    direction.z,
-                    0.0f,
-                };
-            } break;
-        }
-
-        hglUniform4fv(
-            hglGetUniformLocation(program.program, "light.position_or_direction"), 1,
-            (float *)&position_or_direction.x);
-        hglUniform3fv(
-            hglGetUniformLocation(program.program, "light.color"), 1,
-            (float *)&light.color);
-        hglUniform1f(
-            hglGetUniformLocation(program.program, "light.ambient_intensity"),
-            light.ambient_intensity);
-        hglUniform1f(
-            hglGetUniformLocation(program.program, "light.diffuse_intensity"),
-            light.diffuse_intensity);
-        if (state->crash_on_gl_errors) hglErrorAssert();
-    }
-
-    if (mesh_from_asset->flags.cull_front)
-    {
-        hglCullFace(GL_FRONT);
-    }
-    else
-    {
-        hglCullFace(GL_BACK);
-    }
-
-    if (mesh_from_asset->flags.attach_shadowmap)
-    {
-        auto &light = light_descriptors[0];
-        hglActiveTexture(GL_TEXTURE0 + 1);
-        get_texture_id_from_asset_descriptor(
-            ctx, memory, state, descriptors,
-            light.shadowmap_asset_descriptor_id,
-            &shadowmap_texture, &st0, &st1);
-        hglBindTexture(GL_TEXTURE_2D, shadowmap_texture);
-        hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-        hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-        hglActiveTexture(GL_TEXTURE0);
-
-        if (mesh_from_asset->flags.attach_shadowmap_color)
-        {
-            uint32_t shadowmap_color_texture = 0;
-            hglActiveTexture(GL_TEXTURE0 + 2);
-            get_texture_id_from_asset_descriptor(
-                ctx, memory, state, descriptors,
-                light.shadowmap_color_asset_descriptor_id,
-                &shadowmap_color_texture, &st0, &st1);
-            hglBindTexture(GL_TEXTURE_2D, shadowmap_color_texture);
-            hglActiveTexture(GL_TEXTURE0);
-        }
-
-        m4 shadowmap_matrix = light.shadowmap_matrix;
-
-        auto &program = state->phong_no_normal_map_program;
-
-        hglUniformMatrix4fv(program.u_lightspace_matrix_id, 1, GL_FALSE, (float *)&shadowmap_matrix);
-
-        hglUniform1i(program.u_lightspace_available_id, 1);
-        hglUniform1i(program.u_shadow_mode_id, state->shadow_mode);
-        hglUniform1i(program.u_poisson_spread_id, state->poisson_spread);
-        hglUniform1f(program.u_bias_id, state->shadowmap_bias);
-        hglUniform1i(program.u_pcf_distance_id, state->pcf_distance);
-        hglUniform1i(program.u_poisson_samples_id, state->poisson_samples);
-        hglUniform1f(program.u_poisson_position_granularity_id, state->poisson_position_granularity);
-        hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
-        hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
-        //glUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
-    }
-
-    if (!mesh->loaded)
-    {
-        mesh->loaded = true;
-        mesh->reload = true;
-        hglGenBuffers(1, &mesh->legacy.vbo);
-        hglGenBuffers(1, &mesh->legacy.ibo);
-    }
-    hglBindBuffer(GL_ARRAY_BUFFER, mesh->legacy.vbo);
-    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->legacy.ibo);
-    uint32_t positions_offset = 0, offset = 0;
-    uint32_t uvs_offset = offset += mesh->vertices.size;
-    uint32_t normals_offset = offset += mesh->legacy.uvs.size;
-    uint32_t bone_ids_offset = offset += mesh->legacy.normals.size;
-    uint32_t bone_weights_offset = offset += mesh->legacy.bone_ids.size;
-    if (mesh->reload)
-    {
-        hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                mesh->indices.size,
-                mesh->indices.data,
-                GL_STATIC_DRAW);
-
-        uint32_t size = 0 +
-            mesh->vertices.size +
-            mesh->legacy.uvs.size +
-            mesh->legacy.normals.size +
-            mesh->legacy.bone_ids.size +
-            mesh->legacy.bone_weights.size;
-        hglBufferData(GL_ARRAY_BUFFER, size, (void *)0, GL_STATIC_DRAW);
-        hglBufferSubData(GL_ARRAY_BUFFER, positions_offset, mesh->vertices.size,
-                mesh->vertices.data);
-        if (mesh->legacy.uvs.data)
-        {
-            hglBufferSubData(GL_ARRAY_BUFFER, uvs_offset, mesh->legacy.uvs.size,
-                    mesh->legacy.uvs.data);
-        }
-        hglBufferSubData(GL_ARRAY_BUFFER, normals_offset, mesh->legacy.normals.size,
-                mesh->legacy.normals.data);
-        hglBufferSubData(GL_ARRAY_BUFFER, bone_ids_offset, mesh->legacy.bone_ids.size,
-                mesh->legacy.bone_ids.data);
-        hglBufferSubData(GL_ARRAY_BUFFER, bone_weights_offset, mesh->legacy.bone_weights.size,
-                mesh->legacy.bone_weights.data);
-        mesh->reload = false;
-    }
-    hglVertexAttribPointer(
-        (GLuint)a_position_id,
-        3, GL_FLOAT, GL_FALSE,
-        0,
-        (void *)(uintptr_t)positions_offset
-    );
-
-    hglVertexAttribPointer(
-        (GLuint)a_texcoord_id,
-        2, GL_FLOAT, GL_FALSE,
-        0,
-        (void *)(uintptr_t)uvs_offset
-    );
-
-    if (a_normal_id >= 0)
-    {
-        hglVertexAttribPointer(
-            (GLuint)a_normal_id,
-            3, GL_FLOAT, GL_FALSE,
-            0,
-            (void *)(uintptr_t)normals_offset
-        );
-    }
-    if (a_bone_ids_id >= 0)
-    {
-        if (mesh->legacy.bone_ids.size)
-        {
-            hglEnableVertexAttribArray((GLuint)a_bone_ids_id);
-            hglVertexAttribIPointer(
-                (GLuint)a_bone_ids_id,
-                4, GL_INT,
-                0,
-                (void *)(uintptr_t)bone_ids_offset
-            );
-        }
-    }
-    if (a_bone_weights_id >= 0)
-    {
-        if (mesh->legacy.bone_weights.size)
-        {
-            hglEnableVertexAttribArray((GLuint)a_bone_weights_id);
-            hglVertexAttribPointer(
-                (GLuint)a_bone_weights_id,
-                4, GL_FLOAT, GL_FALSE,
-                0,
-                (void *)(uintptr_t)bone_weights_offset
-            );
-        }
-    }
-
-    hglBindTexture(GL_TEXTURE_2D, texture);
-    if (state->crash_on_gl_errors) hglErrorAssert();
-    if (state->flush_for_profiling) hglFlush();
-    {
-        TIMED_BLOCK("draw elements");
-        hglDrawElements(GL_TRIANGLES, (GLsizei)(num_faces * 3), GL_UNSIGNED_INT, (GLvoid *)(start_face * 3 * sizeof(GLuint)));
-        if (state->crash_on_gl_errors) hglErrorAssert();
-        if (state->flush_for_profiling) hglFlush();
-    }
-    if (mesh_from_asset->flags.attach_shadowmap)
-    {
-        hglBindTexture(GL_TEXTURE_2D, shadowmap_texture);
-        hglTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-    }
-
-    hglBindVertexArray(0);
-    hglDisable(GL_DEPTH_TEST);
-    hglDepthFunc(GL_ALWAYS);
-    hglEnable(GL_BLEND);
-    if (state->crash_on_gl_errors) hglErrorAssert();
-    if (state->flush_for_profiling) hglFlush();
+    hassert(!"Unreachable");
 }
 
 void
@@ -4165,18 +3868,54 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 
         hglBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        for (uint32_t j = 0; j < command_list.num_commands; ++j)
+        hglBindBuffer(GL_DRAW_INDIRECT_BUFFER, command_state.indirect_buffer.ubo);
+        hglBufferSubData(
+            GL_DRAW_INDIRECT_BUFFER,
+            0,
+            sizeof(command_list.commands),
+            command_list.commands);
+        if (state->gl_extensions.gl_arb_multi_draw_indirect)
         {
-            auto &command = command_list.commands[j];
-
-            hglUniform1i(pd.draw_data_index_uniform, j);
-            hglDrawElementsBaseVertex(
+            hglUniform1i(pd.draw_data_index_uniform, 0);
+            hglMultiDrawElementsIndirect(
                 GL_TRIANGLES,
-                command.primCount,
                 GL_UNSIGNED_INT,
-                (void *)(intptr_t)(command.firstIndex * 4),
-                command.baseVertex);
+                (void *)0,
+                command_list.num_commands,
+                0);
         }
+        else
+        {
+            for (uint32_t j = 0; j < command_list.num_commands; ++j)
+            {
+                //auto &command = command_list.commands[j];
+
+                hglUniform1i(pd.draw_data_index_uniform, j);
+                /*
+                hglDrawElementsBaseVertex(
+                    GL_TRIANGLES,
+                    command.count,
+                    GL_UNSIGNED_INT,
+                    (void *)(intptr_t)(command.firstIndex * 4),
+                    command.baseVertex);
+                */
+                /*
+                hglDrawElementsInstancedBaseVertexBaseInstance(
+                    GL_TRIANGLES,
+                    command.count,
+                    GL_UNSIGNED_INT,
+                    (void *)(intptr_t)(command.firstIndex * 4),
+                    command.primCount,
+                    command.baseVertex,
+                    0);
+                */
+                hglDrawElementsIndirect(
+                    GL_TRIANGLES,
+                    GL_UNSIGNED_INT,
+                    (void *)(j * sizeof(DrawElementsIndirectCommand)));
+            }
+        }
+
         command_list.num_commands = 0;
         command_list.num_bones = 0;
     }

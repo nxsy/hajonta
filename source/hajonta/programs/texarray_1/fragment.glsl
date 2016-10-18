@@ -66,6 +66,7 @@ in vec3 v_w_position;
 in vec2 v_texcoord;
 in vec3 v_w_normal;
 in vec4 v_l_position;
+flat in uint v_draw_id;
 
 out vec4 o_color;
 
@@ -76,7 +77,7 @@ float linstep(float low, float high, float v)
 
 float shadow_visibility_vsm(vec4 lightspace_position, vec3 normal, vec3 light_dir)
 {
-    DrawData dd = draw_data[u_draw_data_index];
+    DrawData dd = draw_data[v_draw_id];
     vec3 lightspace_coords = lightspace_position.xyz / lightspace_position.w;
     lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
 
@@ -106,7 +107,7 @@ float shadow_visibility_vsm(vec4 lightspace_position, vec3 normal, vec3 light_di
 
 void main()
 {
-    DrawData dd = draw_data[u_draw_data_index];
+    DrawData dd = draw_data[v_draw_id];
     if (dd.texture_texaddress_index >= 0)
     {
         Tex2DAddress addr = texAddress[dd.texture_texaddress_index];

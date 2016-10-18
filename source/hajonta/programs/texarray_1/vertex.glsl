@@ -1,5 +1,9 @@
 #version 410 core
 
+#ifdef GL_ARB_shader_draw_parameters
+#extension GL_ARB_shader_draw_parameters : enable
+#endif
+
 precision highp float;
 precision highp int;
 layout(std140, column_major) uniform;
@@ -14,6 +18,7 @@ out vec3 v_w_position;
 out vec2 v_texcoord;
 out vec3 v_w_normal;
 out vec4 v_l_position;
+flat out uint v_draw_id;
 
 uniform float u_minimum_variance;
 uniform float u_lightbleed_compensation;
@@ -60,7 +65,13 @@ uniform int u_draw_data_index;
 
 void main()
 {
-    DrawData dd = draw_data[u_draw_data_index];
+    uint draw_data_index = u_draw_data_index;
+#ifdef GL_ARB_shader_draw_parameters
+    draw_data_index += gl_DrawIDARB;
+#endif
+    v_draw_id = draw_data_index;
+
+    DrawData dd = draw_data[draw_data_index];
     mat4 model_matrix = dd.model;
     mat4 view_matrix = dd.view;
     mat4 projection_matrix = dd.projection;
