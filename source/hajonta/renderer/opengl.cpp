@@ -21,8 +21,6 @@
 
 #include "hajonta/programs/imgui.h"
 #include "hajonta/programs/ui2d.h"
-#include "hajonta/programs/phong_no_normal_map.h"
-#include "hajonta/programs/variance_shadow_map.h"
 #include "hajonta/programs/filters/filter_gaussian_7x1.h"
 #include "hajonta/programs/sky.h"
 #include "hajonta/programs/texarray_1.h"
@@ -167,8 +165,8 @@ struct
 CommandLists
 {
     uint32_t num_command_lists;
-    CommandKey keys[20];
-    CommandList command_lists[20];
+    CommandKey keys[40];
+    CommandList command_lists[40];
 };
 
 
@@ -497,7 +495,6 @@ struct renderer_state
     int32_t imgui_texcontainer;
     int32_t imgui_tex;
     uint32_t imgui_cb0;
-    phong_no_normal_map_program_struct phong_no_normal_map_program;
     texarray_1_program_struct texarray_1_program;
     uint32_t texarray_1_cb0;
     uint32_t texarray_1_cb1;
@@ -513,7 +510,6 @@ struct renderer_state
     uint32_t texarray_1_vsm_cb3;
     int32_t texarray_1_vsm_texcontainer;
 
-    variance_shadow_map_program_struct variance_shadow_map_program;
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
     sky_program_struct sky_program;
     uint32_t vbo;
@@ -526,10 +522,6 @@ struct renderer_state
     uint32_t mesh_bone_weights_vbo;
     uint32_t vao;
     int32_t tex_id;
-    int32_t phong_no_normal_map_tex_id;
-    int32_t phong_no_normal_map_shadowmap_tex_id;
-    int32_t phong_no_normal_map_shadowmap_color_tex_id;
-    int32_t variance_shadow_map_tex_id;
     int32_t filter_gaussian_7x1_tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
@@ -1477,8 +1469,6 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         imgui_program_struct *program = &state->imgui_program;
         imgui_program(program, ctx, memory);
 
-        state->tex_id = hglGetUniformLocation(program->program, "tex");
-
         hglGenBuffers(1, &state->vbo);
         hglGenBuffers(1, &state->ibo);
         hglGenBuffers(1, &state->QUADS_ibo);
@@ -1527,13 +1517,6 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     hglFlush();
     hglErrorAssert();
 
-    {
-        phong_no_normal_map_program_struct *program = &state->phong_no_normal_map_program;
-        loaded &= phong_no_normal_map_program(program, ctx, memory);
-        state->phong_no_normal_map_tex_id = hglGetUniformLocation(program->program, "tex");
-        state->phong_no_normal_map_shadowmap_tex_id = hglGetUniformLocation(program->program, "shadowmap_tex");
-        state->phong_no_normal_map_shadowmap_color_tex_id = hglGetUniformLocation(program->program, "shadowmap_color_tex");
-    }
     hglFlush();
     hglErrorAssert();
 
@@ -1586,14 +1569,6 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
         state->texarray_1_vsm_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
 
-    hglFlush();
-    hglErrorAssert();
-
-    {
-        variance_shadow_map_program_struct *program = &state->variance_shadow_map_program;
-        loaded &= variance_shadow_map_program(program, ctx, memory);
-        state->variance_shadow_map_tex_id = hglGetUniformLocation(program->program, "tex");
-    }
     hglFlush();
     hglErrorAssert();
 
@@ -4276,7 +4251,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         hglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         hglScissor(0, 0, window->width, window->height);
         hglUseProgram(state->imgui_program.program);
-        hglUniform1i(state->tex_id, 0);
+        hglUniform1i(state->imgui_tex, 0);
 
         hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
         hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
