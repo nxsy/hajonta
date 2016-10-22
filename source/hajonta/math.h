@@ -19,11 +19,15 @@ struct v3
     float z;
 };
 
-struct v3i
+union v3i
 {
-    int32_t x;
-    int32_t y;
-    int32_t z;
+    struct
+    {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+    };
+    int32_t E[3];
 };
 
 struct v4b

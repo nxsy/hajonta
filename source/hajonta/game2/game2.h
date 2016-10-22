@@ -79,6 +79,7 @@ _asset_ids
     int32_t dynamic_mesh_test;
     int32_t dynamic_texture_test;
     int32_t white_texture;
+    int32_t knp_plate_grass;
 };
 
 struct
@@ -207,11 +208,36 @@ array2<H,W,T>::get(int32_t x, int32_t y)
 }
 
 struct
+_vertexformat_1
+{
+    v3 position;
+    v3 normal;
+    v2 texcoords;
+};
+
+struct
+Triangles
+{
+    _vertexformat_1 vertices[3];
+};
+
+struct
+FaceVertices
+{
+    Triangles triangles[2];
+};
+
+struct
+BlockVertices
+{
+    FaceVertices faces[6];
+};
+
+
+struct
 TerrainMeshDataP
 {
-    array2p<v3> vertices;
-    array2p<v3> normals;
-    array2p<v2> uvs;
+    array2p<BlockVertices> vertices;
     v3i *triangles;
     uint32_t *triangle_index;
 
@@ -221,29 +247,40 @@ TerrainMeshDataP
         *triangle_index += 1;
     };
 
-    void
-    create_mesh(Mesh *mesh)
+    int32_t
+    vertex_index(v2i location)
     {
-        int32_t vertex_count = vertices.width * vertices.height;
+        return (int32_t)(
+            (location.x + location.y * vertices.height) *
+            harray_count(vertices.values[0].faces) *
+            harray_count(vertices.values[0].faces[0].triangles) *
+            harray_count(vertices.values[0].faces[0].triangles[0].vertices) *
+            1);
+    }
 
-        mesh->vertices = {
-            (void *)vertices.values,
-            vertex_count * sizeof(v3),
-        };
-        mesh->indices = {
-            (void *)triangles,
-            *triangle_index * sizeof(uint32_t) * 3,
-        };
-        mesh->legacy.normals = {
-            (void *)normals.values,
-            vertex_count * sizeof(v3),
-        };
-        mesh->legacy.uvs = {
-            (void *)uvs.values,
-            vertex_count * sizeof(v2),
-        };
+    void
+    update_mesh(Mesh *mesh)
+    {
+        uint32_t vertex_count = (
+            vertices.width *
+            vertices.height *
+            harray_count(vertices.values[0].faces) *
+            harray_count(vertices.values[0].faces[0].triangles) *
+            harray_count(vertices.values[0].faces[0].triangles[0].vertices) *
+            1);
+        uint32_t vertex_size = vertex_count * sizeof(_vertexformat_1);
+        memcpy(mesh->vertices.data, vertices.values, vertex_size);
+        uint32_t index_size = *triangle_index * sizeof(triangles[0]);
+        memcpy(mesh->indices.data, triangles, index_size);
+        mesh->v3_boneless.vertex_count = (uint32_t)vertex_count;
         mesh->num_triangles = *triangle_index;
         mesh->reload = true;
+    }
+
+    void
+    reset()
+    {
+        *triangle_index = 0;
     }
 };
 
@@ -251,10 +288,8 @@ template<uint32_t W, uint32_t H>
 struct
 TerrainMeshData
 {
-    array2<W, H, v3> vertices;
-    array2<W, H, v3> normals;
-    array2<W, H, v2> uvs;
-    v3i triangles[(W - 1) * (H - 1) * 2];
+    array2<W, H, BlockVertices> vertices;
+    v3i triangles[100000];
     uint32_t triangle_index;
 
     void add_triangle(v3i triangle)
@@ -267,8 +302,6 @@ TerrainMeshData
     {
         return {
             vertices.array2p(),
-            normals.array2p(),
-            uvs.array2p(),
             (v3i *)triangles,
             &triangle_index,
         };
@@ -335,7 +368,7 @@ DebugFrame
     float seconds_elapsed;
 
     uint32_t event_count;
-    DebugProfileEvent events[4000];
+    DebugProfileEvent events[10000];
 
     uint32_t opengl_timer_count;
     OpenGLTimerResult opengl_timer[20];
@@ -420,6 +453,8 @@ debug_state
 
         v2 control_point_0;
         v2 control_point_1;
+        float min_noise_height;
+        float max_noise_height;
     } perlin;
     struct
     {
@@ -754,9 +789,11 @@ struct game_state
     Mesh test_mesh;
     DynamicTextureDescriptor test_texture;
 
-    array2<32, 32, float> noisemap;
-    TerrainMeshData<32, 32> terrain_mesh_data;
-    array2<32, 32, v4b> noisemap_scratch;
+#define NOISE_WIDTH 16
+#define NOISE_HEIGHT 16
+    array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemap;
+    TerrainMeshData<NOISE_WIDTH * 2, NOISE_HEIGHT * 2> terrain_mesh_data;
+    array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratch;
 
     Landmass landmass;
 };

@@ -265,6 +265,8 @@ Mesh
     bool loaded;
     bool dynamic;
     bool reload;
+    uint32_t dynamic_max_vertices;
+    uint32_t dynamic_max_triangles;
 };
 
 struct MeshFromAssetFlags

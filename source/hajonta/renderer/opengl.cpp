@@ -2919,7 +2919,7 @@ draw_mesh_from_asset_v3_bones(
     auto &command_state = state->command_state;
 
     bool debug = false;
-    if (mesh_from_asset->mesh_asset_descriptor_id == 84)
+    if (mesh_from_asset->mesh_asset_descriptor_id == 997)
     {
         debug = true;
     }
@@ -3147,7 +3147,7 @@ draw_mesh_from_asset_v3_boneless(
     auto &command_state = state->command_state;
 
     bool debug = false;
-    if (mesh_from_asset->mesh_asset_descriptor_id == 84)
+    if (mesh_from_asset->mesh_asset_descriptor_id == 97)
     {
         debug = true;
     }
@@ -3160,12 +3160,16 @@ draw_mesh_from_asset_v3_boneless(
         auto &index_buffer = command_state.index_buffers[index_buffer_id];
         uint32_t vertex_base = vertex_buffer.vertex_count;
         uint32_t index_offset = index_buffer.index_count;
+
         mesh->v3_boneless.vertex_buffer = vertex_buffer_id;
         mesh->v3_boneless.vertex_base = vertex_base;
         mesh->v3_boneless.index_buffer = index_buffer_id;
         mesh->v3_boneless.index_offset = index_offset;
         hglBindBuffer(GL_ARRAY_BUFFER,
             vertex_buffer.vbo);
+        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+            index_buffer.ibo);
+
         if (!vertex_buffer.max_vertices)
         {
             vertex_buffer.vertex_size = sizeof(vertexformat_1);
@@ -3175,14 +3179,7 @@ draw_mesh_from_asset_v3_boneless(
                 (void *)0,
                 GL_DYNAMIC_DRAW);
         }
-        hassert(vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count == mesh->vertices.size);
-        hglBufferSubData(GL_ARRAY_BUFFER,
-            vertex_buffer.vertex_size * vertex_buffer.vertex_count,
-            vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count,
-            mesh->vertices.data);
-        vertex_buffer.vertex_count += mesh->v3_boneless.vertex_count;
-        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-            command_state.index_buffers[0].ibo);
+
         if (!index_buffer.max_indices)
         {
             index_buffer.max_indices = 100000;
@@ -3191,14 +3188,77 @@ draw_mesh_from_asset_v3_boneless(
                 (void *)0,
                 GL_DYNAMIC_DRAW);
         }
-        hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
+        mesh->loaded = true;
+        mesh->reload = true;
+
+        if (!mesh->dynamic_max_vertices)
+        {
+            vertex_buffer.vertex_count += mesh->v3_boneless.vertex_count;
+        }
+        else
+        {
+            vertex_buffer.vertex_count += mesh->dynamic_max_vertices;
+        }
+        if (!mesh->dynamic_max_triangles)
+        {
+            index_buffer.index_count += mesh->num_triangles * 3;
+        }
+        else
+        {
+            index_buffer.index_count += mesh->dynamic_max_triangles * 3;
+        }
+    }
+
+    if (mesh->reload)
+    {
+        if (mesh->dynamic)
+        {
+            bool f = mesh->dynamic;
+            (void)f;
+        }
+        uint32_t vertex_buffer_id = mesh->v3_boneless.vertex_buffer;
+        uint32_t vertex_base = mesh->v3_boneless.vertex_base;
+        uint32_t index_buffer_id = mesh->v3_boneless.index_buffer;
+        uint32_t index_offset = mesh->v3_boneless.index_offset;
+
+        auto &vertex_buffer = command_state.vertex_buffers[vertex_buffer_id];
+        auto &index_buffer = command_state.index_buffers[index_buffer_id];
+
+        hglBindBuffer(GL_ARRAY_BUFFER,
+            vertex_buffer.vbo);
+        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+            index_buffer.ibo);
+
+        if (!mesh->dynamic_max_vertices)
+        {
+            hassert(vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count == mesh->vertices.size);
+        }
+        else
+        {
+            hassert(vertex_buffer.vertex_size * mesh->dynamic_max_vertices == mesh->vertices.size);
+        }
+
+        hglBufferSubData(GL_ARRAY_BUFFER,
+            vertex_buffer.vertex_size * vertex_base,
+            vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count,
+            mesh->vertices.data);
+
+        if (!mesh->dynamic_max_triangles)
+        {
+            hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
+        }
+        else
+        {
+            hassert(4 * mesh->dynamic_max_triangles * 3 == mesh->indices.size);
+        }
+
         hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
-            4 * index_buffer.index_count,
+            4 * index_offset,
             4 * mesh->num_triangles * 3,
             mesh->indices.data);
-        index_buffer.index_count += mesh->num_triangles * 3;
-        mesh->loaded = true;
+        mesh->reload = false;
     }
+
 
     CommandKey key = {};
     key.shader_type = mesh_from_asset->shader_type;
