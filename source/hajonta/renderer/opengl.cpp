@@ -2052,7 +2052,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->vsm_minimum_variance = 0.0000002f;
         state->vsm_lightbleed_compensation = 0.001f;
         state->blur_scale_divisor = 3072.0f;
-        state->shadowmap_bias = 0.008f;
+        state->shadowmap_bias = -0.015f;
         hglGenQueries(
             2 * harray_count(state->timer_query_data.query_ids[0]),
             (uint32_t *)&state->timer_query_data.query_ids

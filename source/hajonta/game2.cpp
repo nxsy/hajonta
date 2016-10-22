@@ -348,8 +348,8 @@ initialize(platform_memory *memory, game_state *state)
     auto &light = state->lights[(uint32_t)LightIds::sun];
     light.type = LightType::directional;
     light.direction = {1.0f, -0.66f, -0.288f};
-    light.color = {1.0f, 0.99f, 0.99f};
-    light.ambient_intensity = 0.35f;
+    light.color = {1.0f, 0.75f, 0.75f};
+    light.ambient_intensity = 0.298f;
     light.diffuse_intensity = 1.0f;
     light.attenuation_constant = 1.0f;
 
@@ -374,11 +374,11 @@ initialize(platform_memory *memory, game_state *state)
     state->debug.show_camera = 0;
     state->debug.debug_system.show = 0;
 
-    state->camera.distance = 4.0f;
+    state->camera.distance = 7.0f;
     state->camera.near_ = 1.0f;
     state->camera.far_ = 10000.0f * 1.1f;
-    state->camera.target = {2, 3.5, 0};
-    state->camera.rotation = {0.0f, -1.0f, 0};
+    state->camera.target = {2, 2.5, 0};
+    state->camera.rotation = {-0.1f, -0.8f, 0};
 
     state->np_camera.distance = 2.0f;
     state->np_camera.near_ = 1.0f;
@@ -530,50 +530,63 @@ initialize(platform_memory *memory, game_state *state)
             case TerrainType::deep_water:
             {
                 ti->name = "deep water";
-                ti->height = -0.8f;
+                ti->height = -0.5f;
                 ti->color = {0, 0, 0.8f, 1.0f};
             } break;
             case TerrainType::water:
             {
                 ti->name = "water";
-                ti->height = -0.3f;
-                ti->color = {0.1f, 0.1f, 0.9f, 1.0f};
+                ti->height = -0.005f;
+                ti->color = {0.1f, 0.1f, 0.8f, 1.0f};
+                ti->merge_with_previous = true;
             } break;
             case TerrainType::sand:
             {
                 ti->name = "sand";
-                ti->height = 0.0f;
-                ti->color = {0.8f, 0.8f, 0.0f, 1.0f};
+                ti->height = 0.1f;
+                ti->color = {0.65f, 0.65f, 0.2f, 1.0f};
             } break;
             case TerrainType::grass:
             {
                 ti->name = "grass";
-                ti->height = 0.1f;
-                ti->color = {0.1f, 0.8f, 0.0f, 1.0f};
+                ti->height = 0.15f;
+                ti->color = {0.1f, 0.7f, 0.0f, 1.0f};
+                ti->merge_with_previous = true;
             } break;
             case TerrainType::grass_2:
             {
                 ti->name = "grass 2";
                 ti->height = 0.3f;
-                ti->color = {0.0f, 0.8f, 0.0f, 1.0f};
+                ti->color = {0.0f, 0.6f, 0.0f, 1.0f};
+                ti->merge_with_previous = true;
             } break;
             case TerrainType::rock:
             {
                 ti->name = "rock";
-                ti->height = 0.7f;
+                ti->height = 0.6f;
                 ti->color = {0.65f, 0.25f, 0.25f, 1.0f};
+                ti->merge_with_previous = true;
             } break;
             case TerrainType::rock_2:
             {
                 ti->name = "rock 2";
-                ti->height = 0.8f;
+                ti->height = 0.75f;
                 ti->color = {0.5f, 0.2f, 0.2f, 1.0f};
+                ti->merge_with_previous = true;
             } break;
             case TerrainType::snow:
             {
                 ti->name = "snow";
-                ti->height = 0.9f;
+                ti->height = 0.8f;
+                ti->color = {0.8f, 0.8f, 0.8f, 1.0f};
+                ti->merge_with_previous = true;
+            } break;
+            case TerrainType::snow_2:
+            {
+                ti->name = "snow_2";
+                ti->height = 2.0f;
                 ti->color = {0.9f, 0.9f, 0.9f, 1.0f};
+                ti->merge_with_previous = true;
             } break;
         }
     }
@@ -794,6 +807,12 @@ generate_block_vertices(
     return bv;
 }
 
+float
+perturb_raw(float raw)
+{
+    return fmod(raw, 0.001f) * 100.0f;
+}
+
 void
 generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *mesh, float height_multiplier, v2 cp0, v2 cp1)
 {
@@ -812,10 +831,12 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
         for (int32_t x = 0; x < map.width; ++x)
         {
             v2 uv_base = {x + 0.5f, y + 0.5f};
-            float base_height = roundf(cubic_bezier(
+            float raw_base_height = cubic_bezier(
                 cp0,
                 cp1,
-                map.get({x,y})).y * height_multiplier) / 4;
+                map.get({x,y})).y;
+            float base_height = roundf(raw_base_height * height_multiplier) / 4 +
+                perturb_raw(raw_base_height);
 
             CornerHeights ch = {};
 
@@ -840,10 +861,12 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
 
             if (x < map.width - 1)
             {
-                float base_height_x1 = roundf(cubic_bezier(
+                float raw_base_height_x1 = cubic_bezier(
                     cp0,
                     cp1,
-                    map.get({x+1,y})).y * height_multiplier) / 4;
+                    map.get({x+1,y})).y;
+                float base_height_x1 = roundf(raw_base_height_x1 * height_multiplier) / 4 +
+                    perturb_raw(raw_base_height_x1);
 
                 float min_height = min(base_height, base_height_x1);
 
@@ -873,10 +896,13 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
 
             if (y < map.height - 1)
             {
-                float base_height_y1 = roundf(cubic_bezier(
+                float raw_base_height_y1 = cubic_bezier(
                     cp0,
                     cp1,
-                    map.get({x,y+1})).y * height_multiplier) / 4;
+                    map.get({x,y+1})).y;
+
+                float base_height_y1 = roundf(raw_base_height_y1 * height_multiplier) / 4 +
+                    perturb_raw(raw_base_height_y1);
 
                 float min_height = min(base_height, base_height_y1);
 
@@ -907,23 +933,29 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
             if (y < map.height - 1 && x < map.width - 1)
             {
                 ch = {
-                    roundf(cubic_bezier(
+                    cubic_bezier(
                         cp0,
                         cp1,
-                        map.get({x,y})).y * height_multiplier) / 4,
-                    roundf(cubic_bezier(
+                        map.get({x,y})).y,
+                    cubic_bezier(
                         cp0,
                         cp1,
-                        map.get({x+1,y})).y * height_multiplier) / 4,
-                    roundf(cubic_bezier(
+                        map.get({x+1,y})).y,
+                    cubic_bezier(
                         cp0,
                         cp1,
-                        map.get({x,y+1})).y * height_multiplier) / 4,
-                    roundf(cubic_bezier(
+                        map.get({x,y+1})).y,
+                    cubic_bezier(
                         cp0,
                         cp1,
-                        map.get({x+1,y+1})).y * height_multiplier) / 4,
+                        map.get({x+1,y+1})).y,
                 };
+
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    ch.E[i] = roundf(ch.E[i] * height_multiplier) / 4 +
+                        perturb_raw(ch.E[i]);
+                }
 
                 float min_height = min(
                     min(ch.E[0], ch.E[1]),
@@ -1080,12 +1112,20 @@ noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDes
                             break;
                         }
                     }
+                    v4 color = terrain->color;
+                    if (terrain->merge_with_previous)
+                    {
+                        TerrainTypeInfo *previous_terrain = terrain - 1;
+
+                        float t = (height - previous_terrain->height) / (terrain->height - previous_terrain->height);
+                        color = lerp(previous_terrain->color, terrain->color, t);
+                    }
                     scratch.set(
                         {x,y},
                         {
-                            (uint8_t)(255.0f * terrain->color.x),
-                            (uint8_t)(255.0f * terrain->color.y),
-                            (uint8_t)(255.0f * terrain->color.z),
+                            (uint8_t)(255.0f * color.x),
+                            (uint8_t)(255.0f * color.y),
+                            (uint8_t)(255.0f * color.z),
                             255,
                         }
                     );
@@ -1383,12 +1423,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
         mesh.v3_boneless.vertex_count = (uint32_t)par_mesh.npoints;
         auto &perlin = state->debug.perlin;
-        perlin.scale = 27.6f;
+        perlin.seed = 71;
+        perlin.offset = {0.06f, -0.71f};
+        //perlin.scale = 27.6f;
+        perlin.scale = 22.320f;
         perlin.show = false;
         perlin.octaves = 4;
         perlin.persistence = 0.5f;
         perlin.lacunarity = 2.0f;
-        perlin.height_multiplier = 10.0f;
+        perlin.height_multiplier = 113.0f;
         perlin.min_noise_height = FLT_MAX;
         perlin.max_noise_height = FLT_MIN;
     }
@@ -1588,11 +1631,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
     array2p<float> noise2p = state->noisemap.array2p();
     v2i middle = {(int32_t)(noise2p.width / 2.0f), (int32_t)(noise2p.height / 2.0f)};
-
+    local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
     //float height = cubic_bezier(state->debug.perlin.control_point_0, state->debug.perlin.control_point_1, noise2p.get(middle)).y * state->debug.perlin.height_multiplier;
-    translate.cols[3] = {0.5f, 2.1f, 0.5f, 1.0f};
+    float height = roundf(
+        cubic_bezier(
+            state->debug.perlin.control_point_0,
+            state->debug.perlin.control_point_1,
+            noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
+    translate.cols[3] = {0.5f, height, 0.5f, 1.0f};
     state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    translate.cols[3] = {1.5f, 2.1f, 1.5f, 1.0f};
+    translate.cols[3] = {1.5f, height, 1.5f, 1.0f};
     state->tree_model_matrix2 = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
     local_translate = m4identity();
@@ -1679,9 +1727,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &light = state->lights[(uint32_t)LightIds::sun];
         v3 eye = v3sub({0,0,0}, v3normalize(light.direction));
-        static float eye_distance = 7;
-        shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f + eye_distance, {-ratio * eye_distance, -eye_distance}, {ratio * eye_distance, eye_distance});
-        ImGui::DragFloat("Light distance", &eye_distance, 0.1f, 5.0f, 20.0f);
+        static float eye_distance = 20;
+        shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f + eye_distance, {-eye_distance, -eye_distance}, {eye_distance, eye_distance});
+        ImGui::DragFloat("Light distance", &eye_distance, 0.1f, 5.0f, 40.0f);
         eye = v3mul(eye, eye_distance);
         static v3 target = {0,0,0};
         ImGui::DragFloat3("Target", &target.x, 0.1f, -100.0f, 100.0f);
@@ -1848,8 +1896,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     {
         m4 model = m4mul(
-            m4translate({2, 2.5f, -2}),
-            m4scale(0.5f)
+            m4translate({0, 0, 0}),
+            m4scale(1.0f)
         );
 
         PushMeshFromAsset(
@@ -2195,6 +2243,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
+    /*
     {
         MeshFromAssetFlags flags = {};
         flags.depth_disabled = 1;
@@ -2228,6 +2277,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             ShaderType::standard
         );
     }
+    */
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);

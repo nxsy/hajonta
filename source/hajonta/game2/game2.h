@@ -677,8 +677,9 @@ TerrainType
     rock,
     rock_2,
     snow,
+    snow_2,
 
-    MAX = snow,
+    MAX = snow_2,
 };
 
 struct
@@ -688,6 +689,7 @@ TerrainTypeInfo
     const char *name;
     float height;
     v4 color;
+    bool merge_with_previous;
 };
 
 struct

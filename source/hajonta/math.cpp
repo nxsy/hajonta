@@ -901,3 +901,14 @@ m4lookat(v3 eye, v3 target, v3 up)
     view.cols[3].E[2] = v3dot(forward, eye);
     return view;
 }
+
+float lerp(float a, float b, float s)
+{
+    return a + (b - a) * s;
+}
+
+v4 lerp(v4 a, v4 b, float s)
+{
+    return v4add(a, v4mul(v4sub(b, a), s));
+}
+
