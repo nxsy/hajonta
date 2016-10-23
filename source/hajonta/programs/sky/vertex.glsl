@@ -89,6 +89,10 @@ void main()
 {
     vec4 w_position = u_model_matrix * vec4(a_position, 1.0f);
     v_w_position = w_position.xyz / w_position.w;
+    if (v_w_position.y < 0)
+    {
+        v_w_position.y = -v_w_position.y;
+    }
     gl_Position = u_projection_matrix * u_view_matrix * u_model_matrix * vec4(a_position, 1.0f);
 
     float kr = 0.0025;

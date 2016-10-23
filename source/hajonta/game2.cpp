@@ -1643,65 +1643,67 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::np_projection_matrix] = state->np_camera.projection;
     state->matrices[(uint32_t)matrix_ids::np_view_matrix] = state->np_camera.view;
 
-    m4 translate = m4identity();
-    translate.cols[3] = {0, 0, -3.0f, 1.0f};
-    m4 rotate = m4identity();
-    m4 local_translate = m4identity();
-    local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
+    {
+        m4 translate = m4identity();
+        translate.cols[3] = {0, 0, -3.0f, 1.0f};
+        m4 rotate = m4identity();
+        m4 local_translate = m4identity();
+        local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
 
-    m4 scale = m4identity();
-    scale.cols[0].E[0] = 2.0f;
-    scale.cols[1].E[1] = 2.0f;
-    scale.cols[2].E[2] = 2.0f;
+        m4 scale = m4identity();
+        scale.cols[0].E[0] = 2.0f;
+        scale.cols[1].E[1] = 2.0f;
+        scale.cols[2].E[2] = 2.0f;
 
-    state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    static float plane_rotation = 0.0f;
-    ImGui::DragFloat("Plane rotation", &plane_rotation, 0.01f, 0, 3.0f);
-    rotate = m4identity();
+        state->matrices[(uint32_t)matrix_ids::mesh_model_matrix] = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+        static float plane_rotation = 0.0f;
+        ImGui::DragFloat("Plane rotation", &plane_rotation, 0.01f, 0, 3.0f);
+        rotate = m4identity();
 
-    float _scale = 500.0f;
-    translate.cols[3] = {0, -500.0f, -500.0f, 1.0f};
-    scale.cols[0].E[0] = _scale;
-    scale.cols[1].E[1] = _scale;
-    scale.cols[2].E[2] = _scale;
-    state->plane_model_matrix = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
+        float _scale = 500.0f;
+        translate.cols[3] = {0, -500.0f, -500.0f, 1.0f};
+        scale.cols[0].E[0] = _scale;
+        scale.cols[1].E[1] = _scale;
+        scale.cols[2].E[2] = _scale;
+        state->plane_model_matrix = m4mul(translate, m4mul(rotate, m4mul(scale, local_translate)));
 
-    rotate = m4identity();
-    //rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
-    scale.cols[0].E[0] = 1.0f;
-    scale.cols[1].E[1] = 1.0f;
-    scale.cols[2].E[2] = 1.0f;
-    rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
-    array2p<float> noise2p = state->noisemap.array2p();
-    v2i middle = {(int32_t)(noise2p.width / 2.0f), (int32_t)(noise2p.height / 2.0f)};
-    local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
-    //float height = cubic_bezier(state->debug.perlin.control_point_0, state->debug.perlin.control_point_1, noise2p.get(middle)).y * state->debug.perlin.height_multiplier;
-    float height = roundf(
-        cubic_bezier(
-            state->debug.perlin.control_point_0,
-            state->debug.perlin.control_point_1,
-            noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
-    translate.cols[3] = {0.5f, height, 0.5f, 1.0f};
-    state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    translate.cols[3] = {1.5f, height, 1.5f, 1.0f};
-    state->tree_model_matrix2 = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+        rotate = m4identity();
+        //rotate = m4rotation({1,0,0}, IM_PI / 2.0f);
+        scale.cols[0].E[0] = 1.0f;
+        scale.cols[1].E[1] = 1.0f;
+        scale.cols[2].E[2] = 1.0f;
+        rotate = m4rotation({0,1,0}, h_halfpi/3.0f);
+        array2p<float> noise2p = state->noisemap.array2p();
+        v2i middle = {(int32_t)(noise2p.width / 2.0f), (int32_t)(noise2p.height / 2.0f)};
+        local_translate.cols[3] = {0.0f, 0.0f, 0.0f, 1.0f};
+        //float height = cubic_bezier(state->debug.perlin.control_point_0, state->debug.perlin.control_point_1, noise2p.get(middle)).y * state->debug.perlin.height_multiplier;
+        float height = roundf(
+            cubic_bezier(
+                state->debug.perlin.control_point_0,
+                state->debug.perlin.control_point_1,
+                noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
+        translate.cols[3] = {0.5f, height, 0.5f, 1.0f};
+        state->tree_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+        translate.cols[3] = {1.5f, height, 1.5f, 1.0f};
+        state->tree_model_matrix2 = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
 
-    local_translate = m4identity();
-    rotate = m4identity();
-    translate = m4identity();
-    translate.cols[3] = {0.5f,2.1f,0.5f,1};
-    scale = m4identity();
-    state->cube_bounds_model_matrix = m4mul(translate,m4mul(rotate, local_translate));
-    translate.cols[3] = {-0.5f,2.1f,-0.5f,1};
-    state->cube_bounds_model_matrix_2 = m4mul(translate,m4mul(rotate, local_translate));
+        local_translate = m4identity();
+        rotate = m4identity();
+        translate = m4identity();
+        translate.cols[3] = {0.5f,2.1f,0.5f,1};
+        scale = m4identity();
+        state->cube_bounds_model_matrix = m4mul(translate,m4mul(rotate, local_translate));
+        translate.cols[3] = {-0.5f,2.1f,-0.5f,1};
+        state->cube_bounds_model_matrix_2 = m4mul(translate,m4mul(rotate, local_translate));
 
-    local_translate = m4identity();
-    rotate = m4identity();
-    translate = m4translate({0.5f,0.5f,0.5f});
-    scale = m4identity();
-    state->np_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
-    translate = m4identity();
-    state->dynamic_mesh_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+        local_translate = m4identity();
+        rotate = m4identity();
+        translate = m4translate({0.5f,0.5f,0.5f});
+        scale = m4identity();
+        state->np_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+        translate = m4identity();
+        state->dynamic_mesh_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
+    }
 
     demo_data demoes[] = {
         {
@@ -1885,57 +1887,113 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
     advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t);
 
-    PushMeshFromAsset(
-        &state->three_dee_renderer.list,
-        (uint32_t)matrix_ids::mesh_projection_matrix,
-        (uint32_t)matrix_ids::mesh_view_matrix,
-        state->tree_model_matrix,
-        state->asset_ids.blocky_advanced_mesh,
-        state->asset_ids.blocky_advanced_texture,
-        1,
-        (int32_t)ArmatureIds::test1,
-        three_dee_mesh_flags_debug,
-        ShaderType::standard
-    );
+    {
+        array2p<float> noise2p = state->noisemap.array2p();
+        v2i middle = {
+            (int32_t)(noise2p.width / 2),
+            (int32_t)(noise2p.height / 2),
+        };
+        float height = roundf(
+            cubic_bezier(
+                state->debug.perlin.control_point_0,
+                state->debug.perlin.control_point_1,
+                noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
+        m4 model = m4translate({0,height,0});
 
-    PushMeshFromAsset(
-        &state->shadowmap_renderer.list,
-        (uint32_t)matrix_ids::light_projection_matrix,
-        -1,
-        state->tree_model_matrix,
-        state->asset_ids.blocky_advanced_mesh,
-        state->asset_ids.blocky_advanced_texture,
-        0,
-        (int32_t)ArmatureIds::test1,
-        shadowmap_mesh_flags,
-        ShaderType::variance_shadow_map
-    );
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            model,
+            state->asset_ids.blocky_advanced_mesh,
+            state->asset_ids.blocky_advanced_texture,
+            1,
+            (int32_t)ArmatureIds::test1,
+            three_dee_mesh_flags_debug,
+            ShaderType::standard
+        );
 
-    PushMeshFromAsset(
-        &state->three_dee_renderer.list,
-        (uint32_t)matrix_ids::mesh_projection_matrix,
-        (uint32_t)matrix_ids::mesh_view_matrix,
-        state->tree_model_matrix2,
-        state->asset_ids.dog2_mesh,
-        state->asset_ids.dog2_texture,
-        1,
-        -1,
-        three_dee_mesh_flags_debug,
-        ShaderType::standard
-    );
+        PushMeshFromAsset(
+            &state->shadowmap_renderer.list,
+            (uint32_t)matrix_ids::light_projection_matrix,
+            -1,
+            model,
+            state->asset_ids.blocky_advanced_mesh,
+            state->asset_ids.blocky_advanced_texture,
+            0,
+            (int32_t)ArmatureIds::test1,
+            shadowmap_mesh_flags,
+            ShaderType::variance_shadow_map
+        );
 
-    PushMeshFromAsset(
-        &state->shadowmap_renderer.list,
-        (uint32_t)matrix_ids::light_projection_matrix,
-        -1,
-        state->tree_model_matrix2,
-        state->asset_ids.dog2_mesh,
-        state->asset_ids.dog2_texture,
-        0,
-        -1,
-        shadowmap_mesh_flags,
-        ShaderType::variance_shadow_map
-    );
+        model = m4translate({0, height + 0.5f, 0});
+        MeshFromAssetFlags cube_flags = {};
+        cube_flags.depth_disabled = 1;
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            model,
+            state->asset_ids.cube_bounds_mesh,
+            state->asset_ids.white_texture,
+            0,
+            -1,
+            cube_flags,
+            ShaderType::standard
+        );
+
+        v2i noise_location = {
+            (int32_t)(noise2p.width / 2) + 1,
+            (int32_t)(noise2p.height / 2 - 1)
+        };
+        height = roundf(
+            cubic_bezier(
+                state->debug.perlin.control_point_0,
+                state->debug.perlin.control_point_1,
+                noise2p.get(noise_location)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
+        model = m4translate({2,height,2});
+
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            model,
+            state->asset_ids.dog2_mesh,
+            state->asset_ids.dog2_texture,
+            1,
+            -1,
+            three_dee_mesh_flags_debug,
+            ShaderType::standard
+        );
+
+        PushMeshFromAsset(
+            &state->shadowmap_renderer.list,
+            (uint32_t)matrix_ids::light_projection_matrix,
+            -1,
+            model,
+            state->asset_ids.dog2_mesh,
+            state->asset_ids.dog2_texture,
+            0,
+            -1,
+            shadowmap_mesh_flags,
+            ShaderType::variance_shadow_map
+        );
+
+        model = m4translate({2,height + 0.5f,2});
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            model,
+            state->asset_ids.cube_bounds_mesh,
+            state->asset_ids.white_texture,
+            0,
+            -1,
+            cube_flags,
+            ShaderType::standard
+        );
+    }
+
 
     {
         static int32_t rotate_90s = 0;
@@ -2316,42 +2374,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
     PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
-
-    /*
-    {
-        MeshFromAssetFlags flags = {};
-        flags.depth_disabled = 1;
-        PushMeshFromAsset(
-            &state->three_dee_renderer.list,
-            (uint32_t)matrix_ids::mesh_projection_matrix,
-            (uint32_t)matrix_ids::mesh_view_matrix,
-            state->cube_bounds_model_matrix,
-            state->asset_ids.cube_bounds_mesh,
-            state->asset_ids.white_texture,
-            0,
-            -1,
-            flags,
-            ShaderType::standard
-        );
-    }
-
-    {
-        MeshFromAssetFlags flags = {};
-        flags.depth_disabled = 1;
-        PushMeshFromAsset(
-            &state->three_dee_renderer.list,
-            (uint32_t)matrix_ids::mesh_projection_matrix,
-            (uint32_t)matrix_ids::mesh_view_matrix,
-            state->cube_bounds_model_matrix_2,
-            state->asset_ids.cube_bounds_mesh,
-            state->asset_ids.white_texture,
-            0,
-            -1,
-            flags,
-            ShaderType::standard
-        );
-    }
-    */
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);
