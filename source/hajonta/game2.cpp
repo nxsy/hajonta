@@ -1361,7 +1361,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
-    _platform_get_thread_id = memory->platform_get_thread_id;
+    _platform = memory->platform_api;
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
     game_state *state = (game_state *)memory->memory;
@@ -1701,7 +1701,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         demo_context demo_ctx = {};
         demo_ctx.switched = previous_demo != state->active_demo;
-         demoes[state->active_demo].func(ctx, memory, input, sound_output, &demo_ctx);
+        demoes[state->active_demo].func(memory, input, sound_output, &demo_ctx);
     }
 
     for (uint32_t i = 0;

@@ -88,11 +88,11 @@ struct GLCounterNamesAndOffsets {
 
     sprintf(buffer, R"EOF(
 inline void
-load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
+load_glfuncs(platform_glgetprocaddress_func *get_proc_address)
 {
 )EOF");
     fwrite(buffer, 1, strlen(buffer), p);
-#define HGLD(b,a,...)  { sprintf(buffer, R"EOF(    %s = (%s)get_proc_address(ctx, (char *)"%s");)EOF" "\n", hquoted(_gl##b), hquoted(PFNGL##a##PROC), hquoted(gl##b)); fwrite(buffer, 1, strlen(buffer), p); }
+#define HGLD(b,a,...)  { sprintf(buffer, R"EOF(    %s = (%s)get_proc_address((char *)"%s");)EOF" "\n", hquoted(_gl##b), hquoted(PFNGL##a##PROC), hquoted(gl##b)); fwrite(buffer, 1, strlen(buffer), p); }
 #include "hajonta/platform/glextlist.txt"
 #undef HGLD
     sprintf(buffer, "};\n");

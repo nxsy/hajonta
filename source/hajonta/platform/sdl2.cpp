@@ -61,6 +61,8 @@ struct sdl2_state
     bool no_borderless_fullscreen;
 };
 
+sdl2_state *_state;
+
 struct game_code
 {
     game_update_and_render_func *game_update_and_render;
@@ -80,10 +82,9 @@ struct renderer_code
 };
 
 static bool
-_fail(sdl2_state *state, const char *failure_reason)
+_fail(const char *failure_reason)
 {
-    state->stopping = true;
-    state->stop_reason = strdup(failure_reason);
+    _platform->fail(failure_reason);
     return false;
 }
 
@@ -159,7 +160,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_Init failed");
+        return _fail("SDL_Init failed");
     }
     state->sdl_inited = true;
 
@@ -173,7 +174,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_GetNumVideoDisplays failed");
+        return _fail("SDL_GetNumVideoDisplays failed");
     }
     int32_t window_x = 0;
     int32_t window_y = 0;
@@ -219,7 +220,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_CreateWindow failed");
+        return _fail("SDL_CreateWindow failed");
     }
 
     state->renderer = SDL_CreateRenderer(state->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -228,7 +229,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_CreateRenderer failed");
+        return _fail("SDL_CreateRenderer failed");
     }
 
     SDL_GetRendererOutputSize(
@@ -245,7 +246,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_CreateRGBSurface failed");
+        return _fail("SDL_CreateRGBSurface failed");
     }
 
     SDL_FillRect(surface, 0, SDL_MapRGB(surface->format, 255, 0, 0));
@@ -257,7 +258,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_CreateTextureFromSurface failed");
+        return _fail("SDL_CreateTextureFromSurface failed");
     }
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -286,7 +287,7 @@ sdl_init(sdl2_state *state)
         const char *error = SDL_GetError();
         hassert(error);
         sdl_cleanup(state);
-        return _fail(state, "SDL_GL_CreateContext failed");
+        return _fail("SDL_GL_CreateContext failed");
     }
     SDL_GL_SetSwapInterval(-1);
 
@@ -312,7 +313,8 @@ sdl_init(sdl2_state *state)
 
 PLATFORM_FAIL(platform_fail)
 {
-    _fail((sdl2_state *)ctx, failure_reason);
+    _platform->stopping = true;
+    _platform->stop_reason = strdup(failure_reason);
 }
 
 PLATFORM_DEBUG_MESSAGE(platform_debug_message)
@@ -333,11 +335,9 @@ PLATFORM_GET_THREAD_ID(platform_get_thread_id)
 
 PLATFORM_LOAD_ASSET(platform_load_asset)
 {
-    sdl2_state *state = (sdl2_state *)ctx;
-
     char *asset_folder_paths[] = {
-        state->asset_path,
-        state->arg_asset_path,
+        _state->asset_path,
+        _state->arg_asset_path,
     };
 
     SDL_RWops *sdlrw = 0;
@@ -558,8 +558,16 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdS
 main(int argc, char *argv[])
 #endif
 {
-    _platform_get_thread_id = platform_get_thread_id;
+    PlatformApi pa;
+    pa.fail = platform_fail;
+    pa.glgetprocaddress = platform_glgetprocaddress;
+    pa.load_asset = platform_load_asset;
+    pa.debug_message = platform_debug_message;
+    pa.get_thread_id = platform_get_thread_id;
+    _platform = &pa;
+
     sdl2_state state = {};
+    _state = &state;
     bool sdl_init_successful = sdl_init(&state);
     if (!sdl_init_successful)
     {
@@ -574,12 +582,7 @@ main(int argc, char *argv[])
     memory.cursor_settings.supported_modes[(uint32_t)platform_cursor_mode::normal] = true;
     memory.cursor_settings.supported_modes[(uint32_t)platform_cursor_mode::unlimited] = false;
     memory.cursor_settings.mode = platform_cursor_mode::normal;
-
-    memory.platform_fail = platform_fail;
-    memory.platform_glgetprocaddress = platform_glgetprocaddress;
-    memory.platform_load_asset = platform_load_asset;
-    memory.platform_debug_message = platform_debug_message;
-    memory.platform_get_thread_id = platform_get_thread_id;
+    memory.platform_api = _platform;
 
     memory.debug_table = GlobalDebugTable;
 
@@ -636,14 +639,14 @@ main(int argc, char *argv[])
         state.new_input->window.width = state.gl_window_width;
         state.new_input->window.height = state.gl_window_height;
 
-        renderercode.renderer_setup((hajonta_thread_context *)&state, &memory, state.new_input);
+        renderercode.renderer_setup(&memory, state.new_input);
 
         game_sound_output sound_output;
         sound_output.samples_per_second = 48000;
         sound_output.channels = 2;
         sound_output.number_of_samples = 48000 / 60;
 
-        code.game_update_and_render((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
+        code.game_update_and_render(&memory, state.new_input, &sound_output);
 
         sdl_queue_sound(&state, &sound_output);
 
@@ -655,12 +658,12 @@ main(int argc, char *argv[])
             // Determine if reload needed
             // if reload needed, clear all threads out and disable event recording
             // run debug collation
-            code.game_debug_frame_end((hajonta_thread_context *)&state, &memory, state.new_input, &sound_output);
+            code.game_debug_frame_end(&memory, state.new_input, &sound_output);
             // reload libraries and re-enable event recording
         }
 #endif
 
-        renderercode.renderer_render((hajonta_thread_context *)&state, &memory, state.new_input);
+        renderercode.renderer_render(&memory, state.new_input);
 
         {
             TIMED_BLOCK("Swap");

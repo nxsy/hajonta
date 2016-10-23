@@ -13,7 +13,7 @@ struct demo_context
     bool switched;
 };
 
-#define DEMO(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output, demo_context *context)
+#define DEMO(func_name) void func_name(platform_memory *memory, game_input *input, game_sound_output *sound_output, demo_context *context)
 typedef DEMO(demo_func);
 
 #define MAP_HEIGHT 32

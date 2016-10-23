@@ -32,7 +32,6 @@
 #include "hajonta/math.cpp"
 
 static platform_memory *_platform_memory;
-static hajonta_thread_context *_ctx;
 
 static float h_pi = 3.14159265358979f;
 static float h_halfpi = h_pi / 2.0f;
@@ -695,7 +694,7 @@ add_asset_file_mesh_lookup(renderer_state *state, int32_t asset_file_id, int32_t
 static renderer_state _GlobalRendererState;
 
 void
-draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, ui2d_push_context *pushctx)
+draw_ui2d(renderer_state *state, ui2d_push_context *pushctx)
 {
     ui2d_state *ui_state = &state->ui_state;
     ui2d_program_struct *ui2d_program = &ui_state->ui2d_program;
@@ -764,8 +763,6 @@ draw_ui2d(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
 bool
 load_texture_asset(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     const char *filename,
     uint8_t *image_buffer,
@@ -776,7 +773,7 @@ load_texture_asset(
     GLenum target
 )
 {
-    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
+    if (!_platform->load_asset(filename, image_size, image_buffer)) {
         return false;
     }
 
@@ -882,8 +879,6 @@ new_texaddress(CommandState *command_state, int32_t x, int32_t y, TextureFormat 
 
 bool
 load_texture_array_asset(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     const char *filename,
     uint8_t *image_buffer,
@@ -893,7 +888,7 @@ load_texture_array_asset(
     uint32_t *texaddress_index
 )
 {
-    if (!memory->platform_load_asset(ctx, filename, image_size, image_buffer)) {
+    if (!_platform->load_asset(filename, image_size, image_buffer)) {
         return false;
     }
 
@@ -939,21 +934,17 @@ load_texture_array_asset(
 
 void
 load_texture_asset_failed(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     char *filename
 )
 {
     char msg[1024];
     sprintf(msg, "Could not load %s\n", filename);
-    memory->platform_fail(ctx, msg);
-    memory->quit = true;
+    _platform->fail(msg);
+    _platform->quit = true;
 }
 
 bool
 load_mesh_asset(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     const char *filename,
     uint8_t *mesh_buffer,
@@ -961,7 +952,7 @@ load_mesh_asset(
     Mesh *mesh
 )
 {
-    if (!memory->platform_load_asset(ctx, filename, mesh_buffer_size, mesh_buffer)) {
+    if (!_platform->load_asset(filename, mesh_buffer_size, mesh_buffer)) {
         return false;
     }
 
@@ -1339,39 +1330,35 @@ load_mesh_asset(
 
 void
 load_program_failed(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     const char *program
 )
 {
     char msg[1024];
     sprintf(msg, "Could not load program %s\n", program);
-    memory->platform_fail(ctx, msg);
-    memory->quit = true;
+    _platform->fail(msg);
+    _platform->quit = true;
 }
 
 void
 load_mesh_asset_failed(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     char *filename
 )
 {
     char msg[1024];
     sprintf(msg, "Could not load mesh %s\n", filename);
-    memory->platform_fail(ctx, msg);
-    memory->quit = true;
+    _platform->fail(msg);
+    _platform->quit = true;
 }
 
 bool
-ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
+ui2d_program_init(renderer_state *state)
 {
     ui2d_state *ui_state = &state->ui_state;
     ui2d_program_struct *program = &ui_state->ui2d_program;
-    bool loaded = ui2d_program(program, ctx, memory);
+    bool loaded = ui2d_program(program);
     if (!loaded)
     {
-        load_program_failed(ctx, memory, "ui2d");
+        load_program_failed("ui2d");
         return false;
     }
 
@@ -1383,17 +1370,17 @@ ui2d_program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer
 
     int32_t x, y;
     char filename[] = "ui/slick_arrows/slick_arrow-delta.png";
-    loaded = load_texture_asset(ctx, memory, state, filename, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
+    loaded = load_texture_asset(state, filename, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
     if (!loaded)
     {
-        load_texture_asset_failed(ctx, memory, filename);
+        load_texture_asset_failed(filename);
         return false;
     }
     return true;
 }
 
 bool
-populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, Skybox *skybox)
+populate_skybox(renderer_state *state, Skybox *skybox)
 {
     hglGenBuffers(1, &skybox->vbo);
     hglGenBuffers(1, &skybox->ibo);
@@ -1461,13 +1448,13 @@ populate_skybox(hajonta_thread_context *ctx, platform_memory *memory, renderer_s
 }
 
 bool
-program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state)
+program_init(renderer_state *state)
 {
     hglEnable(GL_FRAMEBUFFER_SRGB);
     bool loaded = true;
     {
         imgui_program_struct *program = &state->imgui_program;
-        imgui_program(program, ctx, memory);
+        imgui_program(program);
 
         hglGenBuffers(1, &state->vbo);
         hglGenBuffers(1, &state->ibo);
@@ -1522,7 +1509,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     {
         texarray_1_program_struct *program = &state->texarray_1_program;
-        loaded &= texarray_1_program(program, ctx, memory);
+        loaded &= texarray_1_program(program);
         state->texarray_1_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
         hglUniformBlockBinding(
             state->texarray_1_program.program,
@@ -1550,7 +1537,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     {
         texarray_1_vsm_program_struct *program = &state->texarray_1_vsm_program;
-        loaded &= texarray_1_vsm_program(program, ctx, memory);
+        loaded &= texarray_1_vsm_program(program);
         state->texarray_1_vsm_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
         hglUniformBlockBinding(
             state->texarray_1_vsm_program.program,
@@ -1574,7 +1561,7 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     {
         filter_gaussian_7x1_program_struct *program = &state->filter_gaussian_7x1_program;
-        loaded &= filter_gaussian_7x1_program(program, ctx, memory);
+        loaded &= filter_gaussian_7x1_program(program);
         state->filter_gaussian_7x1_tex_id = hglGetUniformLocation(program->program, "tex");
     }
     hglFlush();
@@ -1582,8 +1569,8 @@ program_init(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 
     {
         sky_program_struct *program = &state->sky_program;
-        loaded &= sky_program(program, ctx, memory);
-        populate_skybox(ctx, memory, state, &state->skybox);
+        loaded &= sky_program(program);
+        populate_skybox(state, &state->skybox);
     }
     hglFlush();
     hglErrorAssert();
@@ -1664,7 +1651,7 @@ add_asset_file(renderer_state *state, const char *asset_file_path)
 }
 
 int32_t
-add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
+add_asset_file_texture(renderer_state *state, int32_t asset_file_id)
 {
     int32_t result = lookup_asset_file_to_texture(state, asset_file_id);
     hassert(state->texture_count < harray_count(state->textures));
@@ -1672,10 +1659,10 @@ add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, ren
     {
         int32_t x, y;
         asset_file *asset_file0 = state->asset_files + asset_file_id;
-        bool loaded = load_texture_asset(ctx, memory, state, asset_file0->asset_file_path, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, state->textures + state->texture_count, GL_TEXTURE_2D);
+        bool loaded = load_texture_asset(state, asset_file0->asset_file_path, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, state->textures + state->texture_count, GL_TEXTURE_2D);
         if (!loaded)
         {
-            load_texture_asset_failed(ctx, memory, asset_file0->asset_file_path);
+            load_texture_asset_failed(asset_file0->asset_file_path);
             return false;
         }
         result = (int32_t)state->texture_count;
@@ -1686,7 +1673,7 @@ add_asset_file_texture(hajonta_thread_context *ctx, platform_memory *memory, ren
 }
 
 int32_t
-add_asset_file_texaddress_index(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
+add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id)
 {
     int32_t result = lookup_asset_file_to_texaddress_index(state, asset_file_id);
     if (result < 0)
@@ -1696,8 +1683,6 @@ add_asset_file_texaddress_index(hajonta_thread_context *ctx, platform_memory *me
         asset_file *asset_file0 = state->asset_files + asset_file_id;
         uint32_t texaddress_index;
         bool loaded = load_texture_array_asset(
-            ctx,
-            memory,
             state,
             asset_file0->asset_file_path,
             state->asset_scratch,
@@ -1707,7 +1692,7 @@ add_asset_file_texaddress_index(hajonta_thread_context *ctx, platform_memory *me
             &texaddress_index);
         if (!loaded)
         {
-            load_texture_asset_failed(ctx, memory, asset_file0->asset_file_path);
+            load_texture_asset_failed(asset_file0->asset_file_path);
             return false;
         }
         result = (int32_t)state->texaddress_count;
@@ -1718,7 +1703,7 @@ add_asset_file_texaddress_index(hajonta_thread_context *ctx, platform_memory *me
 }
 
 int32_t
-add_asset_file_mesh(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, int32_t asset_file_id)
+add_asset_file_mesh(renderer_state *state, int32_t asset_file_id)
 {
     int32_t result = lookup_asset_file_to_mesh(state, asset_file_id);
     hassert(state->mesh_count < harray_count(state->meshes));
@@ -1726,8 +1711,6 @@ add_asset_file_mesh(hajonta_thread_context *ctx, platform_memory *memory, render
     {
         asset_file *asset_file0 = state->asset_files + asset_file_id;
         bool loaded = load_mesh_asset(
-            ctx,
-            memory,
             state,
             asset_file0->asset_file_path,
             state->asset_scratch,
@@ -1735,7 +1718,7 @@ add_asset_file_mesh(hajonta_thread_context *ctx, platform_memory *memory, render
             state->meshes + state->mesh_count);
         if (!loaded)
         {
-            load_mesh_asset_failed(ctx, memory, asset_file0->asset_file_path);
+            load_mesh_asset_failed(asset_file0->asset_file_path);
             return false;
         }
         result = (int32_t)state->mesh_count;
@@ -1822,7 +1805,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
 {
     static std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
 
-    _platform_get_thread_id = memory->platform_get_thread_id;
+    _platform = memory->platform_api;
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
 
@@ -1851,7 +1834,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
             state->gl_debug_toggles[i] = 1;
         }
         state->glsetup_counters_history.first = -1;
-        load_glfuncs(ctx, memory->platform_glgetprocaddress);
+        load_glfuncs(_platform->glgetprocaddress);
         if (state->crash_on_gl_errors) hglErrorAssert();
         state->gl_vendor = (const char *)hglGetString(GL_VENDOR);
         state->gl_renderer = (const char *)hglGetString(GL_RENDERER);
@@ -1891,11 +1874,11 @@ extern "C" RENDERER_SETUP(renderer_setup)
         }
         hglFlush();
         hglErrorAssert();
-        bool loaded = program_init(ctx, memory, &_GlobalRendererState);
+        bool loaded = program_init(&_GlobalRendererState);
         hglFlush();
         hglErrorAssert();
         hassert(loaded);
-        hassert(ui2d_program_init(ctx, memory, &_GlobalRendererState));
+        hassert(ui2d_program_init(&_GlobalRendererState));
         hglFlush();
         hglErrorAssert();
         _GlobalRendererState.initialized = true;
@@ -2236,7 +2219,7 @@ update_asset_descriptor_asset_id(renderer_state *state, asset_descriptor *descri
 }
 
 void
-draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
+draw_quad(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
 {
     m4 projection = matrices[quad->matrix_id];
 
@@ -2260,7 +2243,7 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
             }
             else
             {
-                int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
+                int32_t texture_id = add_asset_file_texture(state, asset_file_id);
                 if (texture_id >= 0)
                 {
                     texture = (uint32_t)texture_id;
@@ -2323,8 +2306,6 @@ draw_quad(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *
 
 void
 get_texaddress_index_from_asset_descriptor(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     asset_descriptor *descriptors,
     int32_t asset_descriptor_id,
@@ -2354,7 +2335,7 @@ get_texaddress_index_from_asset_descriptor(
                     int32_t idx = lookup_asset_file_to_texaddress_index(state, asset_file_id);
                     if (idx < 0)
                     {
-                        idx = add_asset_file_texaddress_index(ctx, memory, state, asset_file_id);
+                        idx = add_asset_file_texaddress_index(state, asset_file_id);
                     }
                     if (idx >= 0)
                     {
@@ -2426,8 +2407,6 @@ get_texaddress_index_from_asset_descriptor(
 
 void
 get_texture_id_from_asset_descriptor(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     asset_descriptor *descriptors,
     int32_t asset_descriptor_id,
@@ -2462,7 +2441,7 @@ get_texture_id_from_asset_descriptor(
                     }
                     else
                     {
-                        int32_t texture_id = add_asset_file_texture(ctx, memory, state, asset_file_id);
+                        int32_t texture_id = add_asset_file_texture(state, asset_file_id);
                         if (texture_id >= 0)
                         {
                             *texture = (uint32_t)texture_id;
@@ -2499,8 +2478,6 @@ get_texture_id_from_asset_descriptor(
 
 Mesh *
 get_mesh_from_asset_descriptor(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     asset_descriptor *descriptors,
     int32_t asset_descriptor_id)
@@ -2531,7 +2508,7 @@ get_mesh_from_asset_descriptor(
                     int32_t mesh_id = lookup_asset_file_to_mesh(state, asset_file_id);
                     if (mesh_id < 0)
                     {
-                        mesh_id = add_asset_file_mesh(ctx, memory, state, asset_file_id);
+                        mesh_id = add_asset_file_mesh(state, asset_file_id);
                     }
                     hassert(mesh_id >= 0);
                     if (mesh_id >= 0)
@@ -2725,7 +2702,7 @@ get_mesh_from_asset_descriptor(
 }
 
 void
-draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
+draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
 {
     m4 projection = matrices[quads->matrix_id];
 
@@ -2748,8 +2725,6 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     if (use_texaddress)
     {
         get_texaddress_index_from_asset_descriptor(
-            ctx,
-            memory,
             state,
             descriptors,
             quads->asset_descriptor_id,
@@ -2760,7 +2735,7 @@ draw_quads(hajonta_thread_context *ctx, platform_memory *memory, renderer_state 
     else
     {
         get_texture_id_from_asset_descriptor(
-            ctx, memory, state, descriptors, quads->asset_descriptor_id,
+            state, descriptors, quads->asset_descriptor_id,
             (uint32_t *)&texture, &st0, &st1);
     }
 
@@ -2903,8 +2878,6 @@ calculate_camera_position(m4 view)
 
 void
 draw_mesh_from_asset_v3_bones(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     m4 *matrices,
     asset_descriptor *descriptors,
@@ -3035,8 +3008,6 @@ draw_mesh_from_asset_v3_bones(
         hassert(debug);
     }
     get_texaddress_index_from_asset_descriptor(
-        ctx,
-        memory,
         state,
         descriptors,
         mesh_from_asset->texture_asset_descriptor_id,
@@ -3056,8 +3027,6 @@ draw_mesh_from_asset_v3_bones(
         shadowmap_color_texaddress_index = light.shadowmap_color_texaddress_asset_descriptor_id;
         /*
         get_texaddress_index_from_asset_descriptor(
-            ctx,
-            memory,
             state,
             descriptors,
             light.shadowmap_asset_descriptor_id,
@@ -3066,8 +3035,6 @@ draw_mesh_from_asset_v3_bones(
             &st1);
             */
         get_texaddress_index_from_asset_descriptor(
-            ctx,
-            memory,
             state,
             descriptors,
             light.shadowmap_color_texaddress_asset_descriptor_id,
@@ -3132,8 +3099,6 @@ draw_mesh_from_asset_v3_bones(
 }
 void
 draw_mesh_from_asset_v3_boneless(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     m4 *matrices,
     asset_descriptor *descriptors,
@@ -3323,8 +3288,6 @@ draw_mesh_from_asset_v3_boneless(
         hassert(debug);
     }
     get_texaddress_index_from_asset_descriptor(
-        ctx,
-        memory,
         state,
         descriptors,
         mesh_from_asset->texture_asset_descriptor_id,
@@ -3344,8 +3307,6 @@ draw_mesh_from_asset_v3_boneless(
         shadowmap_color_texaddress_index = light.shadowmap_color_texaddress_asset_descriptor_id;
         /*
         get_texaddress_index_from_asset_descriptor(
-            ctx,
-            memory,
             state,
             descriptors,
             light.shadowmap_asset_descriptor_id,
@@ -3354,8 +3315,6 @@ draw_mesh_from_asset_v3_boneless(
             &st1);
             */
         get_texaddress_index_from_asset_descriptor(
-            ctx,
-            memory,
             state,
             descriptors,
             light.shadowmap_color_texaddress_asset_descriptor_id,
@@ -3401,8 +3360,6 @@ draw_mesh_from_asset_v3_boneless(
 
 void
 draw_mesh_from_asset(
-    hajonta_thread_context *ctx,
-    platform_memory *memory,
     renderer_state *state,
     m4 *matrices,
     asset_descriptor *descriptors,
@@ -3411,14 +3368,12 @@ draw_mesh_from_asset(
     render_entry_type_mesh_from_asset *mesh_from_asset
 )
 {
-    Mesh *mesh = get_mesh_from_asset_descriptor(ctx, memory, state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
+    Mesh *mesh = get_mesh_from_asset_descriptor(state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
     switch(mesh->mesh_format)
     {
         case MeshFormat::v3_bones:
         {
             return draw_mesh_from_asset_v3_bones(
-                ctx,
-                memory,
                 state,
                 matrices,
                 descriptors,
@@ -3430,8 +3385,6 @@ draw_mesh_from_asset(
         case MeshFormat::v3_boneless:
         {
             return draw_mesh_from_asset_v3_boneless(
-                ctx,
-                memory,
                 state,
                 matrices,
                 descriptors,
@@ -3449,7 +3402,7 @@ draw_mesh_from_asset(
 }
 
 void
-apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, asset_descriptor *descriptors, render_entry_type_apply_filter *filter)
+apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_type_apply_filter *filter)
 {
     hglDisable(GL_CULL_FACE);
     hglDisable(GL_DEPTH_TEST);
@@ -3490,7 +3443,7 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
     v2 st1 = {1, 1};
     uint32_t texture;
     get_texture_id_from_asset_descriptor(
-        ctx, memory, state, descriptors, filter->source_asset_descriptor_id,
+        state, descriptors, filter->source_asset_descriptor_id,
         &texture, &st0, &st1);
 
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -3548,7 +3501,7 @@ apply_filter(hajonta_thread_context *ctx, platform_memory *memory, renderer_stat
 }
 
 void
-framebuffer_blit(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, asset_descriptor *descriptors, render_entry_type_framebuffer_blit *item, v2i size)
+framebuffer_blit(renderer_state *state, asset_descriptor *descriptors, render_entry_type_framebuffer_blit *item, v2i size)
 {
 
     asset_descriptor *descriptor = descriptors + item->fbo_asset_descriptor_id;
@@ -3561,7 +3514,7 @@ framebuffer_blit(hajonta_thread_context *ctx, platform_memory *memory, renderer_
 }
 
 void
-draw_sky(hajonta_thread_context *ctx, platform_memory *memory, renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_sky *sky)
+draw_sky(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_sky *sky)
 {
     auto &program = state->sky_program;
     hglUseProgram(program.program);
@@ -4240,7 +4193,6 @@ extern "C" RENDERER_RENDER(renderer_render)
     TIMED_FUNCTION();
 
     _platform_memory = memory;
-    _ctx = ctx;
 
     ImGuiIO& io = ImGui::GetIO();
     generations_updated_this_frame = 0;
@@ -4362,7 +4314,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::ui2d:
                 {
                     ExtractRenderElementWithSize(ui2d, item, header, element_size);
-                    draw_ui2d(ctx, memory, state, item->pushctx);
+                    draw_ui2d(state, item->pushctx);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::quad:
@@ -4370,7 +4322,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     ExtractRenderElementWithSize(quad, item, header, element_size);
                     hassert(matrix_count > 0 || item->matrix_id == -1);
                     hassert(asset_descriptor_count > 0 || item->asset_descriptor_id == -1);
-                    draw_quad(ctx, memory, state, matrices, asset_descriptors, item);
+                    draw_quad(state, matrices, asset_descriptors, item);
                     ++quads_drawn;
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
@@ -4398,7 +4350,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::QUADS:
                 {
                     ExtractRenderElementWithSize(QUADS, item, header, element_size);
-                    draw_quads(ctx, memory, state, matrices, asset_descriptors, item);
+                    draw_quads(state, matrices, asset_descriptors, item);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::QUADS_lookup:
@@ -4410,25 +4362,25 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
                     ++meshes_drawn[item->mesh_asset_descriptor_id];
-                    draw_mesh_from_asset(ctx, memory, state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, item);
+                    draw_mesh_from_asset(state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, item);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::apply_filter:
                 {
                     ExtractRenderElementWithSize(apply_filter, item, header, element_size);
-                    apply_filter(ctx, memory, state, asset_descriptors, item);
+                    apply_filter(state, asset_descriptors, item);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::framebuffer_blit:
                 {
                     ExtractRenderElementWithSize(framebuffer_blit, item, header, element_size);
-                    framebuffer_blit(ctx, memory, state, asset_descriptors, item, size);
+                    framebuffer_blit(state, asset_descriptors, item, size);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::sky:
                 {
                     ExtractRenderElementWithSize(sky, item, header, element_size);
-                    draw_sky(ctx, memory, state, matrices, asset_descriptors, item);
+                    draw_sky(state, matrices, asset_descriptors, item);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::debug_texture_load:
@@ -4438,7 +4390,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     v2 st1 = {};
                     int32_t texture = 0;
                     get_texaddress_index_from_asset_descriptor(
-                        ctx, memory, state, asset_descriptors, item->asset_descriptor_id,
+                        state, asset_descriptors, item->asset_descriptor_id,
                         &texture, &st0, &st1);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;

@@ -18,11 +18,6 @@
 
 #define harray_count(array) (sizeof(array) / sizeof((array)[0]))
 
-struct hajonta_thread_context
-{
-    void *opaque;
-};
-
 struct loaded_file
 {
     char *contents;
@@ -31,29 +26,42 @@ struct loaded_file
     char file_path[MAX_PATH]; // platform path for load_nearby
 };
 
-#define PLATFORM_FAIL(func_name) void func_name(hajonta_thread_context *ctx, const char *failure_reason)
+#define PLATFORM_FAIL(func_name) void func_name(const char *failure_reason)
 typedef PLATFORM_FAIL(platform_fail_func);
 
-#define PLATFORM_QUIT(func_name) void func_name(hajonta_thread_context *ctx)
-typedef PLATFORM_QUIT(platform_quit_func);
-
-#define PLATFORM_DEBUG_MESSAGE(func_name) void func_name(hajonta_thread_context *ctx, char *message)
+#define PLATFORM_DEBUG_MESSAGE(func_name) void func_name(char *message)
 typedef PLATFORM_DEBUG_MESSAGE(platform_debug_message_func);
 
-#define PLATFORM_GLGETPROCADDRESS(func_name) void* func_name(hajonta_thread_context *ctx, char *function_name)
+#define PLATFORM_GLGETPROCADDRESS(func_name) void* func_name(char *function_name)
 typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 
-#define PLATFORM_LOAD_ASSET(func_name) bool func_name(hajonta_thread_context *ctx, const char *asset_path, uint32_t size, uint8_t *dest)
+#define PLATFORM_LOAD_ASSET(func_name) bool func_name(const char *asset_path, uint32_t size, uint8_t *dest)
 typedef PLATFORM_LOAD_ASSET(platform_load_asset_func);
 
-#define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target)
+#define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(loaded_file *target)
 typedef PLATFORM_EDITOR_LOAD_FILE(platform_editor_load_file_func);
 
-#define PLATFORM_EDITOR_LOAD_NEARBY_FILE(func_name) bool func_name(hajonta_thread_context *ctx, loaded_file *target, loaded_file existing_file, char *name)
+#define PLATFORM_EDITOR_LOAD_NEARBY_FILE(func_name) bool func_name(loaded_file *target, loaded_file existing_file, char *name)
 typedef PLATFORM_EDITOR_LOAD_NEARBY_FILE(platform_editor_load_nearby_file_func);
 
 #define PLATFORM_GET_THREAD_ID(func_name) uint32_t func_name()
 typedef PLATFORM_GET_THREAD_ID(platform_get_thread_id_func);
+
+struct
+PlatformApi
+{
+    platform_fail_func *fail;
+    platform_glgetprocaddress_func *glgetprocaddress;
+    platform_debug_message_func *debug_message;
+    platform_load_asset_func *load_asset;
+    platform_editor_load_file_func *editor_load_file;
+    platform_editor_load_nearby_file_func *editor_load_nearby_file;
+    platform_get_thread_id_func *get_thread_id;
+
+    bool stopping;
+    char *stop_reason;
+    bool quit;
+};
 
 // Normal means the OS is keeping track of the mouse cursor location.
 // The program still needs to render the cursor, though.
@@ -94,18 +102,11 @@ struct platform_memory
     uint32_t render_lists_count;
 
     platform_cursor_settings cursor_settings;
-
-    platform_fail_func *platform_fail;
-    platform_glgetprocaddress_func *platform_glgetprocaddress;
-    platform_debug_message_func *platform_debug_message;
-    platform_load_asset_func *platform_load_asset;
-    platform_editor_load_file_func *platform_editor_load_file;
-    platform_editor_load_nearby_file_func *platform_editor_load_nearby_file;
-
-    platform_get_thread_id_func *platform_get_thread_id;
+    PlatformApi *platform_api;
 
     uint32_t shadowmap_size;
 };
+static PlatformApi *_platform;
 
 #define BUTTON_ENDED_DOWN(x) (x.ended_down)
 #define BUTTON_ENDED_UP(x) (!x.ended_down)
@@ -247,16 +248,16 @@ struct game_sound_output
     void *samples;
 };
 
-#define GAME_UPDATE_AND_RENDER(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output)
+#define GAME_UPDATE_AND_RENDER(func_name) void func_name(platform_memory *memory, game_input *input, game_sound_output *sound_output)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render_func);
 
-#define GAME_DEBUG_FRAME_END(func_name) void func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input, game_sound_output *sound_output)
+#define GAME_DEBUG_FRAME_END(func_name) void func_name(platform_memory *memory, game_input *input, game_sound_output *sound_output)
 typedef GAME_DEBUG_FRAME_END(game_debug_frame_end_func);
 
-#define RENDERER_SETUP(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+#define RENDERER_SETUP(func_name) bool func_name(platform_memory *memory, game_input *input)
 typedef RENDERER_SETUP(renderer_setup_func);
 
-#define RENDERER_RENDER(func_name) bool func_name(hajonta_thread_context *ctx, platform_memory *memory, game_input *input)
+#define RENDERER_RENDER(func_name) bool func_name(platform_memory *memory, game_input *input)
 typedef RENDERER_RENDER(renderer_render_func);
 
 
@@ -273,9 +274,9 @@ extern "C" {
 #undef HGLD
 
 inline void
-load_glfuncs(hajonta_thread_context *ctx, platform_glgetprocaddress_func *get_proc_address)
+load_glfuncs(platform_glgetprocaddress_func *get_proc_address)
 {
-#define HGLD(b,a) gl##b = (PFNGL##a##PROC)get_proc_address(ctx, (char *)"gl"#b);
+#define HGLD(b,a) gl##b = (PFNGL##a##PROC)get_proc_address((char *)"gl"#b);
 #include "hajonta/platform/glextlist.txt"
 #undef HGLD
 }
@@ -391,7 +392,6 @@ DebugTable
 };
 
 extern DebugTable *GlobalDebugTable;
-platform_get_thread_id_func *_platform_get_thread_id;
 
 /*
  * These debug macros from Casey Muratori's Handmade Hero
@@ -403,7 +403,7 @@ uint32_t _h_event_index_count = (uint32_t)std::atomic_fetch_add(&GlobalDebugTabl
         DebugEvent *_h_event = GlobalDebugTable->events[_h_event_index_count >> 31] + _h_event_index;  \
         _h_event->tsc_cycles = __rdtsc(); \
         _h_event->type = event_type; \
-        _h_event->thread_id = _platform_get_thread_id(); \
+        _h_event->thread_id = _platform->get_thread_id(); \
         _h_event->guid = _guid;
 
 #define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D

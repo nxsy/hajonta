@@ -177,7 +177,7 @@ main(int argc, char **argv)
     strcpy(buffer, "};\n\n");
     fwrite(buffer, 1, strlen(buffer), p);
 
-    sprintf(buffer, "bool %s_program(%s_program_struct *state, hajonta_thread_context *ctx, platform_memory *memory)\n{\n", program_name, program_name);
+    sprintf(buffer, "bool %s_program(%s_program_struct *state)\n{\n", program_name, program_name);
     fwrite(buffer, 1, strlen(buffer), p);
 
     sprintf(buffer, "    #define PROGRAM_NAME \"%s\"\n", program_name);
@@ -267,7 +267,7 @@ main(int argc, char **argv)
         uint32_t shader = vertex_shader_id = hglCreateShader((GLenum)GL_VERTEX_SHADER);
         if (!shader)
         {
-            memory->platform_fail(ctx, "Failed to allocate shader");
+            _platform->fail("Failed to allocate shader");
             return false;
         }
         int compiled;
@@ -284,13 +284,13 @@ main(int argc, char **argv)
         hglGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
         if (!compiled)
         {
-            memory->platform_fail(ctx, info_log);
+            _platform->fail("Failed to allocate shader");
             return false;
         }
 
         if (info_log_written)
         {
-            memory->platform_debug_message(ctx, info_log);
+            _platform->debug_message(info_log);
         }
     }
     {
@@ -309,12 +309,12 @@ main(int argc, char **argv)
         hglGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
         if (!compiled)
         {
-            memory->platform_fail(ctx, info_log);
+            _platform->fail(info_log);
             return false;
         }
         if (info_log_written)
         {
-            memory->platform_debug_message(ctx, info_log);
+            _platform->debug_message(info_log);
         }
     }
     hglAttachShader(state->program, vertex_shader_id);
@@ -327,7 +327,7 @@ main(int argc, char **argv)
     {
         char info_log[1024] = {};
         hglGetProgramInfoLog(state->program, (GLsizei)sizeof(info_log), (GLsizei *)0, info_log);
-        memory->platform_fail(ctx, info_log);
+        _platform->fail(info_log);
         return false;
     }
 
@@ -346,7 +346,7 @@ main(int argc, char **argv)
     if (state->%s_id < 0) {
         char info_log[1024];
         sprintf(info_log, PROGRAM_NAME ": Could not locate %s uniform - hglGetUniformLocation returned %%d", state->%s_id);
-        memory->platform_fail(ctx, info_log);
+        _platform->fail(info_log);
         return false;
     }
 )EOF", uniforms[i], uniforms[i], uniforms[i], uniforms[i], uniforms[i]);
@@ -362,7 +362,7 @@ main(int argc, char **argv)
     state->%s_id = hglGetAttribLocation(state->program, "%s");
     if (state->%s_id < 0) {
         char info_log[] = PROGRAM_NAME ": Could not locate %s attribute";
-        memory->platform_fail(ctx, info_log);
+        _platform->fail(info_log);
         return false;
     }
 )EOF", attribs[i], attribs[i], attribs[i], attribs[i]);
