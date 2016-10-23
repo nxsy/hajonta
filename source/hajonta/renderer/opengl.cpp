@@ -107,9 +107,6 @@ struct DrawData
     int32_t light_index;
     // 4 + 4 + 4 + 4 = 16
 
-    m4 lightspace_matrix;
-    // 64
-
     v3 camera_position;
     int32_t bone_offset;
     // 4 * 3 + 4 = 16
@@ -129,6 +126,10 @@ BoneDataList
 struct Light {
     v4 position_or_direction;
     // 4
+    //
+    m4 lightspace_matrix;
+    // 64
+
     v3 color;
     float ambient_intensity;
     // 3 + 1
@@ -2009,6 +2010,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "blockfigureRigged6_texture", "testing/blockfigureRigged6.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "cube_bounds_mesh", "testing/cube_bounds.hjm");
         add_asset(state, "white_texture", "testing/white.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "dog2_mesh", "testing/dog2/dog2.hjm");
+        add_asset(state, "dog2_texture", "testing/dog2/dog2Color.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -3017,12 +3020,10 @@ draw_mesh_from_asset_v3_bones(
     int32_t shadowmap_texaddress_index = -1;
     int32_t shadowmap_color_texaddress_index = -1;
     int32_t light_index = 0;
-    m4 lightspace_matrix = {};
     if (mesh_from_asset->flags.attach_shadowmap)
     {
         auto &light = light_descriptors[0];
         light_index = 0;
-        lightspace_matrix = light.shadowmap_matrix;
         shadowmap_texaddress_index = -1;
         shadowmap_color_texaddress_index = light.shadowmap_color_texaddress_asset_descriptor_id;
         /*
@@ -3089,7 +3090,6 @@ draw_mesh_from_asset_v3_bones(
     draw_data.light_index = light_index;
     v3 camera_position = calculate_camera_position(view);
     draw_data.camera_position = camera_position;
-    draw_data.lightspace_matrix = lightspace_matrix;
     draw_data.bone_offset = (int32_t)bone_offset;
 
     ++command_list.num_commands;
@@ -3297,12 +3297,10 @@ draw_mesh_from_asset_v3_boneless(
     int32_t shadowmap_texaddress_index = -1;
     int32_t shadowmap_color_texaddress_index = -1;
     int32_t light_index = 0;
-    m4 lightspace_matrix = {};
     if (mesh_from_asset->flags.attach_shadowmap)
     {
         auto &light = light_descriptors[0];
         light_index = 0;
-        lightspace_matrix = light.shadowmap_matrix;
         shadowmap_texaddress_index = -1;
         shadowmap_color_texaddress_index = light.shadowmap_color_texaddress_asset_descriptor_id;
         /*
@@ -3350,7 +3348,6 @@ draw_mesh_from_asset_v3_boneless(
     draw_data.light_index = light_index;
     v3 camera_position = calculate_camera_position(view);
     draw_data.camera_position = camera_position;
-    draw_data.lightspace_matrix = lightspace_matrix;
     draw_data.bone_offset = -1;
 
     ++command_list.num_commands;
@@ -3683,6 +3680,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
 
         command_state.light_list.lights[i] = {
             position_or_direction,
+            light.shadowmap_matrix,
             light.color,
             light.ambient_intensity,
             light.diffuse_intensity,

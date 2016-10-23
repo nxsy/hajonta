@@ -315,6 +315,8 @@ initialize(platform_memory *memory, game_state *state)
     state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
     state->asset_ids.white_texture = add_asset(asset_descriptors, "white_texture");
     state->asset_ids.knp_plate_grass = add_asset(asset_descriptors, "knp_Plate_Grass_01");
+    state->asset_ids.dog2_mesh = add_asset(asset_descriptors, "dog2_mesh");
+    state->asset_ids.dog2_texture = add_asset(asset_descriptors, "dog2_texture");
 
     state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
 
@@ -520,6 +522,11 @@ initialize(platform_memory *memory, game_state *state)
     state->test_mesh.dynamic = true;
     state->asset_ids.dynamic_mesh_test = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh);
     state->asset_ids.dynamic_texture_test = add_dynamic_texture_asset(asset_descriptors, &state->test_texture);
+
+    state->test_mesh2.dynamic = true;
+    state->asset_ids.dynamic_mesh_test2 = add_dynamic_mesh_asset(asset_descriptors, &state->test_mesh2);
+    state->asset_ids.dynamic_texture_test2 = add_dynamic_texture_asset(asset_descriptors, &state->test_texture2);
+
 
     for (uint32_t i = 0; i < (uint32_t)TerrainType::MAX + 1; ++i)
     {
@@ -826,9 +833,9 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
         (float)map.height,
     };
 
-    for (int32_t y = 0; y < map.height; ++y)
+    for (int32_t y = 0; y < map.height - 1; ++y)
     {
-        for (int32_t x = 0; x < map.width; ++x)
+        for (int32_t x = 0; x < map.width - 1; ++x)
         {
             v2 uv_base = {x + 0.5f, y + 0.5f};
             float raw_base_height = cubic_bezier(
@@ -859,7 +866,6 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
                 );
             mesh_data_p.vertices.set({x*2,y*2}, bv);
 
-            if (x < map.width - 1)
             {
                 float raw_base_height_x1 = cubic_bezier(
                     cp0,
@@ -894,7 +900,6 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
                 mesh_data_p.vertices.set({x*2+1,y*2}, bv);
             }
 
-            if (y < map.height - 1)
             {
                 float raw_base_height_y1 = cubic_bezier(
                     cp0,
@@ -930,7 +935,6 @@ generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *m
                 mesh_data_p.vertices.set({x*2,y*2+1}, bv);
             }
 
-            if (y < map.height - 1 && x < map.width - 1)
             {
                 ch = {
                     cubic_bezier(
@@ -1034,8 +1038,8 @@ generate_noise_map(
 
             for (uint32_t i = 0; i < octaves; ++i)
             {
-                float sample_x = (x - half_width) / scale * frequency + offsets[i].x;
-                float sample_y = (y - half_height) / scale * frequency + offsets[i].y;
+                float sample_x = (x - half_width + offsets[i].x) / scale * frequency;
+                float sample_y = (y - half_height + offsets[i].y) / scale * frequency;
 
                 float perlin_value = stb_perlin_noise3(sample_x, sample_y, 0, 256, 256, 256);
                 height += perlin_value * amplitude;
@@ -1381,13 +1385,22 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         auto &mesh = state->test_mesh;
         mesh.vertexformat = 1;
         mesh.dynamic = true;
-        mesh.dynamic_max_vertices = 50000;
-        mesh.dynamic_max_triangles = 50000;
+        mesh.dynamic_max_vertices = 45000;
+        mesh.dynamic_max_triangles = 45000;
         mesh.mesh_format = MeshFormat::v3_boneless;
+
+        auto &mesh2 = state->test_mesh2;
+        mesh2.vertexformat = 1;
+        mesh2.dynamic = true;
+        mesh2.dynamic_max_vertices = 45000;
+        mesh2.dynamic_max_triangles = 45000;
+        mesh2.mesh_format = MeshFormat::v3_boneless;
+
         auto &par_mesh = *state->par_mesh;
 
         size_t vertex_size = sizeof(_vertexformat_1) * mesh.dynamic_max_vertices;
         _vertexformat_1 *vf1_p = (_vertexformat_1 *)malloc(vertex_size);
+        _vertexformat_1 *vf1_p2 = (_vertexformat_1 *)malloc(vertex_size);
 
         for (int32_t i = 0; i < par_mesh.npoints / 3; ++i)
         {
@@ -1411,6 +1424,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         size_t index_size = 4 * 3 * mesh.dynamic_max_triangles;
         uint32_t *indices = (uint32_t *)malloc(index_size);
+        uint32_t *indices2 = (uint32_t *)malloc(index_size);
         memcpy(indices, par_mesh.triangles, (size_t)(4 * 3 * par_mesh.ntriangles));
         mesh.vertices = {
             (void *)vf1_p,
@@ -1420,11 +1434,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             (void *)indices,
             (uint32_t)index_size,
         };
+
+        mesh2.vertices = {
+            (void *)vf1_p2,
+            (uint32_t)vertex_size,
+        };
+        mesh2.indices = {
+            (void *)indices2,
+            (uint32_t)index_size,
+        };
         mesh.num_triangles = (uint32_t)par_mesh.ntriangles;
         mesh.v3_boneless.vertex_count = (uint32_t)par_mesh.npoints;
         auto &perlin = state->debug.perlin;
         perlin.seed = 71;
-        perlin.offset = {0.06f, -0.71f};
+        perlin.offset = {0.0f, 0.0f};
         //perlin.scale = 27.6f;
         perlin.scale = 22.320f;
         perlin.show = false;
@@ -1477,7 +1500,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             rebuild |= ImGui::DragInt("Octaves", &perlin.octaves, 1.0f, 1, 10);
             rebuild |= ImGui::DragFloat("Persistence", &perlin.persistence, 0.001f, 0.001f, 1000.0f, "%0.3f");
             rebuild |= ImGui::DragFloat("Lacunarity", &perlin.lacunarity, 0.001f, 0.001f, 1000.0f, "%0.3f");
-            rebuild |= ImGui::DragFloat2("Offset", &perlin.offset.x, 0.01f, -100.0f, 100.0f, "%0.2f");
+            rebuild |= ImGui::DragFloat2("Offset", &perlin.offset.x, 1.00f, -100.0f, 100.0f, "%0.2f");
             rebuild |= ImGui::DragFloat("Height Multiplier", &perlin.height_multiplier, 0.01f, 0.01f, 1000.0f, "%0.2f");
             ImGui::End();
         }
@@ -1500,6 +1523,26 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->noisemap.array2p(),
                 state->terrain_mesh_data.mesh_data_p(),
                 &state->test_mesh,
+                perlin.height_multiplier,
+                perlin.control_point_0,
+                perlin.control_point_1);
+
+            generate_noise_map(
+                state->noisemap2.array2p(),
+                (uint32_t)perlin.seed,
+                perlin.scale,
+                (uint32_t)perlin.octaves,
+                perlin.persistence,
+                perlin.lacunarity,
+                v2add({-16, 0},perlin.offset),
+                &perlin.min_noise_height,
+                &perlin.max_noise_height
+            );
+            noise_map_to_texture<TerrainMode::color>(state->noisemap2.array2p(), state->noisemap_scratch2.array2p(), &state->test_texture2, state->landmass.terrains);
+            generate_terrain_mesh2(
+                state->noisemap2.array2p(),
+                state->terrain_mesh_data2.mesh_data_p(),
+                &state->test_mesh2,
                 perlin.height_multiplier,
                 perlin.control_point_0,
                 perlin.control_point_1);
@@ -1728,7 +1771,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         auto &light = state->lights[(uint32_t)LightIds::sun];
         v3 eye = v3sub({0,0,0}, v3normalize(light.direction));
         static float eye_distance = 20;
-        shadowmap_projection_matrix = m4orthographicprojection(0.1f, 20.0f + eye_distance, {-eye_distance, -eye_distance}, {eye_distance, eye_distance});
+        shadowmap_projection_matrix = m4orthographicprojection(0.1f, 50.0f + eye_distance, {-eye_distance, -eye_distance}, {eye_distance, eye_distance});
         ImGui::DragFloat("Light distance", &eye_distance, 0.1f, 5.0f, 40.0f);
         eye = v3mul(eye, eye_distance);
         static v3 target = {0,0,0};
@@ -1873,10 +1916,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         (uint32_t)matrix_ids::mesh_projection_matrix,
         (uint32_t)matrix_ids::mesh_view_matrix,
         state->tree_model_matrix2,
-        state->asset_ids.blocky_advanced_mesh2,
-        state->asset_ids.blocky_advanced_texture,
+        state->asset_ids.dog2_mesh,
+        state->asset_ids.dog2_texture,
         1,
-        (int32_t)ArmatureIds::test2,
+        -1,
         three_dee_mesh_flags_debug,
         ShaderType::standard
     );
@@ -1886,19 +1929,22 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         (uint32_t)matrix_ids::light_projection_matrix,
         -1,
         state->tree_model_matrix2,
-        state->asset_ids.blocky_advanced_mesh2,
-        state->asset_ids.blocky_advanced_texture,
+        state->asset_ids.dog2_mesh,
+        state->asset_ids.dog2_texture,
         0,
-        (int32_t)ArmatureIds::test2,
+        -1,
         shadowmap_mesh_flags,
         ShaderType::variance_shadow_map
     );
 
     {
-        m4 model = m4mul(
-            m4translate({0, 0, 0}),
-            m4scale(1.0f)
-        );
+        static int32_t rotate_90s = 0;
+        static int32_t terrain_2_position = 0;
+
+
+        v3 translate_2 = {-32,0,0};
+
+        m4 model = m4identity();
 
         PushMeshFromAsset(
             &state->three_dee_renderer.list,
@@ -1920,6 +1966,34 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             model,
             state->asset_ids.dynamic_mesh_test,
             state->asset_ids.dynamic_texture_test,
+            0,
+            -1,
+            shadowmap_mesh_flags,
+            ShaderType::variance_shadow_map
+        );
+
+        model = m4translate(translate_2);
+
+        PushMeshFromAsset(
+            &state->three_dee_renderer.list,
+            (uint32_t)matrix_ids::mesh_projection_matrix,
+            (uint32_t)matrix_ids::mesh_view_matrix,
+            model,
+            state->asset_ids.dynamic_mesh_test2,
+            state->asset_ids.dynamic_texture_test2,
+            1,
+            -1,
+            three_dee_mesh_flags_debug,
+            ShaderType::standard
+        );
+
+        PushMeshFromAsset(
+            &state->shadowmap_renderer.list,
+            (uint32_t)matrix_ids::light_projection_matrix,
+            -1,
+            model,
+            state->asset_ids.dynamic_mesh_test2,
+            state->asset_ids.dynamic_texture_test2,
             0,
             -1,
             shadowmap_mesh_flags,

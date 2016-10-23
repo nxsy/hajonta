@@ -44,7 +44,6 @@ struct DrawData
     int shadowmap_texaddress_index;
     int shadowmap_color_texaddress_index;
     int light_index;
-    mat4 lightspace_matrix;
     vec3 camera_position;
     int bone_offset;
 };
@@ -52,6 +51,24 @@ struct DrawData
 layout(std140) uniform CB1
 {
     DrawData draw_data[100];
+};
+
+struct Light {
+    vec4 position_or_direction;
+    mat4 lightspace_matrix;
+    vec3 color;
+
+    float ambient_intensity;
+    float diffuse_intensity;
+
+    float attenuation_constant;
+    float attenuation_linear;
+    float attenuation_exponential;
+};
+
+layout(std140) uniform CB2
+{
+    Light lights[32];
 };
 
 layout(std140) uniform CB3
@@ -97,6 +114,7 @@ void main()
     gl_Position = projection_matrix * view_matrix * w_position;
     if (dd.light_index >= 0)
     {
-        v_l_position = dd.lightspace_matrix * w_position;
+        Light light = lights[dd.light_index];
+        v_l_position = light.lightspace_matrix * w_position;
     }
 }

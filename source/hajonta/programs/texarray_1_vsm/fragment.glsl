@@ -28,7 +28,6 @@ struct DrawData
     int shadowmap_texaddress_index;
     int shadowmap_color_texaddress_index;
     int light_index;
-    mat4 lightspace_matrix;
     vec3 camera_position;
     int bone_offset;
 };

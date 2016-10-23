@@ -77,8 +77,12 @@ _asset_ids
     int32_t knp_palette;
     int32_t cube_bounds_mesh;
     int32_t dynamic_mesh_test;
+    int32_t dynamic_mesh_test2;
     int32_t dynamic_texture_test;
+    int32_t dynamic_texture_test2;
     int32_t white_texture;
+    int32_t dog2_mesh;
+    int32_t dog2_texture;
     int32_t knp_plate_grass;
 };
 
@@ -791,11 +795,19 @@ struct game_state
     Mesh test_mesh;
     DynamicTextureDescriptor test_texture;
 
-#define NOISE_WIDTH 16
-#define NOISE_HEIGHT 16
+    Mesh test_mesh2;
+    DynamicTextureDescriptor test_texture2;
+
+#define NOISE_WIDTH 17
+#define NOISE_HEIGHT 17
     array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemap;
-    TerrainMeshData<NOISE_WIDTH * 2, NOISE_HEIGHT * 2> terrain_mesh_data;
+    TerrainMeshData<(NOISE_WIDTH - 1) * 2, (NOISE_HEIGHT - 1)* 2> terrain_mesh_data;
+
+    array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemap2;
+    TerrainMeshData<(NOISE_WIDTH - 1) * 2, (NOISE_HEIGHT - 1)* 2> terrain_mesh_data2;
+
     array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratch;
+    array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratch2;
 
     Landmass landmass;
 };
