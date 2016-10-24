@@ -714,6 +714,9 @@ struct game_state
 
     FrameState frame_state;
 
+    v2i middle_base_location;
+    v2 right_plane_location;
+
     RenderPipeline render_pipeline;
     GamePipelineElements pipeline_elements;
 

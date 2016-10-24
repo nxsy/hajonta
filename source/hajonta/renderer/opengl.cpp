@@ -553,7 +553,7 @@ struct renderer_state
 
     uint32_t generation_id;
 
-    mouse_input original_mouse_input;
+    MouseInput original_mouse_input;
 
     uint32_t vertices_count;
     struct
@@ -2066,7 +2066,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
     io.MouseDown[0] = input->mouse.buttons.left.ended_down;
     io.MouseDown[1] = input->mouse.buttons.middle.ended_down;
     io.MouseDown[2] = input->mouse.buttons.right.ended_down;
-    io.MouseWheel = 0.0f;
+    io.MouseWheel = input->mouse.vertical_wheel_delta;
 
     io.KeysDown[8] = false;
     io.KeyMap[ImGuiKey_Backspace] = 8;
@@ -2120,6 +2120,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         input->mouse.buttons.right.ended_down = false;
         input->mouse.buttons.middle.repeat = !BUTTON_WENT_UP(input->mouse.buttons.middle) || wanted_capture_mouse;
         input->mouse.buttons.middle.ended_down = false;
+        input->mouse.vertical_wheel_delta = 0.0f;
     }
 
     io.MouseDrawCursor = io.WantCaptureMouse;

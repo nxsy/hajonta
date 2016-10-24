@@ -381,6 +381,10 @@ initialize(platform_memory *memory, game_state *state)
     state->camera.far_ = 10000.0f * 1.1f;
     state->camera.target = {2, 2.5, 0};
     state->camera.rotation = {-0.1f, -0.8f, 0};
+    {
+        float ratio = (float)state->frame_state.input->window.width / (float)state->frame_state.input->window.height;
+        update_camera(&state->camera, ratio);
+    }
 
     state->np_camera.distance = 2.0f;
     state->np_camera.near_ = 1.0f;
@@ -1363,6 +1367,41 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
     }
 }
 
+Ray
+screen_to_ray(game_state *state)
+{
+    auto &window = state->frame_state.input->window;
+    auto &mouse = state->frame_state.input->mouse;
+    v4 clip_coordinates =
+    {
+        2.0f * (mouse.x) / window.width - 1.0f,
+        1.0f - 2.0f * (mouse.y) / window.height,
+        -1.0f,
+        0.0f,
+    };
+
+    v4 eyespace_ray = m4mul(m4inverse(state->camera.projection), clip_coordinates);
+    eyespace_ray.z = -1.0f;
+    eyespace_ray.w = 0.0f;
+
+    v4 worldspace_ray4 = m4mul(m4inverse(state->camera.view), eyespace_ray);
+    v3 worldspace_ray3 = v3normalize({
+        worldspace_ray4.x,
+        worldspace_ray4.y,
+        worldspace_ray4.z,
+    });
+
+    Plane p = {
+        {0,1,0},
+        0,
+    };
+    return {
+        state->camera.location,
+        worldspace_ray3,
+    };
+}
+
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     _platform = memory->platform_api;
@@ -1370,6 +1409,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     TIMED_FUNCTION();
     game_state *state = (game_state *)memory->memory;
     _hidden_state = state;
+
+    state->frame_state.delta_t = input->delta_t;
+    state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
+    state->frame_state.input = input;
+    state->frame_state.memory = memory;
 
     if (!memory->initialized)
     {
@@ -1459,15 +1503,91 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.max_noise_height = FLT_MIN;
     }
 
-    state->frame_state.delta_t = input->delta_t;
-    state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
-    state->frame_state.input = input;
-    state->frame_state.memory = memory;
-
     if (memory->imgui_state)
     {
         ImGui::SetCurrentContext((ImGuiContext *)memory->imgui_state);
     }
+
+    for (uint32_t i = 0;
+            i < harray_count(input->controllers);
+            ++i)
+    {
+        if (!input->controllers[i].is_active)
+        {
+            continue;
+        }
+
+        game_controller_state *controller = &input->controllers[i];
+        game_buttons *buttons = &controller->buttons;
+        if (BUTTON_WENT_DOWN(buttons->back))
+        {
+            memory->quit = true;
+        }
+    }
+
+    {
+        MouseInput *mouse = &input->mouse;
+        if (mouse->vertical_wheel_delta)
+        {
+            state->camera.distance -= mouse->vertical_wheel_delta;
+        }
+
+        if (BUTTON_WENT_DOWN(mouse->buttons.middle))
+        {
+            state->middle_base_location = {mouse->x, mouse->y};
+        }
+
+        if (BUTTON_STAYED_DOWN(mouse->buttons.middle))
+        {
+            v2i diff = v2sub(state->middle_base_location, {mouse->x, mouse->y});
+            if (abs(diff.x) > 1 || abs(diff.y) > 1)
+            {
+                if (abs(diff.x) > abs(diff.y))
+                {
+                    state->camera.rotation.y += (diff.x / 25.0f);
+                }
+                else
+                {
+                    state->camera.rotation.x -= (diff.y / 40.0f);
+                }
+                state->middle_base_location = {mouse->x, mouse->y};
+            }
+        }
+
+        if (BUTTON_ENDED_DOWN(mouse->buttons.right))
+        {
+            Plane p = {
+                {0,1,0},
+                -state->camera.target.y,
+            };
+            Ray r = screen_to_ray(state);
+            ImGui::Text("Ray: %f, %f, %f", r.direction.x, r.direction.y, r.direction.z);
+            float t;
+            v3 q;
+            if (ray_plane_intersect(r, p, &t, &q))
+            {
+                ImGui::Text("Intersect");
+                v2 plane_location = {q.x, q.z};
+                if (BUTTON_STAYED_DOWN(mouse->buttons.right))
+                {
+                    if (t < 60.0f && t > -60.0f)
+                    {
+                        v2 diff = v2sub(plane_location, state->right_plane_location);
+                        v3 diff3 = {diff.x, 0, diff.y};
+                        if (t < 0)
+                        {
+                            diff3 = v3sub({}, diff3);
+                        }
+                        state->camera.target = v3sub(state->camera.target, diff3);
+                    }
+                }
+                state->right_plane_location = plane_location;
+            }
+            ImGui::Text("t / q: %f / %f, %f, %f", t, q.x, q.y, q.z);
+        }
+    }
+    ImGui::Text("Hello");
+
     show_debug_main_menu(state);
     show_pq_debug(&state->debug.priority_queue);
 
@@ -1601,7 +1721,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->matrices[(uint32_t)matrix_ids::quad_projection_matrix] = m4orthographicprojection(1.0f, -1.0f, {-max_x + state->camera_offset.x, -max_y + state->camera_offset.y}, {max_x + state->camera_offset.x, max_y + state->camera_offset.y});
 
     float ratio = (float)input->window.width / (float)input->window.height;
-    state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
+    //state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
 
     if (state->debug.show_camera) {
         ImGui::Begin("Camera", &state->debug.show_camera);
@@ -1636,6 +1756,41 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::End();
     }
     update_camera(&state->camera, ratio);
+    if (state->debug.show_camera) {
+        ImGui::Begin("Camera", &state->debug.show_camera);
+        ImGui::Separator();
+        ImGui::Text("View Matrix");
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            ImGui::Text("%2.2f %2.2f %2.2f %2.2f",
+                state->camera.view.cols[0].E[i],
+                state->camera.view.cols[1].E[i],
+                state->camera.view.cols[2].E[i],
+                state->camera.view.cols[3].E[i]);
+        }
+        ImGui::Separator();
+        m4 inverse_view = m4inverse(state->camera.view);
+        ImGui::Text("Inverse View Matrix");
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            ImGui::Text("%2.2f %2.2f %2.2f %2.2f",
+                inverse_view.cols[0].E[i],
+                inverse_view.cols[1].E[i],
+                inverse_view.cols[2].E[i],
+                inverse_view.cols[3].E[i]);
+        }
+        ImGui::Separator();
+        ImGui::Text("Projection Matrix");
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            ImGui::Text("%2.2f %2.2f %2.2f %2.2f",
+                state->camera.projection.cols[0].E[i],
+                state->camera.projection.cols[1].E[i],
+                state->camera.projection.cols[2].E[i],
+                state->camera.projection.cols[3].E[i]);
+        }
+        ImGui::End();
+    }
     state->np_camera.rotation.y += 0.4f * input->delta_t;
     update_camera(&state->np_camera, ratio);
     state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = state->camera.projection;
@@ -1705,17 +1860,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->dynamic_mesh_model_matrix = m4mul(translate,m4mul(rotate, m4mul(scale, local_translate)));
     }
 
-    demo_data demoes[] = {
-        {
-            "none",
-            0,
-        },
-        {
-            "b",
-            &demo_b,
-        },
-    };
-
     LightDescriptors l = {harray_count(state->lights), state->lights};
     ArmatureDescriptors armatures = {
         harray_count(state->armatures),
@@ -1736,6 +1880,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         &prd
     );
 
+    demo_data demoes[] = {
+        {
+            "none",
+            0,
+        },
+        {
+            "b",
+            &demo_b,
+        },
+    };
+
     int32_t previous_demo = state->active_demo;
     for (int32_t i = 0; i < harray_count(demoes); ++i)
     {
@@ -1747,23 +1902,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         demo_context demo_ctx = {};
         demo_ctx.switched = previous_demo != state->active_demo;
         demoes[state->active_demo].func(memory, input, sound_output, &demo_ctx);
-    }
-
-    for (uint32_t i = 0;
-            i < harray_count(input->controllers);
-            ++i)
-    {
-        if (!input->controllers[i].is_active)
-        {
-            continue;
-        }
-
-        game_controller_state *controller = &input->controllers[i];
-        game_buttons *buttons = &controller->buttons;
-        if (BUTTON_WENT_DOWN(buttons->back))
-        {
-            memory->quit = true;
-        }
     }
 
     m4 shadowmap_projection_matrix;

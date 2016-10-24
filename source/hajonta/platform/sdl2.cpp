@@ -405,7 +405,7 @@ sdl_load_renderer_code(sdl2_state *state, renderer_code *code, const char *filen
 }
 
 static void
-sdl2_process_keypress(game_button_state *new_button_state, bool was_down, bool is_down)
+sdl2_process_keypress(GameButtonState *new_button_state, bool was_down, bool is_down)
 {
     if (was_down == is_down)
     {
@@ -439,7 +439,7 @@ handle_sdl2_events(sdl2_state *state)
                 bool was_down = (sdl_event.type == SDL_KEYUP);
                 bool is_down = (sdl_event.type != SDL_KEYUP);
 
-                game_button_state *button_state = 0;
+                GameButtonState *button_state = 0;
                 switch(sdl_event.key.keysym.sym)
                 {
                     case SDLK_w:
@@ -478,12 +478,16 @@ handle_sdl2_events(sdl2_state *state)
                 state->new_input->mouse.x = (int32_t)(sdl_event.motion.x * state->window_gl_ratio_width);
                 state->new_input->mouse.y = (int32_t)(sdl_event.motion.y * state->window_gl_ratio_height);
             } break;
+            case SDL_MOUSEWHEEL:
+            {
+                state->new_input->mouse.vertical_wheel_delta += sdl_event.wheel.y;
+            } break;
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
             {
                 bool was_down = (sdl_event.type == SDL_MOUSEBUTTONUP);
                 bool is_down = (sdl_event.type != SDL_MOUSEBUTTONUP);
-                game_button_state *button_state = 0;
+                GameButtonState *button_state = 0;
                 switch (sdl_event.button.button)
                 {
                     case SDL_BUTTON_LEFT:

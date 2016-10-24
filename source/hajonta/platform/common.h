@@ -115,14 +115,14 @@ static PlatformApi *_platform;
 #define BUTTON_STAYED_DOWN(x) (x.ended_down && x.repeat)
 #define BUTTON_STAYED_UP(x) (!x.ended_down && x.repeat)
 
-struct game_button_state
+struct GameButtonState
 {
     bool ended_down;
     bool repeat;
 };
 
 inline bool
-BUTTON_DOWN_REPETITIVELY(game_button_state button, uint32_t *repetition_var, uint32_t repetition_max)
+BUTTON_DOWN_REPETITIVELY(GameButtonState button, uint32_t *repetition_var, uint32_t repetition_max)
 {
     bool result = false;
     if (button.ended_down)
@@ -143,12 +143,12 @@ BUTTON_DOWN_REPETITIVELY(game_button_state button, uint32_t *repetition_var, uin
 
 struct game_buttons
 {
-    game_button_state move_up;
-    game_button_state move_down;
-    game_button_state move_left;
-    game_button_state move_right;
-    game_button_state back;
-    game_button_state start;
+    GameButtonState move_up;
+    GameButtonState move_down;
+    GameButtonState move_left;
+    GameButtonState move_right;
+    GameButtonState back;
+    GameButtonState start;
 };
 
 struct game_controller_state
@@ -160,7 +160,7 @@ struct game_controller_state
 
     union
     {
-        game_button_state _buttons[sizeof(game_buttons) / sizeof(game_button_state)];
+        GameButtonState _buttons[sizeof(game_buttons) / sizeof(GameButtonState)];
         game_buttons buttons;
     };
 };
@@ -193,25 +193,25 @@ struct keyboard_input
     };
 };
 
-struct mouse_buttons
+struct MouseButtons
 {
-    game_button_state left;
-    game_button_state middle;
-    game_button_state right;
+    GameButtonState left;
+    GameButtonState middle;
+    GameButtonState right;
 };
 
-struct mouse_input
+struct MouseInput
 {
     bool is_active;
     int32_t x;
     int32_t y;
 
-    int32_t vertical_wheel_delta;
+    float vertical_wheel_delta;
 
     union
     {
-        game_button_state _buttons[sizeof(mouse_buttons) / sizeof(game_button_state)];
-        mouse_buttons buttons;
+        GameButtonState _buttons[sizeof(MouseButtons) / sizeof(GameButtonState)];
+        MouseButtons buttons;
     };
 };
 
@@ -231,7 +231,7 @@ struct game_input
 
     game_controller_state controllers[NUM_CONTROLLERS];
     keyboard_input keyboard_inputs[MAX_KEYBOARD_INPUTS];
-    mouse_input mouse;
+    MouseInput mouse;
 };
 
 inline game_controller_state *get_controller(game_input *input, uint32_t index)

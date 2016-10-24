@@ -104,8 +104,28 @@ Quaternion
     float w;
 };
 
-struct m4
+union m4
 {
     v4 cols[4];
+    struct
+    {
+        v4 x;
+        v4 y;
+        v4 z;
+        v4 w;
+    };
 };
 
+struct
+Plane
+{
+    v3 normal;
+    float distance;
+};
+
+struct
+Ray
+{
+    v3 location;
+    v3 direction;
+};
