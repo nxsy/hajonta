@@ -683,6 +683,131 @@ CornerHeights
     float E[4];
 };
 
+void
+append_block_mesh(
+    _vertexformat_1 *vertices,
+    v3i *triangles,
+    int32_t *vertex_index,
+    uint32_t *num_triangles,
+    v3 base_location,
+    CornerHeights ch,
+    v2 uv_base,
+    v2 uv_size
+    )
+{
+    v3 upper_top_left = { -0.5f, 0.1f + ch.top_left, 0.5f };
+    v3 upper_top_right= { 0.5f, 0.1f + ch.top_right, 0.5f };
+    v3 upper_bottom_left = { -0.5f, 0.1f + ch.bottom_left, -0.5f };
+    v3 upper_bottom_right = { 0.5f, 0.1f + ch.bottom_right, -0.5f };
+
+    v3 lower_top_left = { -0.5f, -10.f + ch.top_left, 0.5f };
+    v3 lower_top_right = { 0.5f, -10.f + ch.top_right, 0.5f };
+    v3 lower_bottom_left = { -0.5f, -10.0f + ch.bottom_left, -0.5f };
+    v3 lower_bottom_right = { 0.5f, -10.0f + ch.bottom_right, -0.5f };
+
+    struct
+    {
+        v3 corner_offsets[4];
+    } faces_data[] =
+    {
+        {
+            {
+                upper_bottom_left,
+                upper_top_left,
+                upper_top_right,
+                upper_bottom_right,
+            },
+        },
+        {
+            {
+                lower_bottom_right,
+                lower_top_right,
+                lower_top_left,
+                lower_bottom_left,
+            },
+        },
+        {
+            {
+                lower_bottom_left,
+                lower_top_left,
+                upper_top_left,
+                upper_bottom_left,
+            },
+        },
+        {
+            {
+                upper_top_right,
+                lower_top_right,
+                lower_bottom_right,
+                upper_bottom_right,
+            },
+        },
+        {
+            {
+                lower_bottom_left,
+                upper_bottom_left,
+                upper_bottom_right,
+                lower_bottom_right,
+            },
+        },
+        {
+            {
+                upper_top_right,
+                upper_top_left,
+                lower_top_left,
+                lower_top_right,
+            },
+        },
+    };
+
+    for (uint32_t i = 0; i < harray_count(faces_data); ++i)
+    {
+        auto &face_data = faces_data[i];
+
+        v3i triangles_indices[] = {
+            { 0, 1, 2 },
+            { 0, 2, 3 },
+        };
+
+        for (uint32_t j = 0; j < 2; ++j)
+        {
+            int32_t base_vertex_index = *vertex_index;
+            v3i &triangle_indices = triangles_indices[j];
+
+            triangle3 tri = {
+                face_data.corner_offsets[triangle_indices.E[0]],
+                face_data.corner_offsets[triangle_indices.E[1]],
+                face_data.corner_offsets[triangle_indices.E[2]],
+            };
+            v3 normal = winded_triangle_normal(tri);
+
+            for (uint32_t k = 0; k < 3; ++k)
+            {
+                _vertexformat_1 &vf1 = vertices[*vertex_index];
+                v3 &offset = face_data.corner_offsets[triangle_indices.E[k]];
+                v2 uv_offset = {
+                    (uv_base.x + offset.x * 0.1f) / uv_size.x,
+                    (uv_base.y - offset.z * 0.1f) / uv_size.y,
+                };
+                v3 position = v3add(base_location, offset);
+                vf1 =
+                {
+                    position,
+                    normal,
+                    uv_offset,
+                };
+                ++*vertex_index;
+            }
+            triangles[*num_triangles] = {
+                base_vertex_index,
+                base_vertex_index + 1,
+                base_vertex_index + 2,
+            };
+            ++*num_triangles;
+        }
+    }
+}
+
 BlockVertices
 generate_block_vertices(
     TerrainMeshDataP mesh_data_p,
@@ -823,6 +948,184 @@ perturb_raw(float raw)
 {
     return fmod(raw, 0.001f) * 100.0f;
 }
+
+void
+generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, v2 cp0, v2 cp1)
+{
+    v2 top_left = {
+        -(map.width - 1.0f),
+        (map.height - 1.0f),
+    };
+    v2 uv_size = {
+        (float)map.width,
+        (float)map.height,
+    };
+
+    _vertexformat_1 *vertices = (_vertexformat_1 *)mesh->vertices.data;
+    v3i *triangles = (v3i *)mesh->indices.data;
+    int32_t vertex_index = 0;
+    uint32_t num_triangles = 0;
+
+    for (int32_t y = 0; y < map.height - 1; ++y)
+    {
+        for (int32_t x = 0; x < map.width - 1; ++x)
+        {
+            v2 uv_base = {x + 0.5f, y + 0.5f};
+            float raw_base_height = cubic_bezier(
+                cp0,
+                cp1,
+                map.get({x,y})).y;
+            float base_height = roundf(raw_base_height * height_multiplier) / 4 +
+                perturb_raw(raw_base_height);
+
+            CornerHeights ch = {};
+
+            v3 base_location =
+            {
+                top_left.x + (2*x),
+                base_height,
+                top_left.y - (2*y),
+            };
+
+            append_block_mesh(
+                vertices,
+                triangles,
+                &vertex_index,
+                &num_triangles,
+                base_location,
+                ch,
+                uv_base,
+                uv_size);
+
+            {
+                float raw_base_height_x1 = cubic_bezier(
+                    cp0,
+                    cp1,
+                    map.get({x+1,y})).y;
+                float base_height_x1 = roundf(raw_base_height_x1 * height_multiplier) / 4 +
+                    perturb_raw(raw_base_height_x1);
+
+                float min_height = min(base_height, base_height_x1);
+
+                ch = {
+                    base_height - min_height,
+                    base_height_x1 - min_height,
+                    base_height - min_height,
+                    base_height_x1 - min_height,
+                };
+
+                v3 x_base_location = base_location;
+                x_base_location.x++;
+                x_base_location.y = min_height;
+                v2 x_uv_base = uv_base;
+                x_uv_base.x += 0.25f;
+                append_block_mesh(
+                    vertices,
+                    triangles,
+                    &vertex_index,
+                    &num_triangles,
+                    x_base_location,
+                    ch,
+                    x_uv_base,
+                    uv_size);
+            }
+
+            {
+                float raw_base_height_y1 = cubic_bezier(
+                    cp0,
+                    cp1,
+                    map.get({x,y+1})).y;
+
+                float base_height_y1 = roundf(raw_base_height_y1 * height_multiplier) / 4 +
+                    perturb_raw(raw_base_height_y1);
+
+                float min_height = min(base_height, base_height_y1);
+
+                ch = {
+                    base_height - min_height,
+                    base_height - min_height,
+                    base_height_y1 - min_height,
+                    base_height_y1 - min_height,
+                };
+
+                v3 y_base_location = base_location;
+                y_base_location.z--;
+                y_base_location.y = min_height;
+                v2 y_uv_base = uv_base;
+                y_uv_base.y += 0.25f;
+
+                append_block_mesh(
+                    vertices,
+                    triangles,
+                    &vertex_index,
+                    &num_triangles,
+                    y_base_location,
+                    ch,
+                    y_uv_base,
+                    uv_size);
+            }
+
+            {
+                ch = {
+                    cubic_bezier(
+                        cp0,
+                        cp1,
+                        map.get({x,y})).y,
+                    cubic_bezier(
+                        cp0,
+                        cp1,
+                        map.get({x+1,y})).y,
+                    cubic_bezier(
+                        cp0,
+                        cp1,
+                        map.get({x,y+1})).y,
+                    cubic_bezier(
+                        cp0,
+                        cp1,
+                        map.get({x+1,y+1})).y,
+                };
+
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    ch.E[i] = roundf(ch.E[i] * height_multiplier) / 4 +
+                        perturb_raw(ch.E[i]);
+                }
+
+                float min_height = min(
+                    min(ch.E[0], ch.E[1]),
+                    min(ch.E[2], ch.E[3])
+                );
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    ch.E[i] -= min_height;
+                }
+
+                v3 xy_base_location = base_location;
+                xy_base_location.x++;
+                xy_base_location.z--;
+                xy_base_location.y = min_height;
+                v2 xy_uv_base = uv_base;
+                xy_uv_base.x += 0.25f;
+                xy_uv_base.y += 0.25f;
+
+                append_block_mesh(
+                    vertices,
+                    triangles,
+                    &vertex_index,
+                    &num_triangles,
+                    xy_base_location,
+                    ch,
+                    xy_uv_base,
+                    uv_size);
+            }
+        }
+    }
+
+    mesh->v3_boneless.vertex_count = (uint32_t)vertex_index;
+    mesh->num_triangles = num_triangles;
+    mesh->reload = true;
+}
+
 
 void
 generate_terrain_mesh2(array2p<float> map, TerrainMeshDataP mesh_data_p, Mesh *mesh, float height_multiplier, v2 cp0, v2 cp1)
@@ -1639,9 +1942,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 &perlin.max_noise_height
             );
             noise_map_to_texture<TerrainMode::color>(state->noisemap.array2p(), state->noisemap_scratch.array2p(), &state->test_texture, state->landmass.terrains);
-            generate_terrain_mesh2(
+            generate_terrain_mesh3(
                 state->noisemap.array2p(),
-                state->terrain_mesh_data.mesh_data_p(),
                 &state->test_mesh,
                 perlin.height_multiplier,
                 perlin.control_point_0,
@@ -1659,9 +1961,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 &perlin.max_noise_height
             );
             noise_map_to_texture<TerrainMode::color>(state->noisemap2.array2p(), state->noisemap_scratch2.array2p(), &state->test_texture2, state->landmass.terrains);
-            generate_terrain_mesh2(
+            generate_terrain_mesh3(
                 state->noisemap2.array2p(),
-                state->terrain_mesh_data2.mesh_data_p(),
                 &state->test_mesh2,
                 perlin.height_multiplier,
                 perlin.control_point_0,
@@ -1915,6 +2216,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::DragFloat("Light distance", &eye_distance, 0.1f, 5.0f, 40.0f);
         eye = v3mul(eye, eye_distance);
         static v3 target = {0,0,0};
+        eye = v3add(eye, target);
+        ImGui::Text("Sun is at %f, %f, %f", eye.x, eye.y, eye.z);
         ImGui::DragFloat3("Target", &target.x, 0.1f, -100.0f, 100.0f);
         v3 up = {0, 1, 0};
 
