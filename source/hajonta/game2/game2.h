@@ -76,10 +76,6 @@ _asset_ids
     int32_t blockfigureRigged6_texture;
     int32_t knp_palette;
     int32_t cube_bounds_mesh;
-    int32_t dynamic_mesh_test;
-    int32_t dynamic_mesh_test2;
-    int32_t dynamic_texture_test;
-    int32_t dynamic_texture_test2;
     int32_t white_texture;
     int32_t dog2_mesh;
     int32_t dog2_texture;
@@ -218,100 +214,6 @@ _vertexformat_1
     v3 normal;
     v2 texcoords;
 };
-
-struct
-Triangles
-{
-    _vertexformat_1 vertices[3];
-};
-
-struct
-FaceVertices
-{
-    Triangles triangles[2];
-};
-
-struct
-BlockVertices
-{
-    FaceVertices faces[6];
-};
-
-
-struct
-TerrainMeshDataP
-{
-    array2p<BlockVertices> vertices;
-    v3i *triangles;
-    uint32_t *triangle_index;
-
-    void add_triangle(v3i triangle)
-    {
-        triangles[*triangle_index] = triangle;
-        *triangle_index += 1;
-    };
-
-    int32_t
-    vertex_index(v2i location)
-    {
-        return (int32_t)(
-            (location.x + location.y * vertices.height) *
-            harray_count(vertices.values[0].faces) *
-            harray_count(vertices.values[0].faces[0].triangles) *
-            harray_count(vertices.values[0].faces[0].triangles[0].vertices) *
-            1);
-    }
-
-    void
-    update_mesh(Mesh *mesh)
-    {
-        uint32_t vertex_count = (
-            vertices.width *
-            vertices.height *
-            harray_count(vertices.values[0].faces) *
-            harray_count(vertices.values[0].faces[0].triangles) *
-            harray_count(vertices.values[0].faces[0].triangles[0].vertices) *
-            1);
-        uint32_t vertex_size = vertex_count * sizeof(_vertexformat_1);
-        memcpy(mesh->vertices.data, vertices.values, vertex_size);
-        uint32_t index_size = *triangle_index * sizeof(triangles[0]);
-        memcpy(mesh->indices.data, triangles, index_size);
-        mesh->v3_boneless.vertex_count = (uint32_t)vertex_count;
-        mesh->num_triangles = *triangle_index;
-        mesh->reload = true;
-    }
-
-    void
-    reset()
-    {
-        *triangle_index = 0;
-    }
-};
-
-template<uint32_t W, uint32_t H>
-struct
-TerrainMeshData
-{
-    array2<W, H, BlockVertices> vertices;
-    v3i triangles[100000];
-    uint32_t triangle_index;
-
-    void add_triangle(v3i triangle)
-    {
-        triangles[triangle_index++] = triangle;
-    };
-
-    TerrainMeshDataP
-    mesh_data_p()
-    {
-        return {
-            vertices.array2p(),
-            (v3i *)triangles,
-            &triangle_index,
-        };
-    }
-};
-
 
 struct
 astar_data
@@ -591,16 +493,11 @@ enum struct matrix_ids
     mesh_view_matrix,
     np_projection_matrix,
     np_view_matrix,
-    cube_bounds_model_matrix,
-    chest_model_matrix,
-    plane_model_matrix,
-    tree_model_matrix,
-    tree_model_matrix2,
     light_projection_matrix,
     np_model_matrix,
-    mesh_model_matrix,
+    _unused,
 
-    MAX = mesh_model_matrix,
+    MAX = _unused,
 };
 
 enum struct
@@ -624,7 +521,7 @@ struct
 AssetDescriptors
 {
     uint32_t count;
-    asset_descriptor descriptors[128];
+    asset_descriptor descriptors[512];
 };
 
 struct
@@ -699,7 +596,7 @@ TerrainTypeInfo
 struct
 Landmass
 {
-    TerrainTypeInfo terrains[(uint32_t)TerrainType::MAX];
+    TerrainTypeInfo terrains[(uint32_t)TerrainType::MAX + 1];
 };
 
 struct game_state
@@ -731,13 +628,6 @@ struct game_state
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
-    m4 np_model_matrix;
-    m4 cube_bounds_model_matrix;
-    m4 cube_bounds_model_matrix_2;
-    m4 plane_model_matrix;
-    m4 tree_model_matrix;
-    m4 tree_model_matrix2;
-    m4 dynamic_mesh_model_matrix;
     m4 light_projection_matrix;
 
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
@@ -794,24 +684,27 @@ struct game_state
     AssetClassEntry asset_classes[10];
     const char *asset_class_names[10];
 
-    par_shapes_mesh *par_mesh;
-    Mesh test_mesh;
-    DynamicTextureDescriptor test_texture;
-
-    Mesh test_mesh2;
-    DynamicTextureDescriptor test_texture2;
-
-#define NOISE_WIDTH 17
-#define NOISE_HEIGHT 17
-    array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemap;
-    TerrainMeshData<(NOISE_WIDTH - 1) * 2, (NOISE_HEIGHT - 1)* 2> terrain_mesh_data;
-
-    array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemap2;
-    TerrainMeshData<(NOISE_WIDTH - 1) * 2, (NOISE_HEIGHT - 1)* 2> terrain_mesh_data2;
-
-    array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratch;
-    array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratch2;
+#define MESH_SURROUND 3
+#define MESH_WIDTH (1+2*MESH_SURROUND)
+#define MESH_SQUARE (MESH_WIDTH*MESH_WIDTH)
+    Mesh test_meshes[MESH_SQUARE];
+    DynamicTextureDescriptor test_textures[MESH_SQUARE];
+#define TERRAIN_MAP_CHUNK_WIDTH 64
+#define TERRAIN_MAP_CHUNK_HEIGHT 64
+#define NOISE_WIDTH (TERRAIN_MAP_CHUNK_WIDTH / 2 + 1)
+#define NOISE_HEIGHT (TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1)
+    array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemaps[MESH_SQUARE];
+    array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratches[MESH_SQUARE];
+    int32_t test_mesh_descriptors[MESH_SQUARE];
+    int32_t test_texture_descriptors[MESH_SQUARE];
 
     Landmass landmass;
+
+    struct
+    {
+        v2 offset;
+        bool rebuild;
+    } noisemaps_data[MESH_SQUARE];
+    v2 noisemap_base;
 };
 

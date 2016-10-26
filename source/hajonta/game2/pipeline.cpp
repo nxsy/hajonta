@@ -21,7 +21,8 @@ PipelineInit(RenderPipeline *pipeline, AssetDescriptors *asset_descriptors)
         framebuffer->framebuffer._flags.use_multisample_buffer = framebuffer->multisample;
         framebuffer->framebuffer._flags.use_depth_texture = framebuffer->use_depth_texture;
         framebuffer->framebuffer._flags.use_rg32f_buffer = framebuffer->use_rg32f_buffer;
-        framebuffer->framebuffer._flags.use_texarray = framebuffer->use_texarray;
+        framebuffer->framebuffer._flags.use_texarray = 1;
+        framebuffer->framebuffer._flags.use_stencil_buffer = framebuffer->use_stencil_buffer;
         framebuffer->framebuffer._flags.no_clear_each_frame = framebuffer->no_clear_each_frame;
         framebuffer->framebuffer.clear_color = framebuffer->clear_color;
     }
@@ -55,7 +56,7 @@ PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *da
         PushAssetDescriptors(entry->list, data->asset_count, data->assets);
         PushDescriptors(entry->list, data->l, data->armatures);
 
-        if ((entry->target_framebuffer_id >= 0) && (entry->source_framebuffer_id >= 0))
+        if (entry->source_framebuffer_id >= 0)
         {
             auto source_framebuffer = pipeline->framebuffers[entry->source_framebuffer_id];
             if (entry->filter_type != ApplyFilterType::none) {
@@ -105,17 +106,14 @@ CreatePipeline(game_state *state)
     auto pipeline = &state->render_pipeline;
     *pipeline = {};
     pipeline_elements.fb_main = RenderPipelineAddFramebuffer(pipeline);
-    auto &fb_main = pipeline->framebuffers[pipeline_elements.fb_main];
-    fb_main.use_depth_texture = 1;
-    fb_main.no_clear_each_frame = 1;
     pipeline_elements.fb_multisample = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_multisample = pipeline->framebuffers[pipeline_elements.fb_multisample];
     fb_multisample.multisample = 1;
-    fb_multisample.use_depth_texture = 1;
+    fb_multisample.use_stencil_buffer = 1;
 
     pipeline_elements.fb_shadowmap = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
-    fb_shadowmap.use_depth_texture = 1;
+    //fb_shadowmap.use_depth_texture = 1;
     fb_shadowmap.use_rg32f_buffer = 1;
     fb_shadowmap.size = {
         (int32_t)state->shadowmap_size,
@@ -124,31 +122,17 @@ CreatePipeline(game_state *state)
     fb_shadowmap.fixed_size = 1;
     fb_shadowmap.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
 
-    {
-        pipeline_elements.fb_shadowmap_texarray = RenderPipelineAddFramebuffer(pipeline);
-        auto &fb_shadowmap_texarray = pipeline->framebuffers[pipeline_elements.fb_shadowmap_texarray];
-        //fb_shadowmap_texarray.use_depth_texture = 1;
-        fb_shadowmap_texarray.use_rg32f_buffer = 1;
-        fb_shadowmap_texarray.use_texarray = 1;
-        fb_shadowmap_texarray.size = {
-            (int32_t)state->shadowmap_size,
-            (int32_t)state->shadowmap_size
-        };
-        fb_shadowmap_texarray.fixed_size = 1;
-        fb_shadowmap_texarray.clear_color = {1.0f, 1.0f, 0.0f, 1.0f};
-    }
-
     pipeline_elements.fb_sm_blur_x = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_x = pipeline->framebuffers[pipeline_elements.fb_sm_blur_x];
     fb_sm_blur_x.use_rg32f_buffer = 1;
-    fb_sm_blur_x.size = fb_shadowmap.size;
+    fb_sm_blur_x.size = v2div(fb_shadowmap.size, 2);
     fb_sm_blur_x.fixed_size = 1;
     fb_sm_blur_x.no_clear_each_frame = 1;
 
     pipeline_elements.fb_sm_blur_xy = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_xy = pipeline->framebuffers[pipeline_elements.fb_sm_blur_xy];
     fb_sm_blur_xy.use_rg32f_buffer = 1;
-    fb_sm_blur_xy.size = fb_shadowmap.size;
+    fb_sm_blur_xy.size = v2div(fb_shadowmap.size, 2);
     fb_sm_blur_xy.fixed_size = 1;
     fb_sm_blur_xy.no_clear_each_frame = 1;
 
@@ -235,17 +219,6 @@ CreatePipeline(game_state *state)
         ApplyFilterType::gaussian_7x1_y,
     };
 
-    pipeline_elements.r_shadowmap_texarray_blit = RenderPipelineAddRenderer(pipeline);
-    RenderPipelineEntry *shadowmap_texarray_blit = pipeline->entries + pipeline_elements.r_shadowmap_texarray_blit;
-    pipeline_elements.rl_shadowmap_texarray_blit.list.name = DEBUG_NAME("texarray_blit");
-    *shadowmap_texarray_blit = {
-        &pipeline_elements.rl_shadowmap_texarray_blit.list,
-        pipeline_elements.rl_shadowmap_texarray_blit.buffer,
-        sizeof(pipeline_elements.rl_shadowmap_texarray_blit.buffer),
-        pipeline_elements.fb_shadowmap_texarray,
-        pipeline_elements.fb_sm_blur_xy,
-    };
-
     pipeline_elements.r_nature_pack_debug = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *nature_pack_debug = pipeline->entries + pipeline_elements.r_nature_pack_debug;
     pipeline_elements.rl_nature_pack_debug.list.name = DEBUG_NAME("nature_pack_debug");
@@ -257,7 +230,6 @@ CreatePipeline(game_state *state)
         -1,
     };
 
-    PipelineAddDependency(pipeline, pipeline_elements.r_shadowmap_texarray_blit, pipeline_elements.r_sm_blur_xy);
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee, pipeline_elements.r_sm_blur_xy);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_xy, pipeline_elements.r_sm_blur_x);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_x, pipeline_elements.r_shadowmap);

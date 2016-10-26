@@ -4,12 +4,22 @@ struct v2
 {
     float x;
     float y;
+
+    bool operator==(const v2 &other) const
+    {
+        return (x == other.x) && (y == other.y);
+    }
 };
 
 struct v2i
 {
     int x;
     int y;
+
+    bool operator==(const v2i &other) const
+    {
+        return (x == other.x) && (y == other.y);
+    }
 };
 
 struct v3
@@ -38,12 +48,16 @@ struct v4b
     uint8_t w;
 };
 
-struct v4i
+union v4i
 {
-    int32_t x;
-    int32_t y;
-    int32_t z;
-    int32_t w;
+    struct
+    {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+        int32_t w;
+    };
+    int32_t E[4];
 };
 
 struct triangle2
@@ -53,11 +67,15 @@ struct triangle2
     v2 p2;
 };
 
-struct triangle3
+union triangle3
 {
-    v3 p0;
-    v3 p1;
-    v3 p2;
+    struct
+    {
+        v3 p0;
+        v3 p1;
+        v3 p2;
+    };
+    v3 p[3];
 };
 
 struct rectangle2

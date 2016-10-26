@@ -30,6 +30,7 @@ RenderPipelineFramebuffer
         uint32_t use_rg32f_buffer:1;
         uint32_t use_texarray:1;
         uint32_t no_clear_each_frame:1;
+        uint32_t use_stencil_buffer:1;
     };
 };
 

@@ -4,6 +4,7 @@ uniform mat4 u_projection;
 uniform mat4 u_view_matrix;
 uniform mat4 u_model_matrix;
 uniform vec2 u_blur_scale;
+uniform int u_texaddress_index;
 
 in vec3 a_position;
 in vec2 a_texcoord;

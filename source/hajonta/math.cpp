@@ -37,6 +37,13 @@ v2div(v2 v, float divisor)
     return result;
 }
 
+v2i
+v2div(v2i v, int32_t divisor)
+{
+    v2i result = {v.x / divisor, v.y / divisor};
+    return result;
+}
+
 float
 v2length(v2 v)
 {

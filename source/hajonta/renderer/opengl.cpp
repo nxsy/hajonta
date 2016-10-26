@@ -477,7 +477,6 @@ CommandState
     uint32_t textures[NUM_TEXARRAY_TEXTURES];
     TextureConfig texture_configs[NUM_TEXARRAY_TEXTURES];
     uint32_t texture_layer_count[NUM_TEXARRAY_TEXTURES];
-    uint32_t texture_space_max;
 
     uint32_t texture_address_count;
     TextureAddress texture_addresses[100];
@@ -511,6 +510,9 @@ struct renderer_state
     int32_t texarray_1_vsm_texcontainer;
 
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
+    uint32_t filter_gaussian_7x1_cb0;
+    int32_t filter_gaussian_7x1_texcontainer;
+
     sky_program_struct sky_program;
     uint32_t vbo;
     uint32_t ibo;
@@ -522,7 +524,6 @@ struct renderer_state
     uint32_t mesh_bone_weights_vbo;
     uint32_t vao;
     int32_t tex_id;
-    int32_t filter_gaussian_7x1_tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
 
@@ -610,6 +611,7 @@ struct renderer_state
 
     bool multisample_disabled;
     float framebuffer_scale;
+    bool overdraw;
     bool flush_for_profiling;
     bool crash_on_gl_errors;
 };
@@ -848,14 +850,16 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y, Tex
             command_state.textures[container_index] = tex;
             command_state.texture_configs[container_index] = ts;
             hglBindTexture(GL_TEXTURE_2D_ARRAY, tex);
-            command_state.texture_space_max = 10;
+            int32_t xy = x * y;
+            const int32_t target_size = 4096 * 4096 * 10;
+            int32_t texture_space_max = min(target_size / xy, 100);
             hglTexStorage3D(
                 GL_TEXTURE_2D_ARRAY,
                 1,
                 texture_format_configs[(uint32_t)format].internal_format,
                 x,
                 y,
-                command_state.texture_space_max);
+                texture_space_max);
         } break;
     }
     return container_index;
@@ -1532,8 +1536,6 @@ program_init(renderer_state *state)
             state->texarray_1_cb3,
             3);
         state->texarray_1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
-        state->texarray_1_shadowmap_tex_id = hglGetUniformLocation(program->program, "shadowmap_tex");
-        state->texarray_1_shadowmap_color_tex_id = hglGetUniformLocation(program->program, "shadowmap_color_tex");
     }
 
     {
@@ -1563,7 +1565,12 @@ program_init(renderer_state *state)
     {
         filter_gaussian_7x1_program_struct *program = &state->filter_gaussian_7x1_program;
         loaded &= filter_gaussian_7x1_program(program);
-        state->filter_gaussian_7x1_tex_id = hglGetUniformLocation(program->program, "tex");
+        state->filter_gaussian_7x1_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
+        hglUniformBlockBinding(
+            program->program,
+            state->filter_gaussian_7x1_cb0,
+            0);
+        state->filter_gaussian_7x1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
     hglFlush();
     hglErrorAssert();
@@ -2037,8 +2044,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->poisson_position_granularity = 1000.0f;
         state->vsm_minimum_variance = 0.0000002f;
         state->vsm_lightbleed_compensation = 0.001f;
-        state->blur_scale_divisor = 3072.0f;
-        state->shadowmap_bias = -0.015f;
+        state->blur_scale_divisor = 4096.0f;
+        state->shadowmap_bias = 0.003f;
         hglGenQueries(
             2 * harray_count(state->timer_query_data.query_ids[0]),
             (uint32_t *)&state->timer_query_data.query_ids
@@ -2221,6 +2228,90 @@ update_asset_descriptor_asset_id(renderer_state *state, asset_descriptor *descri
         descriptor->generation_id = state->generation_id;
     }
 }
+
+void
+draw_overdraw(renderer_state *state)
+{
+    hglDisable(GL_DEPTH_TEST);
+    hglDisable(GL_BLEND);
+    hglDepthFunc(GL_ALWAYS);
+    hglStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    m4 identity = m4identity();
+    hglUseProgram(state->imgui_program.program);
+    hglUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&identity);
+    hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&identity);
+    hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&identity);
+    hglUniform1f(state->imgui_program.u_use_color_id, 0.0f);
+
+    uint32_t texture = state->white_texture;
+    v2 st0 = {0, 0};
+    v2 st1 = {1, 1};
+    hglBindVertexArray(state->vao);
+
+    struct
+    {
+        v2 pos;
+        v2 uv;
+        uint32_t col;
+    } vertices[] = {
+        {
+            { -1, -1, },
+            { st0.x, st0.y },
+            0xffffffff,
+        },
+        {
+            { 1, -1, },
+            { st1.x, st0.y },
+            0xffffffff,
+        },
+        {
+            { 1, 1, },
+            { st1.x, st1.y },
+            0xffffffff,
+        },
+        {
+            { -1, 1, },
+            { st0.x, st1.y },
+            0xffffffff,
+        },
+    };
+
+    hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    hglVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
+    hglVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
+    hglVertexAttribPointer((GLuint)state->imgui_program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
+    hglBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+
+    uint32_t indices[] = {
+        0, 1, 2,
+        2, 3, 0,
+    };
+    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
+    hglBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
+
+    hglBindTexture(GL_TEXTURE_2D, texture);
+
+    hglColorMask(GL_FALSE, GL_FALSE, GL_TRUE, GL_FALSE);
+    hglStencilFunc(GL_NOTEQUAL, 0, 0xf8 | 0x01);
+    hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
+
+    hglColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
+    hglStencilFunc(GL_NOTEQUAL, 0, 0xf8 | 0x02);
+    hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
+
+    hglColorMask(GL_FALSE, GL_TRUE, GL_FALSE, GL_FALSE);
+    hglStencilFunc(GL_NOTEQUAL, 0, 0xf8 | 0x04);
+    hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
+
+    hglStencilFunc(GL_ALWAYS, 0, 0);
+    hglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    hglBindVertexArray(0);
+
+    hglEnable(GL_DEPTH_TEST);
+    hglEnable(GL_BLEND);
+    hglDepthFunc(GL_LESS);
+}
+
 
 void
 draw_quad(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
@@ -2719,10 +2810,7 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
         auto &descriptor = descriptors[quads->asset_descriptor_id];
         if (descriptor.type == asset_descriptor_type::framebuffer)
         {
-            if (descriptor.framebuffer->_flags.use_texarray)
-            {
-                use_texaddress = true;
-            }
+            use_texaddress = true;
         }
     }
 
@@ -3139,7 +3227,7 @@ draw_mesh_from_asset_v3_boneless(
         if (!vertex_buffer.max_vertices)
         {
             vertex_buffer.vertex_size = sizeof(vertexformat_1);
-            vertex_buffer.max_vertices = 100000;
+            vertex_buffer.max_vertices = 10000000;
             hglBufferData(GL_ARRAY_BUFFER,
                 vertex_buffer.vertex_size * vertex_buffer.max_vertices,
                 (void *)0,
@@ -3148,7 +3236,7 @@ draw_mesh_from_asset_v3_boneless(
 
         if (!index_buffer.max_indices)
         {
-            index_buffer.max_indices = 100000;
+            index_buffer.max_indices = 10000000;
             hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
                 3 * 4 * index_buffer.max_indices,
                 (void *)0,
@@ -3404,8 +3492,18 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
 {
     hglDisable(GL_CULL_FACE);
     hglDisable(GL_DEPTH_TEST);
+    auto &command_state = state->command_state;
     int32_t a_position_id = 0;
     int32_t a_texcoord_id = 0;
+
+    v2 st0 = {0, 0};
+    v2 st1 = {1, 1};
+    int32_t texture;
+    get_texaddress_index_from_asset_descriptor(
+        state, descriptors, filter->source_asset_descriptor_id,
+        &texture, &st0, &st1);
+
+    int32_t texcontainer = -1;
 
     hglBindVertexArray(state->vao);
     switch (filter->type)
@@ -3413,15 +3511,18 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
         case ApplyFilterType::none:
         {
             auto &program = state->filter_gaussian_7x1_program;
+            texcontainer = state->filter_gaussian_7x1_texcontainer;
             hglUseProgram(program.program);
             hglUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&state->m4identity);
             hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
+            hglUniform1i(program.u_texaddress_index_id, texture);
         } break;
         case ApplyFilterType::gaussian_7x1_x:
         case ApplyFilterType::gaussian_7x1_y:
         {
             auto &program = state->filter_gaussian_7x1_program;
+            texcontainer = state->filter_gaussian_7x1_texcontainer;
             hglUseProgram(program.program);
             hglUniformMatrix4fv(program.u_projection_id, 1, GL_FALSE, (float *)&state->m4identity);
             hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
@@ -3434,15 +3535,9 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
                 blur_scale = { 0, 1.0f / state->blur_scale_divisor };
             }
             hglUniform2fv(program.u_blur_scale_id, 1, (float *)&blur_scale);
+            hglUniform1i(program.u_texaddress_index_id, texture);
         } break;
     }
-
-    v2 st0 = {0, 0};
-    v2 st1 = {1, 1};
-    uint32_t texture;
-    get_texture_id_from_asset_descriptor(
-        state, descriptors, filter->source_asset_descriptor_id,
-        &texture, &st0, &st1);
 
     if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
@@ -3482,9 +3577,37 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
     hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
     hglBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
 
-    hglUniform1i(state->filter_gaussian_7x1_tex_id, 0);
+    hglBindBufferBase(
+        GL_UNIFORM_BUFFER,
+        0,
+        command_state.texture_address_buffers[0].uniform_buffer.ubo);
+
+    static int32_t texcontainer_textures[harray_count(command_state.textures)] =
+    {
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+    };
+    hglUniform1iv(texcontainer, harray_count(texcontainer_textures), texcontainer_textures);
+    for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
+    {
+        hglActiveTexture(GL_TEXTURE0 + i);
+        hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
+    }
+
+    /*
+    hglUniform1i(state->filter_gaussian_7x1_texaddress_id, 0);
     hglActiveTexture(GL_TEXTURE0);
     hglBindTexture(GL_TEXTURE_2D, texture);
+    */
+
     hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
     hglBindTexture(GL_TEXTURE_2D, 0);
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -3507,7 +3630,17 @@ framebuffer_blit(renderer_state *state, asset_descriptor *descriptors, render_en
     uint32_t fbo = f->_fbo;
 
     hglBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
-    hglBlitFramebuffer(0, 0, size.x, size.y, 0, 0, size.x, size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    hglBlitFramebuffer(
+        0,
+        0,
+        size.x,
+        size.y,
+        0,
+        0,
+        size.x,
+        size.y,
+        GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+        GL_NEAREST);
     if (state->crash_on_gl_errors) hglErrorAssert();
 }
 
@@ -3539,7 +3672,7 @@ draw_sky(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, ren
 
     hglUniform3fv(program.u_camera_position_id, 1, (float *)&camera_position);
     hglUniform3fv(program.u_light_direction_id, 1, (float *)&sky->light_direction);
-    m4 model_matrix = m4scale(10000.0f);
+    m4 model_matrix = m4scale(1000.0f);
 
     hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model_matrix);
     hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view_matrix);
@@ -3945,56 +4078,6 @@ framebuffer_texture_config(FramebufferDescriptor *framebuffer, bool multisample_
 }
 
 void
-framebuffer_initialize_color_buffer(
-    renderer_state *state,
-    FramebufferDescriptor *framebuffer,
-    FramebufferTextureConfig texture_config,
-    v2i framebuffer_size,
-    uint32_t multisample_samples)
-{
-    hglGenTextures(1, &framebuffer->_texture);
-    if (texture_config.multisample)
-    {
-        hglBindTexture(texture_config.texture_target, framebuffer->_texture);
-    }
-    else
-    {
-        hglBindTexture(texture_config.texture_target, framebuffer->_texture);
-        hglTexParameteri(texture_config.texture_target, GL_TEXTURE_BASE_LEVEL, 0);
-        hglTexParameteri(texture_config.texture_target, GL_TEXTURE_MAX_LEVEL, 0);
-    }
-    if (state->crash_on_gl_errors) hglErrorAssert();
-    if (framebuffer->_flags.use_rg32f_buffer)
-    {
-        hglTexImage2D(texture_config.texture_target, 0, GL_RGBA32F, framebuffer_size.x, framebuffer_size.y, 0, GL_RGBA, GL_BYTE, nullptr);
-        hglTexParameterf(texture_config.texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        hglTexParameterf(texture_config.texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        hglTexParameterf(texture_config.texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        hglTexParameterf(texture_config.texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        if (state->crash_on_gl_errors) hglErrorAssert();
-    }
-    else
-    {
-        if (texture_config.multisample)
-        {
-            hglTexImage2DMultisample(texture_config.texture_target, multisample_samples, GL_RGBA16F, framebuffer_size.x, framebuffer_size.y, true);
-            if (state->crash_on_gl_errors) hglErrorAssert();
-        }
-        else
-        {
-            hglTexImage2D(texture_config.texture_target, 0, GL_RGBA16F, framebuffer_size.x, framebuffer_size.y, 0, GL_RGBA, GL_BYTE, nullptr);
-            hglTexParameterf(texture_config.texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            hglTexParameterf(texture_config.texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            hglTexParameterf(texture_config.texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            hglTexParameterf(texture_config.texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            if (state->crash_on_gl_errors) hglErrorAssert();
-        }
-    }
-    if (state->crash_on_gl_errors) hglErrorAssert();
-}
-
-
-void
 framebuffer_initialize_color_buffer_texarray(
     renderer_state *state,
     FramebufferDescriptor *framebuffer,
@@ -4037,15 +4120,7 @@ framebuffer_initialize(
 
     if (!framebuffer->_flags.no_color_buffer)
     {
-        if (!framebuffer->_flags.use_texarray)
-        {
-            framebuffer_initialize_color_buffer(state, framebuffer, texture_config, framebuffer_size, multisample_samples);
-        }
-        else
-        {
-            framebuffer_initialize_color_buffer_texarray(state, framebuffer, texture_config, framebuffer_size, multisample_samples);
-            //framebuffer_initialize_color_buffer(state, framebuffer, texture_config, framebuffer_size, multisample_samples);
-        }
+        framebuffer_initialize_color_buffer_texarray(state, framebuffer, texture_config, framebuffer_size, multisample_samples);
     }
 
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -4060,12 +4135,14 @@ framebuffer_initialize(
         }
         else
         {
-            hglRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, framebuffer_size.x, framebuffer_size.y);
+            hglRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, framebuffer_size.x, framebuffer_size.y);
         }
         if (state->crash_on_gl_errors) hglErrorAssert();
     }
     else
     {
+        hassert(!"bitrotted");
+#if 0
         hglGenTextures(1, &framebuffer->_renderbuffer);
         if (texture_config.multisample)
         {
@@ -4081,6 +4158,7 @@ framebuffer_initialize(
             hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         }
+#endif
     }
     if (state->crash_on_gl_errors) hglErrorAssert();
 
@@ -4098,18 +4176,9 @@ framebuffer_texture_attach(
     hassert(framebuffer->_fbo);
     if (!framebuffer->_flags.no_color_buffer)
     {
-        if (!framebuffer->_flags.use_texarray)
-        {
-            hglFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_config.texture_target, framebuffer->_texture, 0);
-        }
-        else
-        {
-            //hglFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_config.texture_target, framebuffer->_texture, 0);
-
-            auto &ta = command_state.texture_addresses[framebuffer->_texture];
-            auto &texture_id = command_state.textures[ta.container_index];
-            hglFramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_id, 0, (int32_t)ta.layer);
-        }
+        auto &ta = command_state.texture_addresses[framebuffer->_texture];
+        auto &texture_id = command_state.textures[ta.container_index];
+        hglFramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_id, 0, (int32_t)ta.layer);
         GLenum draw_buffers[] =
         {
             GL_COLOR_ATTACHMENT0,
@@ -4125,17 +4194,26 @@ framebuffer_texture_attach(
     if (!framebuffer->_flags.use_depth_texture)
     {
         hglFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer->_renderbuffer);
+        if (framebuffer->_flags.use_stencil_buffer)
+        {
+            hglFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, framebuffer->_renderbuffer);
+        }
     }
     else
     {
+        hassert(!"bitrotted");
+#if 0
         if (texture_config.multisample)
         {
             hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, framebuffer->_renderbuffer, 0);
+            //hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, framebuffer->_renderbuffer, 0);
         }
         else
         {
             hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
+            //hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
         }
+#endif
     }
     if (state->crash_on_gl_errors) hglErrorAssert();
 
@@ -4257,6 +4335,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         hglEnable(GL_BLEND);
         hglDisable(GL_CULL_FACE);
         hglDisable(GL_DEPTH_TEST);
+        hglDisable(GL_STENCIL_TEST);
         hglDepthFunc(GL_ALWAYS);
         hglBlendEquation(GL_FUNC_ADD);
         hglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -4283,6 +4362,12 @@ extern "C" RENDERER_RENDER(renderer_render)
         if (framebuffer)
         {
             framebuffer_setup(state, framebuffer, &clear, &clear_color, &size);
+            if (framebuffer->_flags.use_stencil_buffer)
+            {
+                hglEnable(GL_STENCIL_TEST);
+                hglStencilFunc(GL_ALWAYS, 0, 0);
+                hglStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+            }
         }
         hglViewport(0, 0, (GLsizei)size.x, (GLsizei)size.y);
         hglScissor(0, 0, size.x, size.y);
@@ -4290,7 +4375,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         {
             TIMED_BLOCK("clear");
             hglClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
-            hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             if (state->flush_for_profiling) hglFlush();
         }
 
@@ -4307,7 +4392,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     v4 *color = &item->color;
                     hglScissor(0, 0, size.x, size.y);
                     hglClearColor(color->r, color->g, color->b, color->a);
-                    hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::ui2d:
@@ -4407,6 +4492,10 @@ extern "C" RENDERER_RENDER(renderer_render)
 
         if (framebuffer)
         {
+            if (framebuffer->_flags.use_stencil_buffer && state->overdraw)
+            {
+                draw_overdraw(state);
+            }
             hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
         if (state->flush_for_profiling) hglFlush();
@@ -4433,6 +4522,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             "bone_weights",
             "bone_ids",
         };
+        ImGui::Checkbox("Overdraw", &state->overdraw);
         ImGui::ListBox("Shadow mode", &state->shadow_mode, shadow_modes, harray_count(shadow_modes));
         ImGui::DragInt("Poisson spread", &state->poisson_spread);
         ImGui::DragFloat("Shadowmap bias", &state->shadowmap_bias, 0.00001f, -0.1f, 0.1f, "%.9f");

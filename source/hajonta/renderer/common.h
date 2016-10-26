@@ -29,7 +29,7 @@ render_entry_type
 struct
 render_entry_header
 {
-     render_entry_type type;
+    render_entry_type type;
 };
 
 struct
@@ -335,6 +335,7 @@ struct FramebufferFlags
     unsigned int use_depth_texture:1;
     unsigned int use_rg32f_buffer:1;
     unsigned int use_texarray:1;
+    unsigned int use_stencil_buffer:1;
     unsigned int use_multisample_buffer:1;
     unsigned int no_clear_each_frame:1;
     unsigned int cleared_this_frame:1;
