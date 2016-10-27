@@ -1561,7 +1561,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         MouseInput *mouse = &input->mouse;
         if (mouse->vertical_wheel_delta)
         {
-            state->camera.distance -= mouse->vertical_wheel_delta;
+            state->camera.distance -= mouse->vertical_wheel_delta * 0.1f;
         }
 
         if (BUTTON_WENT_DOWN(mouse->buttons.middle))
@@ -1789,9 +1789,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::Begin("Camera", &state->debug.show_camera);
         ImGui::DragFloat3("Rotation", &state->camera.rotation.x, 0.1f);
         ImGui::DragFloat3("Target", &state->camera.target.x);
-        ImGui::DragFloat("Distance", &state->camera.distance);
-        ImGui::DragFloat("Near", &state->camera.near_);
-        ImGui::DragFloat("Far", &state->camera.far_);
+        ImGui::DragFloat("Distance", &state->camera.distance, 0.1f, 0.1f, 100.0f);
+        ImGui::DragFloat("Near", &state->camera.near_, 0.1f, 0.1f, 5.0f);
+        ImGui::DragFloat("Far", &state->camera.far_, 0.1f, 5.0f, 2000.0f);
         bool orthographic = state->camera.orthographic;
         ImGui::Checkbox("Orthographic", &orthographic);
         state->camera.orthographic = (uint32_t)orthographic;
@@ -2044,12 +2044,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         state->pipeline_elements.rl_three_dee_water.list.reflection_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor;
         state->pipeline_elements.rl_three_dee_water.list.refraction_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor;
+        state->pipeline_elements.rl_three_dee_water.list.refraction_depth_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].depth_asset_descriptor;
         state->pipeline_elements.rl_three_dee_water.list.dudv_map_asset_descriptor = state->asset_ids.water_dudv;
         state->pipeline_elements.rl_three_dee_water.list.normal_map_asset_descriptor = state->asset_ids.water_normal;
         state->pipeline_elements.rl_three_dee_water.list.camera_position = state->camera.location;
+        state->pipeline_elements.rl_three_dee_water.list.near_ = state->camera.near_;
+        state->pipeline_elements.rl_three_dee_water.list.far_ = state->camera.far_;
         m4 model = m4mul(
             m4scale({500,0.1f,500}),
-            m4translate({-0,-0.999f,-1})
+            m4translate({-0,-1.1f,-1})
         );
 
         MeshFromAssetFlags mesh_flags;
@@ -2256,23 +2259,29 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {1,1,1,1}, 0,
             state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_main].asset_descriptor
     );
-    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {100,100},
-            {200, 200},
-            {1,1,1,1}, 0,
-            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor
-    );
 
-    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {400,100},
-            {200, 200},
-            {1,1,1,1}, 0,
-            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor
-    );
+    {
+        int32_t descriptors_to_show[] =
+        {
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor,
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].depth_asset_descriptor,
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor,
+        };
 
-    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {700,100},
-            {200, 200},
-            {1,1,1,1}, 0,
-            state->asset_ids.water_dudv
-    );
+        float width = 200;
+        float gap = 100;
+        float start_x = 0;
+
+        for (uint32_t i = 0; i < harray_count(descriptors_to_show); ++i)
+        {
+            PushQuad(&state->pipeline_elements.rl_framebuffer.list, {start_x + gap,100},
+                    {width, 200},
+                    {1,1,1,1}, 0,
+                    descriptors_to_show[i]
+            );
+            start_x += gap + width;
+        }
+    }
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

@@ -413,6 +413,7 @@ TexArray1WaterShaderConfig
     v3 camera_position;
     int reflection_texaddress_index;
     int refraction_texaddress_index;
+    int refraction_depth_texaddress_index;
     int dudv_map_texaddress_index;
     int normal_map_texaddress_index;
     float tiling;
@@ -422,6 +423,8 @@ TexArray1WaterShaderConfig
     float minimum_variance;
     float bias;
     float lightbleed_compensation;
+    float near_;
+    float far_;
 };
 
 union
@@ -449,7 +452,9 @@ LightsBuffer
     X(rgba8, GL_RGBA8, GL_RGBA) \
     X(srgba, GL_SRGB8_ALPHA8, GL_RGBA) \
     X(rg32f, GL_RG32F, GL_RG) \
-    X(rgba16f, GL_RGBA16F, GL_RGBA)
+    X(rgba16f, GL_RGBA16F, GL_RGBA) \
+    X(depth24stencil8, GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL) \
+
 
 enum struct
 TextureFormat
@@ -2546,11 +2551,10 @@ get_texaddress_index_from_asset_descriptor(
             } break;
             case asset_descriptor_type::framebuffer_depth:
             {
-                //if (FramebufferInitialized(descriptor->framebuffer))
-                //{
-                //    *texture = descriptor->framebuffer->_renderbuffer;
-                //}
-                hassert(!"Not implemented");
+                if (FramebufferInitialized(descriptor->framebuffer))
+                {
+                    *texaddress_index = (int32_t)descriptor->framebuffer->_renderbuffer;
+                }
             } break;
             case asset_descriptor_type::dynamic_mesh:
             {
@@ -2898,6 +2902,7 @@ get_mesh_from_asset_descriptor(
 void
 draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
 {
+    hglDisable(GL_BLEND);
     if (state->crash_on_gl_errors) hglErrorAssert();
     m4 projection = matrices[quads->matrix_id];
 
@@ -2909,6 +2914,10 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
     {
         auto &descriptor = descriptors[quads->asset_descriptor_id];
         if (descriptor.type == asset_descriptor_type::framebuffer)
+        {
+            use_texaddress = true;
+        }
+        if (descriptor.type == asset_descriptor_type::framebuffer_depth)
         {
             use_texaddress = true;
         }
@@ -3771,6 +3780,7 @@ draw_sky(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, ren
     hglDepthFunc(GL_LESS);
     hglDisable(GL_CULL_FACE);
     hglCullFace(GL_FRONT);
+    hglDisable(GL_BLEND);
 
     hglBindVertexArray(state->vao);
 
@@ -3834,7 +3844,7 @@ draw_indirect(
     auto &command_state = state->command_state;
     auto &command_lists = command_state.lists;
 
-    hglDisable(GL_BLEND);
+    //hglDisable(GL_BLEND);
     hglEnable(GL_DEPTH_TEST);
     hglDepthFunc(GL_LESS);
     hglEnable(GL_CULL_FACE);
@@ -3931,9 +3941,13 @@ draw_indirect(
 
             hglUseProgram(program.program);
             hglCullFace(GL_BACK);
+            hglEnable(GL_BLEND);
+            hglBlendEquation(GL_FUNC_ADD);
+            hglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
             int32_t reflection_texaddress_index = - 1;
             int32_t refraction_texaddress_index = - 1;
+            int32_t refraction_depth_texaddress_index = - 1;
             int32_t dudv_map_texaddress_index = - 1;
             int32_t normal_map_texaddress_index = - 1;
             v2 st0, st1;
@@ -3945,6 +3959,10 @@ draw_indirect(
                 state, descriptors,
                 list->refraction_asset_descriptor,
                 &refraction_texaddress_index, &st0, &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state, descriptors,
+                list->refraction_depth_asset_descriptor,
+                &refraction_depth_texaddress_index, &st0, &st1);
             get_texaddress_index_from_asset_descriptor(
                 state, descriptors,
                 list->dudv_map_asset_descriptor,
@@ -3959,14 +3977,17 @@ draw_indirect(
                 list->camera_position,
                 reflection_texaddress_index,
                 refraction_texaddress_index,
+                refraction_depth_texaddress_index,
                 dudv_map_texaddress_index,
                 normal_map_texaddress_index,
-                10.0f,
+                20.0f,
                 0.02f,
                 move_factor,
                 state->vsm_minimum_variance,
                 state->shadowmap_bias,
                 state->vsm_lightbleed_compensation,
+                list->near_,
+                list->far_,
             };
         } break;
     }
@@ -4328,7 +4349,7 @@ framebuffer_initialize_depth_buffer_texarray(
     v2i framebuffer_size,
     uint32_t multisample_samples)
 {
-    framebuffer->_renderbuffer = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y, TextureFormat::rgba16f);
+    framebuffer->_renderbuffer = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y, TextureFormat::depth24stencil8);
 }
 
 void
@@ -4366,24 +4387,7 @@ framebuffer_initialize(
     }
     else
     {
-        hassert(!"bitrotted");
-#if 0
-        hglGenTextures(1, &framebuffer->_renderbuffer);
-        if (texture_config.multisample)
-        {
-            hglBindTexture(GL_TEXTURE_2D_MULTISAMPLE, framebuffer->_renderbuffer);
-            hglTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, multisample_samples, GL_DEPTH_COMPONENT16, framebuffer_size.x, framebuffer_size.y, true);
-        }
-        else
-        {
-            hglBindTexture(GL_TEXTURE_2D, framebuffer->_renderbuffer);
-            hglTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, framebuffer_size.x, framebuffer_size.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-            hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            hglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-#endif
+        framebuffer_initialize_depth_buffer_texarray(state, framebuffer, texture_config, framebuffer_size, multisample_samples);
     }
     if (state->crash_on_gl_errors) hglErrorAssert();
 
@@ -4426,19 +4430,9 @@ framebuffer_texture_attach(
     }
     else
     {
-        hassert(!"bitrotted");
-#if 0
-        if (texture_config.multisample)
-        {
-            hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, framebuffer->_renderbuffer, 0);
-            //hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, framebuffer->_renderbuffer, 0);
-        }
-        else
-        {
-            hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
-            //hglFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, framebuffer->_renderbuffer, 0);
-        }
-#endif
+        auto &ta = command_state.texture_addresses[framebuffer->_renderbuffer];
+        auto &texture_id = command_state.textures[ta.container_index];
+        hglFramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture_id, 0, (int32_t)ta.layer);
     }
     if (state->crash_on_gl_errors) hglErrorAssert();
 
@@ -4600,6 +4594,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         {
             TIMED_BLOCK("clear");
             hglClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
+            hglClearDepth(1.0f);
             hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             if (state->flush_for_profiling) hglFlush();
         }

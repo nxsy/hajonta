@@ -466,9 +466,12 @@ render_entry_list
 
     int32_t reflection_asset_descriptor;
     int32_t refraction_asset_descriptor;
+    int32_t refraction_depth_asset_descriptor;
     int32_t dudv_map_asset_descriptor;
     int32_t normal_map_asset_descriptor;
     v3 camera_position;
+    float near_;
+    float far_;
 
     Plane clipping_plane;
     uint32_t max_size;

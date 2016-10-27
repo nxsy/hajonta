@@ -10,6 +10,7 @@ ShaderConfig
     vec3 camera_position;
     int reflection_texaddress_index;
     int refraction_texaddress_index;
+    int refraction_depth_texaddress_index;
     int dudv_map_texaddress_index;
     int normal_map_texaddress_index;
     float tiling;
@@ -19,6 +20,8 @@ ShaderConfig
     float minimum_variance;
     float bias;
     float lightbleed_compensation;
+    float near;
+    float far;
 };
 
 layout(std140) uniform SHADERCONFIG
@@ -128,7 +131,7 @@ distortion2()
     d.normal = texture(TexContainer[addr.Container], texCoord).rgb;
     d.normal = vec3(
         d.normal.r * 2 - 1,
-        d.normal.b * 2,
+        d.normal.b * 2 - 1,
         d.normal.g * 2 - 1
     );
     d.normal = normalize(d.normal);
@@ -184,9 +187,31 @@ void main()
         Tex2DAddress addr;
         vec3 texCoord;
 
-        //vec2 total_distortion = distortion1();
+        addr = texAddress[shader_config.refraction_depth_texaddress_index];
+        texCoord = vec3(ndc, addr.Page);
+        float depth = 2 * texture(TexContainer[addr.Container], texCoord).r - 1;
+        float near = shader_config.near;
+        float far = shader_config.far;
+
+        float floor_distance = 
+            (2.0 * near * far) /
+            (far + near - depth * (far - near));
+
+        float water_depth = 2 * gl_FragCoord.z - 1;
+        float water_distance = 
+            (2.0 * near * far) /
+            (far + near - water_depth * (far - near));
+
+        float water_floor_distance = floor_distance - water_distance;
 
         Distortion d = distortion2();
+
+        d.distortion *= pow(clamp(water_floor_distance / 2, 0, 1), 2.0f);
+        float distance_normal_step = pow(water_distance / 75, 2.0);
+
+        d.normal.y *= mix(3, 12, distance_normal_step);
+        d.distortion /= mix(1, 4, distance_normal_step);
+        d.normal = normalize(d.normal);
 
         refraction += d.distortion * shader_config.wave_strength;
         refraction = clamp(refraction, 0.001, 0.999);
@@ -196,14 +221,14 @@ void main()
 
         addr = texAddress[shader_config.refraction_texaddress_index];
         texCoord = vec3(refraction, addr.Page);
-        vec4 refraction_color = texture(TexContainer[addr.Container], texCoord);
+        vec3 refraction_color = texture(TexContainer[addr.Container], texCoord).rgb;
 
         addr = texAddress[shader_config.reflection_texaddress_index];
         texCoord = vec3(reflection, addr.Page);
-        vec4 reflection_color = texture(TexContainer[addr.Container], texCoord);
+        vec3 reflection_color = texture(TexContainer[addr.Container], texCoord).rgb;
 
         vec3 to_camera = normalize(shader_config.camera_position - v_w_position);
-        float refractiveness = dot(to_camera, vec3(0,1,0));
+        float refractiveness = dot(to_camera, d.normal);
         refractiveness = pow(refractiveness, 0.75f);
         refractiveness = clamp(refractiveness, 0, 1);
 
@@ -229,24 +254,38 @@ void main()
             vec3 reflected_light = reflect(from_light, d.normal);
             specular = max(dot(reflected_light, to_camera), 0);
             specular = pow(specular, 20);
-            specular *= direction_similarity;
+            //specular *= direction_similarity;
         }
 
         float visibility = shadow_visibility_vsm(v_l_position, w_surface_to_light_direction);
         visibility = clamp(visibility, 0.05, 1.0);
         diffuse = visibility * diffuse;
-        float specular_highlights = visibility * specular * 0.6f;
+        float sh_clamp = pow(clamp(0.2 + water_floor_distance * 4, 0, 1), 2.5f);
+        float specular_highlights = visibility * specular * 0.8f * sh_clamp;
+        //specular_highlights = 0;
 
-        o_color = mix(reflection_color, refraction_color, refractiveness);
-        o_color = mix(o_color, vec4(vec3(0.0, 0.15, 0.25), 1.0f), 0.2f);
-        o_color.xyz *= (ambient + diffuse);
-        o_color.xyz += specular_highlights;
-        o_color.xyz *= light.color;
 
-        o_color.a = 1;
+        float refraction_clamp = pow(clamp(water_floor_distance / 5, 0, 1), 1);
+        refraction_color = mix(refraction_color, vec3(0.0, 0.1, 0.2), refraction_clamp);
 
-        if (skip)
+        o_color.a = 1.0f;
+        o_color.rgb = mix(reflection_color, refraction_color, refractiveness);
+        //o_color.rgb = mix(o_color.rgb, vec3(0.0, 0.15, 0.25), 0.2f);
+        o_color.rgb *= (ambient + diffuse);
+        o_color.rgb += specular_highlights;
+        o_color.rgb *= light.color;
+
+        float transparency = mix(0.0f, 1.0f, pow(clamp(water_floor_distance * 20, 0, 1), 1.0));
+        o_color.a = transparency;
+
+        if (!skip)
         {
+            //o_color.rgb = vec3(distance_normal_step);
+            //o_color = vec4(transparency, transparency, transparency, 1.0f);
+            //o_color = vec4(specular_highlights, specular_highlights, specular_highlights, 1.0f);
+            //o_color = vec4(sh_clamp, sh_clamp, sh_clamp, 1.0f);
+            //o_color *= transparency;
+        /*
             o_color = vec4(
                 v_w_position.xyz / 100 + 0.5,
                 1);
@@ -263,6 +302,33 @@ void main()
                 shader_config.minimum_variance * 100,
                 shader_config.minimum_variance * 100,
                 1);
+            o_color = vec4(
+                abs(floor_distance / 4),
+                abs(floor_distance / 8),
+                abs(floor_distance / 16),
+                1.0f);
+
+            o_color = vec4(
+                abs(water_distance / 4),
+                abs(water_distance / 8),
+                abs(water_distance / 16),
+                1.0f);
+
+            o_color = vec4(
+                abs(water_floor_distance / 4),
+                abs(water_floor_distance / 8),
+                abs(water_floor_distance / 16),
+                1.0f);
+                */
+
+            /*
+            o_color = vec4(
+                abs(depth) * 0,
+                abs(water_depth) / 4,
+                abs(water_depth) / 8,
+                1.0f);
+            */
+            //o_color = vec4(0,0,0,0);
         }
     }
     else

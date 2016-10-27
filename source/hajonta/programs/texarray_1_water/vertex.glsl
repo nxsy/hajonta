@@ -23,6 +23,7 @@ ShaderConfig
 
     int reflection_texaddress_index;
     int refraction_texaddress_index;
+    int refraction_depth_texaddress_index;
     int dudv_map_texaddress_index;
     int normal_map_texaddress_index;
     float tiling;
@@ -32,6 +33,8 @@ ShaderConfig
     float minimum_variance;
     float bias;
     float lightbleed_compensation;
+    float near;
+    float far;
 };
 
 layout(std140) uniform SHADERCONFIG

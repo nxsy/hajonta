@@ -116,7 +116,7 @@ CreatePipeline(game_state *state)
     pipeline_elements.fb_multisample = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_multisample = pipeline->framebuffers[pipeline_elements.fb_multisample];
     fb_multisample.multisample = 1;
-    fb_multisample.use_stencil_buffer = 1;
+    //fb_multisample.use_stencil_buffer = 1;
 
     pipeline_elements.fb_shadowmap = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
@@ -162,6 +162,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_sky = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *sky = pipeline->entries + pipeline_elements.r_sky;
     state->pipeline_elements.rl_sky.list.name = DEBUG_NAME("sky");
+    pipeline_elements.rl_sky.list.flags.use_clipping_plane = 1;
+    pipeline_elements.rl_sky.list.clipping_plane = {{0,1,0}, 0};
     *sky = {
         &state->pipeline_elements.rl_sky.list,
         state->pipeline_elements.rl_sky.buffer,
@@ -184,8 +186,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_three_dee = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *three_dee = pipeline->entries + pipeline_elements.r_three_dee;
     state->pipeline_elements.rl_three_dee.list.name = DEBUG_NAME("three_dee");
-    pipeline_elements.rl_three_dee.list.flags.use_clipping_plane = 1;
-    pipeline_elements.rl_three_dee.list.clipping_plane = {{0,1,0}, 0};
+    //pipeline_elements.rl_three_dee.list.flags.use_clipping_plane = 1;
+    //pipeline_elements.rl_three_dee.list.clipping_plane = {{0,1,0}, -5};
     *three_dee = {
         &state->pipeline_elements.rl_three_dee.list,
         state->pipeline_elements.rl_three_dee.buffer,
@@ -270,11 +272,12 @@ CreatePipeline(game_state *state)
     pipeline_elements.fb_refraction = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_refraction = pipeline->framebuffers[pipeline_elements.fb_refraction];
     fb_refraction.half_size = 1;
+    fb_refraction.use_depth_texture = 1;
     pipeline_elements.r_refraction = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *refraction = pipeline->entries + pipeline_elements.r_refraction;
     pipeline_elements.rl_refraction.list.name = DEBUG_NAME("refraction");
     pipeline_elements.rl_refraction.list.flags.use_clipping_plane = 1;
-    pipeline_elements.rl_refraction.list.clipping_plane = {{0,-1,0}, 0};
+    pipeline_elements.rl_refraction.list.clipping_plane = {{0,-1,0}, 0.1f};
     *refraction = {
         &pipeline_elements.rl_refraction.list,
         pipeline_elements.rl_refraction.buffer,

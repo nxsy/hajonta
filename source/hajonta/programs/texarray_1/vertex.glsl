@@ -136,5 +136,8 @@ void main()
         Light light = lights[dd.light_index];
         v_l_position = light.lightspace_matrix * w_position;
     }
-    gl_ClipDistance[0] = dot(v_w_position, shader_config.clipping_plane.normal);
+    gl_ClipDistance[0] = dot(
+        vec4(v_w_position, 1.0f),
+        vec4(shader_config.clipping_plane.normal, shader_config.clipping_plane.distance)
+    );
 }
