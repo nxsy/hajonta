@@ -20,7 +20,6 @@
 #endif
 
 #include "hajonta/programs/imgui.h"
-#include "hajonta/programs/ui2d.h"
 #include "hajonta/programs/filters/filter_gaussian_7x1.h"
 #include "hajonta/programs/sky.h"
 #include "hajonta/programs/texarray_1.h"
@@ -28,7 +27,6 @@
 #include "hajonta/programs/texarray_1_water.h"
 
 #include "stb_truetype.h"
-#include "hajonta/ui/ui2d.cpp"
 #include "hajonta/image.cpp"
 #include "hajonta/math.cpp"
 
@@ -237,15 +235,6 @@ hglErrorAssert(bool skip = false)
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
-
-struct ui2d_state
-{
-    ui2d_program_struct ui2d_program;
-    uint32_t vbo;
-    uint32_t ibo;
-    uint32_t vao;
-    uint32_t mouse_texture;
-};
 
 struct asset_file_to_texture
 {
@@ -581,8 +570,6 @@ struct renderer_state
     uint32_t font_texture;
     uint32_t white_texture;
 
-    ui2d_state ui_state;
-
     char bitmap_scratch[4096 * 4096 * 4];
     uint8_t asset_scratch[4096 * 4096 * 4];
     game_input *input;
@@ -749,74 +736,6 @@ add_asset_file_mesh_lookup(renderer_state *state, int32_t asset_file_id, int32_t
 }
 
 static renderer_state _GlobalRendererState;
-
-void
-draw_ui2d(renderer_state *state, ui2d_push_context *pushctx)
-{
-    ui2d_state *ui_state = &state->ui_state;
-    ui2d_program_struct *ui2d_program = &ui_state->ui2d_program;
-
-    hglDisable(GL_DEPTH_TEST);
-    hglDepthFunc(GL_ALWAYS);
-    hglUseProgram(ui2d_program->program);
-    hglBindVertexArray(ui_state->vao);
-
-    float screen_pixel_size[] =
-    {
-        (float)state->input->window.width,
-        (float)state->input->window.height,
-    };
-    hglUniform2fv(ui2d_program->screen_pixel_size_id, 1, (float *)&screen_pixel_size);
-
-    hglBindBuffer(GL_ARRAY_BUFFER, ui_state->vbo);
-    hglBufferData(GL_ARRAY_BUFFER,
-            (GLsizei)(pushctx->num_vertices * sizeof(pushctx->vertices[0])),
-            pushctx->vertices,
-            GL_DYNAMIC_DRAW);
-
-    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ui_state->ibo);
-    hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
-            (GLsizei)(pushctx->num_elements * sizeof(pushctx->elements[0])),
-            pushctx->elements,
-            GL_DYNAMIC_DRAW);
-
-    hglEnableVertexAttribArray((GLuint)ui2d_program->a_pos_id);
-    hglEnableVertexAttribArray((GLuint)ui2d_program->a_tex_coord_id);
-    hglEnableVertexAttribArray((GLuint)ui2d_program->a_texid_id);
-    hglEnableVertexAttribArray((GLuint)ui2d_program->a_options_id);
-    hglEnableVertexAttribArray((GLuint)ui2d_program->a_channel_color_id);
-    hglVertexAttribPointer((GLuint)ui2d_program->a_pos_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)0);
-    hglVertexAttribPointer((GLuint)ui2d_program->a_tex_coord_id, 2, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, tex_coord));
-    hglVertexAttribPointer((GLuint)ui2d_program->a_texid_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, texid));
-    hglVertexAttribPointer((GLuint)ui2d_program->a_options_id, 1, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, options));
-    hglVertexAttribPointer((GLuint)ui2d_program->a_channel_color_id, 3, GL_FLOAT, GL_FALSE, sizeof(ui2d_vertex_format), (void *)offsetof(ui2d_vertex_format, channel_color));
-
-    GLint uniform_locations[10] = {};
-    char msg[] = "tex[xx]";
-    for (int idx = 0; idx < harray_count(uniform_locations); ++idx)
-    {
-        sprintf(msg, "tex[%d]", idx);
-        uniform_locations[idx] = hglGetUniformLocation(ui2d_program->program, msg);
-
-    }
-
-    for (uint32_t i = 0; i < pushctx->num_textures; ++i)
-    {
-        hglActiveTexture(GL_TEXTURE0 + i);
-        hglBindTexture(GL_TEXTURE_2D, pushctx->textures[i]);
-        hglUniform1i(
-            uniform_locations[i],
-            (GLint)i);
-    }
-
-    // TODO(nbm): Get textures working properly.
-    hglActiveTexture(GL_TEXTURE0);
-    hglBindTexture(GL_TEXTURE_2D, ui_state->mouse_texture);
-    hglUniform1i(uniform_locations[0], 0);
-
-    hglDrawElements(GL_TRIANGLES, (GLsizei)pushctx->num_elements, GL_UNSIGNED_INT, (void *)0);
-    if (state->crash_on_gl_errors) hglErrorAssert();
-}
 
 bool
 load_texture_asset(
@@ -1410,35 +1329,6 @@ load_mesh_asset_failed(
 }
 
 bool
-ui2d_program_init(renderer_state *state)
-{
-    ui2d_state *ui_state = &state->ui_state;
-    ui2d_program_struct *program = &ui_state->ui2d_program;
-    bool loaded = ui2d_program(program);
-    if (!loaded)
-    {
-        load_program_failed("ui2d");
-        return false;
-    }
-
-    hglGenBuffers(1, &ui_state->vbo);
-    hglGenBuffers(1, &ui_state->ibo);
-
-    hglGenVertexArrays(1, &ui_state->vao);
-    hglBindVertexArray(ui_state->vao);
-
-    int32_t x, y;
-    char filename[] = "ui/slick_arrows/slick_arrow-delta.png";
-    loaded = load_texture_asset(state, filename, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, &state->ui_state.mouse_texture, GL_TEXTURE_2D);
-    if (!loaded)
-    {
-        load_texture_asset_failed(filename);
-        return false;
-    }
-    return true;
-}
-
-bool
 populate_skybox(renderer_state *state, Skybox *skybox)
 {
     hglGenBuffers(1, &skybox->vbo);
@@ -1987,7 +1877,6 @@ extern "C" RENDERER_SETUP(renderer_setup)
         hglFlush();
         hglErrorAssert();
         hassert(loaded);
-        hassert(ui2d_program_init(&_GlobalRendererState));
         hglFlush();
         hglErrorAssert();
         _GlobalRendererState.initialized = true;
@@ -4613,12 +4502,6 @@ extern "C" RENDERER_RENDER(renderer_render)
                     hglScissor(0, 0, size.x, size.y);
                     hglClearColor(color->r, color->g, color->b, color->a);
                     hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-                    if (state->crash_on_gl_errors) hglErrorAssert();
-                } break;
-                case render_entry_type::ui2d:
-                {
-                    ExtractRenderElementWithSize(ui2d, item, header, element_size);
-                    draw_ui2d(state, item->pushctx);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::quad:

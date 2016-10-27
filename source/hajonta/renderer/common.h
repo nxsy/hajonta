@@ -7,7 +7,6 @@ enum struct
 render_entry_type
 {
     clear,
-    ui2d,
     quad,
     matrices,
     asset_descriptors,
@@ -44,14 +43,6 @@ render_entry_type_debug_texture_load
 {
     render_entry_header header;
     int32_t asset_descriptor_id;
-};
-
-struct ui2d_push_context;
-struct
-render_entry_type_ui2d
-{
-    render_entry_header header;
-    ui2d_push_context *pushctx;
 };
 
 struct
@@ -601,16 +592,6 @@ PushClear(render_entry_list *list, v4 color)
      if (entry)
      {
          entry->color = color;
-     }
-}
-
-inline void
-PushUi2d(render_entry_list *list, ui2d_push_context *pushctx)
-{
-     render_entry_type_ui2d *entry = PushRenderElement(list, ui2d);
-     if (entry)
-     {
-         entry->pushctx = pushctx;
      }
 }
 
