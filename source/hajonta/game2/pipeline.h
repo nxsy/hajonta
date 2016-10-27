@@ -25,6 +25,7 @@ RenderPipelineFramebuffer
     v4 clear_color;
     struct {
         uint32_t fixed_size:1;
+        uint32_t half_size:1;
         uint32_t multisample:1;
         uint32_t use_depth_texture:1;
         uint32_t use_rg32f_buffer:1;
@@ -73,11 +74,14 @@ GamePipelineElements
     RenderPipelineFramebufferId fb_sm_blur_xy;
     RenderPipelineFramebufferId fb_nature_pack_debug;
     RenderPipelineFramebufferId fb_shadowmap_texarray;
+    RenderPipelineFramebufferId fb_reflection;
+    RenderPipelineFramebufferId fb_refraction;
 
     RenderPipelineRendererId r_framebuffer;
     RenderPipelineRendererId r_multisample;
     RenderPipelineRendererId r_sky;
     RenderPipelineRendererId r_three_dee;
+    RenderPipelineRendererId r_three_dee_water;
     RenderPipelineRendererId r_shadowmap;
     RenderPipelineRendererId r_shadowmap_texarray_blit;
     RenderPipelineRendererId r_sm_blur_x;
@@ -85,10 +89,25 @@ GamePipelineElements
     RenderPipelineRendererId r_two_dee;
     RenderPipelineRendererId r_two_dee_debug;
     RenderPipelineRendererId r_nature_pack_debug;
+    RenderPipelineRendererId r_reflection;
+    RenderPipelineRendererId r_refraction;
 
     _render_list<1024 * 100> rl_nature_pack_debug;
     _render_list<2 * 1024 * 1024> rl_sky;
     _render_list<1024 * 100> rl_shadowmap_texarray_blit;
+    _render_list<2 * 1024 * 1024> rl_reflection;
+    _render_list<2 * 1024 * 1024> rl_refraction;
+
+    _render_list<4*1024*1024> rl_two_dee;
+    _render_list<4*1024*1024> rl_two_dee_debug;
+    _render_list<4*1024*1024> rl_three_dee;
+    _render_list<1024> rl_three_dee_water;
+    _render_list<4*1024*1024> rl_shadowmap;
+    _render_list<1024*1024> rl_framebuffer;
+    _render_list<1024> rl_multisample;
+    _render_list<1024> rl_sm_blur_x;
+    _render_list<1024> rl_sm_blur_xy;
+
 };
 
 struct

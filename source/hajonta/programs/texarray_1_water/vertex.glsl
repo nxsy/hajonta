@@ -9,33 +9,29 @@ precision highp int;
 layout(std140, column_major) uniform;
 
 in vec3 a_position;
-in vec2 a_texcoord;
-in vec3 a_normal;
-in ivec4 a_bone_ids;
-in vec4 a_bone_weights;
 
 out vec3 v_w_position;
-out vec2 v_texcoord;
-out vec3 v_w_normal;
 out vec4 v_l_position;
+out vec4 v_c_position;
+out vec2 v_texcoord;
 flat out uint v_draw_id;
-
-uniform float u_minimum_variance;
-uniform float u_lightbleed_compensation;
-uniform float u_bias;
-
-struct
-Plane
-{
-    vec3 normal;
-    float distance;
-};
 
 struct
 ShaderConfig
 {
-    Plane clipping_plane;
-    int use_clipping_plane;
+    vec3 camera_position;
+
+    int reflection_texaddress_index;
+    int refraction_texaddress_index;
+    int dudv_map_texaddress_index;
+    int normal_map_texaddress_index;
+    float tiling;
+
+    float wave_strength;
+    float move_factor;
+    float minimum_variance;
+    float bias;
+    float lightbleed_compensation;
 };
 
 layout(std140) uniform SHADERCONFIG
@@ -90,11 +86,6 @@ layout(std140) uniform CB2
     Light lights[32];
 };
 
-layout(std140) uniform CB3
-{
-    mat4 bones[100];
-};
-
 uniform int u_draw_data_index;
  uniform bool do_not_skip = true;
  uniform bool skip = false;
@@ -112,29 +103,16 @@ void main()
     mat4 view_matrix = dd.view;
     mat4 projection_matrix = dd.projection;
 
-    vec4 normal = vec4(a_normal, 1.0);
     vec4 position = vec4(a_position, 1.0);
 
-    if (dd.bone_offset >= 0)
-    {
-        mat4 bone_transform = mat4(0);
-        bone_transform += bones[dd.bone_offset + a_bone_ids[0]] * a_bone_weights[0];
-        bone_transform += bones[dd.bone_offset + a_bone_ids[1]] * a_bone_weights[1];
-        bone_transform += bones[dd.bone_offset + a_bone_ids[2]] * a_bone_weights[2];
-        bone_transform += bones[dd.bone_offset + a_bone_ids[3]] * a_bone_weights[3];
-        normal = bone_transform * normal;
-        position = bone_transform * position;
-    }
-
-    v_texcoord = a_texcoord;
-    v_w_normal = mat3(transpose(inverse(model_matrix))) * (normal.xyz / normal.w);
     vec4 w_position = model_matrix * position;
     v_w_position = w_position.xyz / w_position.w;
-    gl_Position = projection_matrix * view_matrix * w_position;
+    v_c_position = projection_matrix * view_matrix * w_position;
+    v_texcoord = vec2(a_position.x/2.0f + 0.5f, a_position.z / 2.0f + 0.5f) * shader_config.tiling;
+    gl_Position = v_c_position;
     if (dd.light_index >= 0)
     {
         Light light = lights[dd.light_index];
         v_l_position = light.lightspace_matrix * w_position;
     }
-    gl_ClipDistance[0] = dot(v_w_position, shader_config.clipping_plane.normal);
 }

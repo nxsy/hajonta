@@ -164,19 +164,24 @@ show_debug_main_menu(game_state *state)
 }
 
 void
-update_camera(CameraState *camera, float aspect_ratio)
+update_camera(CameraState *camera, float aspect_ratio, bool invert = false)
 {
     float rho = camera->distance;
     float theta = camera->rotation.y;
     float phi = camera->rotation.x;
 
-    camera->location = {
+    float sign = invert ? -1.0f : 1.0f;
+
+    camera->relative_location = {
         sinf(theta) * cosf(phi) * rho,
-        sinf(phi) * rho,
+        sign * sinf(phi) * rho,
         cosf(theta) * cosf(phi) * rho,
     };
 
-    v3 eye = v3add(camera->target, camera->location);
+    v3 target = camera->target;
+    target.y *= sign;
+
+    camera->location = v3add(target, camera->relative_location);
     v3 up;
     if (camera->rotation.x < h_halfpi && camera->rotation.x > -h_halfpi)
     {
@@ -187,7 +192,7 @@ update_camera(CameraState *camera, float aspect_ratio)
         up = {0, -1, 0};
     }
 
-    camera->view = m4lookat(eye, camera->target, up);
+    camera->view = m4lookat(camera->location, target, up);
     if (camera->orthographic)
     {
         camera->projection = m4orthographicprojection(camera->near_, camera->far_, {-aspect_ratio * rho, -1.0f * rho}, {aspect_ratio * rho, 1.0f * rho});
@@ -317,6 +322,9 @@ initialize(platform_memory *memory, game_state *state)
     state->asset_ids.knp_plate_grass = add_asset(asset_descriptors, "knp_Plate_Grass_01");
     state->asset_ids.dog2_mesh = add_asset(asset_descriptors, "dog2_mesh");
     state->asset_ids.dog2_texture = add_asset(asset_descriptors, "dog2_texture");
+
+    state->asset_ids.water_normal = add_asset(asset_descriptors, "water_normal");
+    state->asset_ids.water_dudv = add_asset(asset_descriptors, "water_dudv");
 
     state->asset_ids.familiar = add_asset(asset_descriptors, "familiar");
 
@@ -550,13 +558,13 @@ initialize(platform_memory *memory, game_state *state)
             {
                 ti->name = "deep water";
                 ti->height = -0.5f;
-                ti->color = {0, 0, 0.8f, 1.0f};
+                ti->color = {0.45f, 0.45f, 0.1f, 1.0f};
             } break;
             case TerrainType::water:
             {
                 ti->name = "water";
                 ti->height = -0.005f;
-                ti->color = {0.1f, 0.1f, 0.8f, 1.0f};
+                ti->color = {0.55f, 0.55f, 0.15f, 1.0f};
                 ti->merge_with_previous = true;
             } break;
             case TerrainType::sand:
@@ -667,7 +675,7 @@ append_block_mesh(
     v3 lower_bottom_left = { -0.5f, -10.0f + ch.bottom_left, -0.5f };
     v3 lower_bottom_right = { 0.5f, -10.0f + ch.bottom_right, -0.5f };
 
-    int32_t base_vertex_index = *vertex_index;
+    //int32_t base_vertex_index = *vertex_index;
 
     triangle3 tris[] =
     {
@@ -683,10 +691,12 @@ append_block_mesh(
         },
     };
 
+    /*
     int32_t utl = base_vertex_index + 1;
     int32_t utr = base_vertex_index + 2;
     int32_t ubl = base_vertex_index + 0;
     int32_t ubr = base_vertex_index + 5;
+    */
 
     for (uint32_t i = 0; i < harray_count(tris); ++i)
     {
@@ -1420,9 +1430,71 @@ screen_to_ray(game_state *state)
         0,
     };
     return {
-        state->camera.location,
+        state->camera.relative_location,
         worldspace_ray3,
     };
+}
+
+void
+add_mesh_to_render_lists(game_state *state, m4 model, int32_t mesh, int32_t texture, int32_t armature)
+{
+    MeshFromAssetFlags shadowmap_mesh_flags = {};
+    shadowmap_mesh_flags.cull_front = state->debug.cull_front ? (uint32_t)1 : (uint32_t)0;
+    MeshFromAssetFlags three_dee_mesh_flags = {};
+    three_dee_mesh_flags.attach_shadowmap = 1;
+    three_dee_mesh_flags.attach_shadowmap_color = 1;
+
+    PushMeshFromAsset(
+        &state->pipeline_elements.rl_three_dee.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
+        model,
+        mesh,
+        texture,
+        1,
+        armature,
+        three_dee_mesh_flags,
+        ShaderType::standard
+    );
+
+    PushMeshFromAsset(
+        &state->pipeline_elements.rl_shadowmap.list,
+        (uint32_t)matrix_ids::light_projection_matrix,
+        -1,
+        model,
+        mesh,
+        texture,
+        0,
+        armature,
+        shadowmap_mesh_flags,
+        ShaderType::variance_shadow_map
+    );
+
+    PushMeshFromAsset(
+        &state->pipeline_elements.rl_reflection.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::reflected_mesh_view_matrix,
+        model,
+        mesh,
+        texture,
+        1,
+        armature,
+        three_dee_mesh_flags,
+        ShaderType::standard
+    );
+
+    PushMeshFromAsset(
+        &state->pipeline_elements.rl_refraction.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
+        model,
+        mesh,
+        texture,
+        1,
+        armature,
+        three_dee_mesh_flags,
+        ShaderType::standard
+    );
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -1450,8 +1522,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
         auto &perlin = state->debug.perlin;
-        perlin.seed = 71;
-        perlin.offset = {0.0f, 0.0f};
+        perlin.seed = 95;
+        perlin.offset = {-3.0f, -23.0f};
         //perlin.scale = 27.6f;
         perlin.scale = 22.320f;
         perlin.show = false;
@@ -1687,7 +1759,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             ImGui::Checkbox("Animate Sun", &animate_sun);
             if (animate_sun)
             {
-                static float animation_speed_per_second = 0.1f;
+                static float animation_speed_per_second = 0.05f;
                 ImGui::DragFloat("  Animation Speed", &animation_speed_per_second, 0.001f, 0.0f, 1.0f);
                 if (light.direction.y < -0.5)
                 {
@@ -1746,6 +1818,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::End();
     }
     update_camera(&state->camera, ratio);
+    CameraState inverted_camera = state->camera;
+    update_camera(&inverted_camera, ratio, true);
+    ImGui::Text("Camera location: %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
+    ImGui::Text("Reflection camera location: %.2f, %.2f, %.2f",
+            inverted_camera.location.x,
+            inverted_camera.location.y,
+            inverted_camera.location.z);
+
     if (state->debug.show_camera) {
         ImGui::Begin("Camera", &state->debug.show_camera);
         ImGui::Separator();
@@ -1785,6 +1865,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     update_camera(&state->np_camera, ratio);
     state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = state->camera.projection;
     state->matrices[(uint32_t)matrix_ids::mesh_view_matrix] = state->camera.view;
+
+    state->matrices[(uint32_t)matrix_ids::reflected_mesh_view_matrix] = inverted_camera.view;
+
     state->matrices[(uint32_t)matrix_ids::np_projection_matrix] = state->np_camera.projection;
     state->matrices[(uint32_t)matrix_ids::np_view_matrix] = state->np_camera.view;
 
@@ -1838,7 +1921,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &light = state->lights[(uint32_t)LightIds::sun];
         v3 eye = v3sub({0,0,0}, v3normalize(light.direction));
-        static float eye_distance_base = 20;
+        static float eye_distance_base = 100;
         ImGui::DragFloat("Light distance", &eye_distance_base, 0.1f, 5.0f, 100.0f);
         float eye_distance = eye_distance_base + state->camera.distance;
         shadowmap_projection_matrix = m4orthographicprojection(1.0f, 500.0f + eye_distance, {-eye_distance, -eye_distance}, {eye_distance, eye_distance});
@@ -1880,7 +1963,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t);
 
     {
-        array2p<float> noise2p = state->noisemaps[5].array2p();
+        array2p<float> noise2p = state->noisemaps[12].array2p();
         v2i middle = {
             (int32_t)(noise2p.width / 2),
             (int32_t)(noise2p.height / 2),
@@ -1892,37 +1975,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
         m4 model = m4translate({0,height,0});
 
-        PushMeshFromAsset(
-            &state->three_dee_renderer.list,
-            (uint32_t)matrix_ids::mesh_projection_matrix,
-            (uint32_t)matrix_ids::mesh_view_matrix,
-            model,
-            state->asset_ids.blocky_advanced_mesh,
-            state->asset_ids.blocky_advanced_texture,
-            1,
-            (int32_t)ArmatureIds::test1,
-            three_dee_mesh_flags_debug,
-            ShaderType::standard
-        );
+        add_mesh_to_render_lists(state, model, state->asset_ids.blocky_advanced_mesh, state->asset_ids.blocky_advanced_texture, (int32_t)ArmatureIds::test1);
 
-        PushMeshFromAsset(
-            &state->shadowmap_renderer.list,
-            (uint32_t)matrix_ids::light_projection_matrix,
-            -1,
-            model,
-            state->asset_ids.blocky_advanced_mesh,
-            state->asset_ids.blocky_advanced_texture,
-            0,
-            (int32_t)ArmatureIds::test1,
-            shadowmap_mesh_flags,
-            ShaderType::variance_shadow_map
-        );
-
+        /*
         model = m4translate({0, height + 0.5f, 0});
         MeshFromAssetFlags cube_flags = {};
         cube_flags.depth_disabled = 1;
         PushMeshFromAsset(
-            &state->three_dee_renderer.list,
+            &state->pipeline_elements.rl_three_dee.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
             model,
@@ -1933,6 +1993,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             cube_flags,
             ShaderType::standard
         );
+        */
 
         v2i noise_location = {
             (int32_t)(noise2p.width / 2) + 1,
@@ -1944,36 +2005,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->debug.perlin.control_point_1,
                 noise2p.get(noise_location)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
         model = m4translate({2,height,2});
+        add_mesh_to_render_lists(state, model, state->asset_ids.dog2_mesh, state->asset_ids.dog2_texture, -1);
 
-        PushMeshFromAsset(
-            &state->three_dee_renderer.list,
-            (uint32_t)matrix_ids::mesh_projection_matrix,
-            (uint32_t)matrix_ids::mesh_view_matrix,
-            model,
-            state->asset_ids.dog2_mesh,
-            state->asset_ids.dog2_texture,
-            1,
-            -1,
-            three_dee_mesh_flags_debug,
-            ShaderType::standard
-        );
-
-        PushMeshFromAsset(
-            &state->shadowmap_renderer.list,
-            (uint32_t)matrix_ids::light_projection_matrix,
-            -1,
-            model,
-            state->asset_ids.dog2_mesh,
-            state->asset_ids.dog2_texture,
-            0,
-            -1,
-            shadowmap_mesh_flags,
-            ShaderType::variance_shadow_map
-        );
-
+        /*
         model = m4translate({2,height + 0.5f,2});
         PushMeshFromAsset(
-            &state->three_dee_renderer.list,
+            &state->pipeline_elements.rl_three_dee.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
             model,
@@ -1984,6 +2021,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             cube_flags,
             ShaderType::standard
         );
+        */
     }
 
 
@@ -2001,32 +2039,37 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         m4 model = m4translate(translate);
 
+        add_mesh_to_render_lists(state, model, state->test_mesh_descriptors[noisemap_id], state->test_texture_descriptors[noisemap_id], -1);
+    }
+    {
+        state->pipeline_elements.rl_three_dee_water.list.reflection_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor;
+        state->pipeline_elements.rl_three_dee_water.list.refraction_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor;
+        state->pipeline_elements.rl_three_dee_water.list.dudv_map_asset_descriptor = state->asset_ids.water_dudv;
+        state->pipeline_elements.rl_three_dee_water.list.normal_map_asset_descriptor = state->asset_ids.water_normal;
+        state->pipeline_elements.rl_three_dee_water.list.camera_position = state->camera.location;
+        m4 model = m4mul(
+            m4scale({500,0.1f,500}),
+            m4translate({-0,-0.999f,-1})
+        );
+
+        MeshFromAssetFlags mesh_flags;
+        mesh_flags.attach_shadowmap = 1;
+        mesh_flags.attach_shadowmap_color = 1;
         PushMeshFromAsset(
-            &state->three_dee_renderer.list,
+            &state->pipeline_elements.rl_three_dee_water.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
             model,
-            state->test_mesh_descriptors[noisemap_id],
-            state->test_texture_descriptors[noisemap_id],
+            state->asset_ids.cube_mesh,
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor,
+            //state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor,
             1,
             -1,
-            three_dee_mesh_flags_debug,
-            ShaderType::standard
-        );
-
-        PushMeshFromAsset(
-            &state->shadowmap_renderer.list,
-            (uint32_t)matrix_ids::light_projection_matrix,
-            -1,
-            model,
-            state->test_mesh_descriptors[noisemap_id],
-            state->test_texture_descriptors[noisemap_id],
-            0,
-            -1,
-            shadowmap_mesh_flags,
-            ShaderType::variance_shadow_map
+            mesh_flags,
+            ShaderType::water
         );
     }
+
 
     /*
     int32_t plate_grass_asset_id = -1;
@@ -2165,7 +2208,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         auto &&asset_and_loc = foo[i];
         //m4 model = m4mul(asset_and_loc.transform, state->np_model_matrix);
-        PushMeshFromAsset(&state->three_dee_renderer.list,
+        PushMeshFromAsset(&state->pipeline_elements.rl_three_dee.list,
             (uint32_t)matrix_ids::mesh_projection_matrix,
             (uint32_t)matrix_ids::mesh_view_matrix,
             asset_and_loc.transform,
@@ -2176,7 +2219,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             three_dee_mesh_flags,
             ShaderType::standard
         );
-        PushMeshFromAsset(&state->shadowmap_renderer.list,
+        PushMeshFromAsset(&state->pipeline_elements.rl_shadowmap.list,
             (uint32_t)matrix_ids::light_projection_matrix,
             -1,
             asset_and_loc.transform,
@@ -2190,7 +2233,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     PushDebugTextureLoad(
-        &state->three_dee_renderer.list,
+        &state->pipeline_elements.rl_three_dee.list,
         state->asset_ids.dynamic_texture_test
     );
     */
@@ -2203,26 +2246,37 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             v3normalize(light.direction));
     }
 
-    PushQuad(&state->framebuffer_renderer.list, {0,0},
+    PushSky(&state->pipeline_elements.rl_reflection.list,
+        (int32_t)matrix_ids::mesh_projection_matrix,
+        (int32_t)matrix_ids::reflected_mesh_view_matrix,
+        v3normalize(light.direction));
+
+    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {0,0},
             {(float)input->window.width, (float)input->window.height},
             {1,1,1,1}, 0,
             state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_main].asset_descriptor
     );
-    PushQuad(&state->framebuffer_renderer.list, {100,100},
+    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {100,100},
             {200, 200},
             {1,1,1,1}, 0,
-            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_shadowmap].asset_descriptor
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor
     );
 
-    PushQuad(&state->framebuffer_renderer.list, {400,100},
+    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {400,100},
             {200, 200},
             {1,1,1,1}, 0,
-            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_sm_blur_xy].asset_descriptor
+            state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor
+    );
+
+    PushQuad(&state->pipeline_elements.rl_framebuffer.list, {700,100},
+            {200, 200},
+            {1,1,1,1}, 0,
+            state->asset_ids.water_dudv
     );
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->framebuffer_renderer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+    PushQuad(&state->pipeline_elements.rl_framebuffer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);

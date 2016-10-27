@@ -25,6 +25,7 @@
 #include "hajonta/programs/sky.h"
 #include "hajonta/programs/texarray_1.h"
 #include "hajonta/programs/texarray_1_vsm.h"
+#include "hajonta/programs/texarray_1_water.h"
 
 #include "stb_truetype.h"
 #include "hajonta/ui/ui2d.cpp"
@@ -400,6 +401,45 @@ IndirectBuffer
 };
 
 struct
+TexArray1ShaderConfig
+{
+    Plane clipping_plane;
+    int32_t use_clipping_plane;
+};
+
+struct
+TexArray1WaterShaderConfig
+{
+    v3 camera_position;
+    int reflection_texaddress_index;
+    int refraction_texaddress_index;
+    int dudv_map_texaddress_index;
+    int normal_map_texaddress_index;
+    float tiling;
+
+    float wave_strength;
+    float move_factor;
+    float minimum_variance;
+    float bias;
+    float lightbleed_compensation;
+};
+
+union
+ShaderConfig
+{
+    TexArray1ShaderConfig texarray_1_shaderconfig;
+    TexArray1WaterShaderConfig texarray_1_water_shaderconfig;
+};
+
+struct
+ShaderConfigBuffer
+{
+    uint32_t ubo;
+    uint32_t max_data;
+    uint32_t data_count;
+};
+
+struct
 LightsBuffer
 {
     uint32_t ubo;
@@ -470,6 +510,7 @@ CommandState
     DrawDataBuffer draw_data_buffer;
     BoneDataBuffer bone_data_buffer;
     IndirectBuffer indirect_buffer;
+    ShaderConfigBuffer shaderconfig_buffer;
     LightList light_list;
     LightsBuffer lights_buffer;
     CommandLists lists;
@@ -499,6 +540,7 @@ struct renderer_state
     uint32_t texarray_1_cb1;
     uint32_t texarray_1_cb2;
     uint32_t texarray_1_cb3;
+    uint32_t texarray_1_shaderconfig;
     int32_t texarray_1_texcontainer;
     int32_t texarray_1_shadowmap_tex_id;
     int32_t texarray_1_shadowmap_color_tex_id;
@@ -508,6 +550,13 @@ struct renderer_state
     uint32_t texarray_1_vsm_cb1;
     uint32_t texarray_1_vsm_cb3;
     int32_t texarray_1_vsm_texcontainer;
+
+    texarray_1_water_program_struct texarray_1_water_program;
+    uint32_t texarray_1_water_cb0;
+    uint32_t texarray_1_water_cb1;
+    uint32_t texarray_1_water_cb2;
+    uint32_t texarray_1_water_shaderconfig;
+    int32_t texarray_1_water_texcontainer;
 
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
     uint32_t filter_gaussian_7x1_cb0;
@@ -932,8 +981,8 @@ load_texture_array_asset(
     ++ta_count;
     hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
     return true;
 }
 
@@ -1515,6 +1564,10 @@ program_init(renderer_state *state)
     {
         texarray_1_program_struct *program = &state->texarray_1_program;
         loaded &= texarray_1_program(program);
+        if (!loaded)
+        {
+            return false;
+        }
         state->texarray_1_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
         hglUniformBlockBinding(
             state->texarray_1_program.program,
@@ -1535,8 +1588,16 @@ program_init(renderer_state *state)
             state->texarray_1_program.program,
             state->texarray_1_cb3,
             3);
+        state->texarray_1_shaderconfig = hglGetUniformBlockIndex(program->program, "SHADERCONFIG");
+        hglUniformBlockBinding(
+            state->texarray_1_program.program,
+            state->texarray_1_shaderconfig,
+            9);
         state->texarray_1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
+
+    hglFlush();
+    hglErrorAssert();
 
     {
         texarray_1_vsm_program_struct *program = &state->texarray_1_vsm_program;
@@ -1559,6 +1620,34 @@ program_init(renderer_state *state)
         state->texarray_1_vsm_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
 
+    hglFlush();
+    hglErrorAssert();
+
+    {
+        texarray_1_water_program_struct *program = &state->texarray_1_water_program;
+        loaded &= texarray_1_water_program(program);
+        state->texarray_1_water_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
+        hglUniformBlockBinding(
+            state->texarray_1_water_program.program,
+            state->texarray_1_water_cb0,
+            0);
+        state->texarray_1_water_cb1 = hglGetUniformBlockIndex(program->program, "CB1");
+        hglUniformBlockBinding(
+            state->texarray_1_water_program.program,
+            state->texarray_1_water_cb1,
+            1);
+        state->texarray_1_water_cb2 = hglGetUniformBlockIndex(program->program, "CB2");
+        hglUniformBlockBinding(
+            state->texarray_1_water_program.program,
+            state->texarray_1_water_cb2,
+            2);
+        state->texarray_1_water_shaderconfig = hglGetUniformBlockIndex(program->program, "SHADERCONFIG");
+        hglUniformBlockBinding(
+            program->program,
+            state->texarray_1_water_shaderconfig,
+            9);
+        state->texarray_1_water_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
+    }
     hglFlush();
     hglErrorAssert();
 
@@ -1594,6 +1683,7 @@ program_init(renderer_state *state)
     hglGenBuffers(1, &command_state.bone_data_buffer.ubo);
     hglGenBuffers(1, &command_state.indirect_buffer.ubo);
     hglGenBuffers(1, &command_state.lights_buffer.ubo);
+    hglGenBuffers(1, &command_state.shaderconfig_buffer.ubo);
     hglFlush();
     hglErrorAssert();
 
@@ -1611,6 +1701,12 @@ program_init(renderer_state *state)
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.lights_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(LightList), (void *)0, GL_DYNAMIC_DRAW);
+    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+    hglFlush();
+    hglErrorAssert();
+
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.shaderconfig_buffer.ubo);
+    hglBufferData(GL_UNIFORM_BUFFER, sizeof(ShaderConfig), (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
     hglFlush();
     hglErrorAssert();
@@ -1891,7 +1987,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         hglErrorAssert();
         _GlobalRendererState.initialized = true;
         state->generation_id = 1;
-        state->crash_on_gl_errors = 0;
+        state->crash_on_gl_errors = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
@@ -2020,6 +2116,9 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "dog2_mesh", "testing/dog2/dog2.hjm");
         add_asset(state, "dog2_texture", "testing/dog2/dog2Color.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
+        add_asset(state, "water_normal", "testing/water_normal.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_asset(state, "water_dudv", "testing/water_dudv.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
         {
@@ -2045,7 +2144,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->vsm_minimum_variance = 0.0000002f;
         state->vsm_lightbleed_compensation = 0.001f;
         state->blur_scale_divisor = 4096.0f;
-        state->shadowmap_bias = 0.003f;
+        state->shadowmap_bias = -0.0001f;
         hglGenQueries(
             2 * harray_count(state->timer_query_data.query_ids[0]),
             (uint32_t *)&state->timer_query_data.query_ids
@@ -2491,8 +2590,8 @@ get_texaddress_index_from_asset_descriptor(
                     );
                     hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                     hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                    hglTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
                 }
                 *texaddress_index = (int32_t)d->_texture;
             } break;
@@ -2799,6 +2898,7 @@ get_mesh_from_asset_descriptor(
 void
 draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
 {
+    if (state->crash_on_gl_errors) hglErrorAssert();
     m4 projection = matrices[quads->matrix_id];
 
     v2 st0 = {};
@@ -2831,11 +2931,13 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
             (uint32_t *)&texture, &st0, &st1);
     }
 
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglUseProgram(state->imgui_program.program);
     hglUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
     hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     hglUniform1f(state->imgui_program.u_use_color_id, 1.0f);
+    if (state->crash_on_gl_errors) hglErrorAssert();
     if (use_texaddress)
     {
         hglUniform1i(state->imgui_program.u_texaddress_index_id, texture);
@@ -2877,12 +2979,15 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
         };
     }
 
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     hglVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
     hglVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
     hglVertexAttribPointer((GLuint)state->imgui_program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
     hglBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(state->vertices_scratch[0])) * 4 * quads->entry_count, state->vertices_scratch, GL_STREAM_DRAW);
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->QUADS_ibo);
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     auto &command_state = state->command_state;
     hglBindBufferBase(
@@ -2894,10 +2999,17 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
     memcpy(p, command_state.texture_addresses, sizeof(command_state.texture_addresses));
     hglUnmapBuffer(GL_UNIFORM_BUFFER);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglUniform1i(state->imgui_tex, 0);
     hglActiveTexture(GL_TEXTURE0);
-    hglBindTexture(GL_TEXTURE_2D, texture);
+
+    if (!use_texaddress)
+    {
+        hglBindTexture(GL_TEXTURE_2D, texture);
+    }
+    if (state->crash_on_gl_errors) hglErrorAssert();
     static int32_t texcontainer_textures[harray_count(command_state.textures)] =
     {
         1,
@@ -2913,15 +3025,20 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
     };
 
     hglUniform1iv(state->imgui_texcontainer, harray_count(texcontainer_textures), texcontainer_textures);
+    if (state->crash_on_gl_errors) hglErrorAssert();
     for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
     {
         hglActiveTexture(GL_TEXTURE0 + texcontainer_textures[i]);
         hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
     }
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglActiveTexture(GL_TEXTURE0);
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglDrawElements(GL_TRIANGLES, (GLsizei)quads->entry_count * 6, GL_UNSIGNED_INT, (void *)0);
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     hglUniform1i(state->imgui_program.u_texaddress_index_id, -1);
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     hglBindVertexArray(0);
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -3705,8 +3822,14 @@ append_command(
 
 static bool multi_draw_enabled = true;
 void
-draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
+draw_indirect(
+    renderer_state *state,
+    render_entry_list *list,
+    LightDescriptors light_descriptors,
+    asset_descriptor *descriptors
+    )
 {
+    if (state->crash_on_gl_errors) hglErrorAssert();
     TIMED_FUNCTION();
     auto &command_state = state->command_state;
     auto &command_lists = command_state.lists;
@@ -3734,7 +3857,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
     {
         return;
     }
-
+    ShaderConfig shaderconfig = {};
     uint32_t program_data_index = 0;
     struct
     {
@@ -3765,8 +3888,18 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
             state->texarray_1_vsm_program.a_bone_ids_id,
             state->texarray_1_vsm_program.a_bone_weights_id,
         },
+        {
+            state->texarray_1_water_texcontainer,
+            state->texarray_1_water_program.u_draw_data_index_id,
+            state->texarray_1_water_program.a_position_id,
+            -1
+            -1,
+            -1,
+            -1,
+        },
     };
 
+    if (state->crash_on_gl_errors) hglErrorAssert();
     switch (shader_type)
     {
         case ShaderType::standard:
@@ -3779,7 +3912,10 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
             hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
             hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
             hglCullFace(GL_BACK);
-
+            shaderconfig.texarray_1_shaderconfig = {
+                list->clipping_plane,
+                (int32_t)list->flags.use_clipping_plane,
+            };
         } break;
         case ShaderType::variance_shadow_map:
         {
@@ -3788,7 +3924,53 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
             hglUseProgram(program.program);
             hglCullFace(GL_FRONT);
         } break;
+        case ShaderType::water:
+        {
+            program_data_index = 2;
+            auto &program = state->texarray_1_water_program;
+
+            hglUseProgram(program.program);
+            hglCullFace(GL_BACK);
+
+            int32_t reflection_texaddress_index = - 1;
+            int32_t refraction_texaddress_index = - 1;
+            int32_t dudv_map_texaddress_index = - 1;
+            int32_t normal_map_texaddress_index = - 1;
+            v2 st0, st1;
+            get_texaddress_index_from_asset_descriptor(
+                state, descriptors,
+                list->reflection_asset_descriptor,
+                &reflection_texaddress_index, &st0, &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state, descriptors,
+                list->refraction_asset_descriptor,
+                &refraction_texaddress_index, &st0, &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state, descriptors,
+                list->dudv_map_asset_descriptor,
+                &dudv_map_texaddress_index, &st0, &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state, descriptors,
+                list->normal_map_asset_descriptor,
+                &normal_map_texaddress_index, &st0, &st1);
+            static float move_factor = 0.0f;
+            move_factor += 0.0004f;
+            shaderconfig.texarray_1_water_shaderconfig = {
+                list->camera_position,
+                reflection_texaddress_index,
+                refraction_texaddress_index,
+                dudv_map_texaddress_index,
+                normal_map_texaddress_index,
+                10.0f,
+                0.02f,
+                move_factor,
+                state->vsm_minimum_variance,
+                state->shadowmap_bias,
+                state->vsm_lightbleed_compensation,
+            };
+        } break;
     }
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     auto &pd = program_data[program_data_index];
 
@@ -3824,6 +4006,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         };
     }
 
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
         0,
@@ -3835,6 +4018,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         sizeof(command_state.texture_addresses),
         command_state.texture_addresses);
 
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
         2,
@@ -3847,6 +4031,28 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         0,
         sizeof(LightList),
         command_state.light_list.lights);
+
+    if (list->flags.use_clipping_plane)
+    {
+        hglEnable(GL_CLIP_DISTANCE0);
+    }
+    else
+    {
+        hglDisable(GL_CLIP_DISTANCE0);
+    }
+    if (state->crash_on_gl_errors) hglErrorAssert();
+    hglBindBufferBase(
+        GL_UNIFORM_BUFFER,
+        9,
+        command_state.shaderconfig_buffer.ubo);
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.shaderconfig_buffer.ubo);
+    hglBufferSubData(
+        GL_UNIFORM_BUFFER,
+        0,
+        sizeof(ShaderConfig),
+        &shaderconfig);
+
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     static int32_t texcontainer_textures[harray_count(command_state.textures)] =
@@ -3862,6 +4068,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         8,
         9,
     };
+    if (state->crash_on_gl_errors) hglErrorAssert();
     hglUniform1iv(pd.texcontainer_uniform, harray_count(texcontainer_textures), texcontainer_textures);
     for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
     {
@@ -3870,6 +4077,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
     }
 
     hglActiveTexture(GL_TEXTURE0);
+    if (state->crash_on_gl_errors) hglErrorAssert();
 
     for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
     {
@@ -3901,8 +4109,11 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
                 {
                     hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, position));
                     hglEnableVertexAttribArray((GLuint)pd.a_position_id);
-                    hglVertexAttribPointer((GLuint)pd.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, texcoords));
-                    hglEnableVertexAttribArray((GLuint)pd.a_texcoord_id);
+                    if (pd.a_texcoord_id >= 0)
+                    {
+                        hglVertexAttribPointer((GLuint)pd.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, texcoords));
+                        hglEnableVertexAttribArray((GLuint)pd.a_texcoord_id);
+                    }
                     if (pd.a_normal_id >= 0)
                     {
                         hglVertexAttribPointer((GLuint)pd.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, normal));
@@ -3913,8 +4124,11 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
                 {
                     hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_2), (void *)offsetof(vertexformat_2, position));
                     hglEnableVertexAttribArray((GLuint)pd.a_position_id);
-                    hglVertexAttribPointer((GLuint)pd.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_2), (void *)offsetof(vertexformat_2, texcoords));
-                    hglEnableVertexAttribArray((GLuint)pd.a_texcoord_id);
+                    if (pd.a_texcoord_id >= 0)
+                    {
+                        hglVertexAttribPointer((GLuint)pd.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_2), (void *)offsetof(vertexformat_2, texcoords));
+                        hglEnableVertexAttribArray((GLuint)pd.a_texcoord_id);
+                    }
                     if (pd.a_normal_id >= 0)
                     {
                         hglVertexAttribPointer((GLuint)pd.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_2), (void *)offsetof(vertexformat_2, normal));
@@ -3965,6 +4179,17 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[command_key.index_buffer].ibo);
 
+        if (command_key.shader_type == ShaderType::water)
+        {
+            auto &dd = command_list.draw_data_list.data[0];
+            v3 &camera_position = dd.camera_position;
+            //camera_position.y *= -1.0f;
+            ImGui::Text("Water camera position: %f %f %f",
+                camera_position.x, camera_position.y, camera_position.z);
+
+            ImGui::Text("light_index: %d", dd.light_index);
+        }
+
         hglBindBufferBase(
             GL_UNIFORM_BUFFER,
             1,
@@ -3977,7 +4202,6 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
             0,
             sizeof(DrawDataList),
             command_list.draw_data_list.data);
-
         hglBindBufferBase(
             GL_UNIFORM_BUFFER,
             3,
@@ -4044,6 +4268,7 @@ draw_indirect(renderer_state *state, LightDescriptors light_descriptors)
         command_list.num_commands = 0;
         command_list.num_bones = 0;
     }
+    if (state->crash_on_gl_errors) hglErrorAssert();
 }
 
 enum struct
@@ -4488,7 +4713,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             offset += element_size;
         }
 
-        draw_indirect(state, lights);
+        draw_indirect(state, render_list, lights, asset_descriptors);
 
         if (framebuffer)
         {
@@ -4501,6 +4726,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         if (state->flush_for_profiling) hglFlush();
         hglEndQuery(GL_TIME_ELAPSED);
         END_BLOCK();
+        if (state->crash_on_gl_errors) hglErrorAssert();
     }
 
     if (state->show_debug) {
@@ -4663,5 +4889,6 @@ extern "C" RENDERER_RENDER(renderer_render)
     input->mouse = state->original_mouse_input;
     (void)meshes_drawn;
 
+    hglErrorAssert();
     return true;
 };

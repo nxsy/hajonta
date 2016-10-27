@@ -1,8 +1,31 @@
 #version 410 core
 
+#ifdef GL_ARB_shader_draw_parameters
+#extension GL_ARB_shader_draw_parameters : enable
+#endif
+
 precision highp float;
 precision highp int;
 layout(std140, column_major) uniform;
+
+struct
+Plane
+{
+    vec3 normal;
+    float distance;
+};
+
+struct
+ShaderConfig
+{
+    Plane clipping_plane;
+    int use_clipping_plane;
+};
+
+layout(std140) uniform SHADERCONFIG
+{
+    ShaderConfig shader_config;
+};
 
 struct Tex2DAddress
 {
@@ -116,8 +139,18 @@ void main()
         vec3 w_normal = normalize(v_w_normal);
         Light light = lights[dd.light_index];
         vec3 w_surface_to_light_direction = -light.position_or_direction.xyz;
-        float direction_similarity = max(dot(w_normal, w_surface_to_light_direction), 0.0);
-        float ambient = light.ambient_intensity;
+        //float direction_similarity = max(dot(w_normal, w_surface_to_light_direction), 0.0);
+        float direction_similarity = max(
+            min(
+                dot(w_normal, w_surface_to_light_direction),
+                dot(vec3(0,1,0), w_surface_to_light_direction)
+            ),
+            0.0);
+
+        float horizon_similarity = pow(max(dot(vec3(0,1,0), w_surface_to_light_direction), 0.0), 0.5);
+
+        float ambient = light.ambient_intensity * clamp(horizon_similarity, 0.1, 0.5) * 2.0;
+
         float diffuse = light.diffuse_intensity * direction_similarity;
         vec3 w_surface_to_eye = normalize(dd.camera_position - v_w_position);
         vec3 w_reflection_direction = reflect(-w_surface_to_light_direction.xyz, w_normal);
@@ -141,6 +174,11 @@ void main()
                 light.ambient_intensity + v_w_position.y / 5,
                 light.ambient_intensity + v_w_position.y / 5,
                 light.ambient_intensity + v_w_position.y / 5,
+                1);
+            o_color = vec4(
+                visibility,
+                visibility,
+                visibility,
                 1);
         }
         o_color.a = diffuse_color.a;

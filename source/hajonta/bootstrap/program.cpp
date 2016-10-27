@@ -267,7 +267,7 @@ main(int argc, char **argv)
         uint32_t shader = vertex_shader_id = hglCreateShader((GLenum)GL_VERTEX_SHADER);
         if (!shader)
         {
-            _platform->fail("Failed to allocate shader");
+            _platform->fail("Failed to allocate vertex shader");
             return false;
         }
         int compiled;
@@ -282,15 +282,23 @@ main(int argc, char **argv)
         char info_log[1024] = {};
         strcpy(info_log, PROGRAM_NAME " vertex: ");
         hglGetShaderInfoLog(shader, (GLsizei)(sizeof(info_log) - strlen(info_log)), &info_log_written, info_log + strlen(info_log));
-        if (!compiled)
-        {
-            _platform->fail("Failed to allocate shader");
-            return false;
-        }
 
         if (info_log_written)
         {
             _platform->debug_message(info_log);
+        }
+
+        if (!compiled)
+        {
+            if (info_log_written)
+            {
+                _platform->fail(info_log);
+            }
+            else
+            {
+                _platform->fail("Failed to allocate shader");
+            }
+            return false;
         }
     }
     {

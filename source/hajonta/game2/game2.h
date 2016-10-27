@@ -79,6 +79,8 @@ _asset_ids
     int32_t white_texture;
     int32_t dog2_mesh;
     int32_t dog2_texture;
+    int32_t water_normal;
+    int32_t water_dudv;
     int32_t knp_plate_grass;
 };
 
@@ -491,6 +493,7 @@ enum struct matrix_ids
     quad_projection_matrix,
     mesh_projection_matrix,
     mesh_view_matrix,
+    reflected_mesh_view_matrix,
     np_projection_matrix,
     np_view_matrix,
     light_projection_matrix,
@@ -563,6 +566,7 @@ CameraState
     };
 
     v3 location;
+    v3 relative_location;
     m4 view;
     m4 projection;
 };
@@ -616,15 +620,6 @@ struct game_state
 
     RenderPipeline render_pipeline;
     GamePipelineElements pipeline_elements;
-
-    _render_list<4*1024*1024> two_dee_renderer;
-    _render_list<4*1024*1024> two_dee_debug_renderer;
-    _render_list<4*1024*1024> three_dee_renderer;
-    _render_list<4*1024*1024> shadowmap_renderer;
-    _render_list<1024*1024> framebuffer_renderer;
-    _render_list<1024> multisample_renderer;
-    _render_list<1024> sm_blur_x_renderer;
-    _render_list<1024> sm_blur_xy_renderer;
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
 
@@ -684,7 +679,7 @@ struct game_state
     AssetClassEntry asset_classes[10];
     const char *asset_class_names[10];
 
-#define MESH_SURROUND 3
+#define MESH_SURROUND 2
 #define MESH_WIDTH (1+2*MESH_SURROUND)
 #define MESH_SQUARE (MESH_WIDTH*MESH_WIDTH)
     Mesh test_meshes[MESH_SQUARE];

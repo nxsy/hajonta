@@ -40,6 +40,13 @@ PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *da
         {
             framebuffer->framebuffer.size = framebuffer->size;
         }
+        else if (framebuffer->half_size)
+        {
+            framebuffer->framebuffer.size = {
+                window_size.x/2,
+                window_size.y/2,
+            };
+        }
         else
         {
             framebuffer->framebuffer.size = window_size;
@@ -143,11 +150,11 @@ CreatePipeline(game_state *state)
 
     pipeline_elements.r_framebuffer = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *framebuffer = pipeline->entries + pipeline_elements.r_framebuffer;
-    state->framebuffer_renderer.list.name = DEBUG_NAME("framebuffer");
+    state->pipeline_elements.rl_framebuffer.list.name = DEBUG_NAME("framebuffer");
     *framebuffer = {
-        &state->framebuffer_renderer.list,
-        state->framebuffer_renderer.buffer,
-        sizeof(state->framebuffer_renderer.buffer),
+        &state->pipeline_elements.rl_framebuffer.list,
+        state->pipeline_elements.rl_framebuffer.buffer,
+        sizeof(state->pipeline_elements.rl_framebuffer.buffer),
         -1,
         -1,
     };
@@ -165,43 +172,57 @@ CreatePipeline(game_state *state)
 
     pipeline_elements.r_multisample = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *multisample = pipeline->entries + pipeline_elements.r_multisample;
-    state->multisample_renderer.list.name = DEBUG_NAME("multisample");
+    state->pipeline_elements.rl_multisample.list.name = DEBUG_NAME("multisample");
     *multisample = {
-        &state->multisample_renderer.list,
-        state->multisample_renderer.buffer,
-        sizeof(state->multisample_renderer.buffer),
+        &state->pipeline_elements.rl_multisample.list,
+        state->pipeline_elements.rl_multisample.buffer,
+        sizeof(state->pipeline_elements.rl_multisample.buffer),
         pipeline_elements.fb_main,
         pipeline_elements.fb_multisample,
     };
+
     pipeline_elements.r_three_dee = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *three_dee = pipeline->entries + pipeline_elements.r_three_dee;
-    state->three_dee_renderer.list.name = DEBUG_NAME("three_dee");
+    state->pipeline_elements.rl_three_dee.list.name = DEBUG_NAME("three_dee");
+    pipeline_elements.rl_three_dee.list.flags.use_clipping_plane = 1;
+    pipeline_elements.rl_three_dee.list.clipping_plane = {{0,1,0}, 0};
     *three_dee = {
-        &state->three_dee_renderer.list,
-        state->three_dee_renderer.buffer,
-        sizeof(state->three_dee_renderer.buffer),
+        &state->pipeline_elements.rl_three_dee.list,
+        state->pipeline_elements.rl_three_dee.buffer,
+        sizeof(state->pipeline_elements.rl_three_dee.buffer),
+        pipeline_elements.fb_multisample,
+        -1,
+    };
+
+    pipeline_elements.r_three_dee_water = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *three_dee_water = pipeline->entries + pipeline_elements.r_three_dee_water;
+    state->pipeline_elements.rl_three_dee_water.list.name = DEBUG_NAME("three_dee_water");
+    *three_dee_water = {
+        &state->pipeline_elements.rl_three_dee_water.list,
+        state->pipeline_elements.rl_three_dee_water.buffer,
+        sizeof(state->pipeline_elements.rl_three_dee_water.buffer),
         pipeline_elements.fb_multisample,
         -1,
     };
 
     pipeline_elements.r_shadowmap = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *shadowmap = pipeline->entries + pipeline_elements.r_shadowmap;
-    state->shadowmap_renderer.list.name = DEBUG_NAME("shadowmap");
+    state->pipeline_elements.rl_shadowmap.list.name = DEBUG_NAME("shadowmap");
     *shadowmap = {
-        &state->shadowmap_renderer.list,
-        state->shadowmap_renderer.buffer,
-        sizeof(state->shadowmap_renderer.buffer),
+        &state->pipeline_elements.rl_shadowmap.list,
+        state->pipeline_elements.rl_shadowmap.buffer,
+        sizeof(state->pipeline_elements.rl_shadowmap.buffer),
         pipeline_elements.fb_shadowmap,
         -1,
     };
 
     pipeline_elements.r_sm_blur_x = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *sm_blur_x = pipeline->entries + pipeline_elements.r_sm_blur_x;
-    state->sm_blur_x_renderer.list.name = DEBUG_NAME("sm_blur_x");
+    state->pipeline_elements.rl_sm_blur_x.list.name = DEBUG_NAME("sm_blur_x");
     *sm_blur_x = {
-        &state->sm_blur_x_renderer.list,
-        state->sm_blur_x_renderer.buffer,
-        sizeof(state->sm_blur_x_renderer.buffer),
+        &state->pipeline_elements.rl_sm_blur_x.list,
+        state->pipeline_elements.rl_sm_blur_x.buffer,
+        sizeof(state->pipeline_elements.rl_sm_blur_x.buffer),
         pipeline_elements.fb_sm_blur_x,
         pipeline_elements.fb_shadowmap,
         ApplyFilterType::gaussian_7x1_x,
@@ -209,11 +230,11 @@ CreatePipeline(game_state *state)
 
     pipeline_elements.r_sm_blur_xy = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *sm_blur_xy = pipeline->entries + pipeline_elements.r_sm_blur_xy;
-    state->sm_blur_xy_renderer.list.name = DEBUG_NAME("sm_blur_xy");
+    state->pipeline_elements.rl_sm_blur_xy.list.name = DEBUG_NAME("sm_blur_xy");
     *sm_blur_xy = {
-        &state->sm_blur_xy_renderer.list,
-        state->sm_blur_xy_renderer.buffer,
-        sizeof(state->sm_blur_xy_renderer.buffer),
+        &state->pipeline_elements.rl_sm_blur_xy.list,
+        state->pipeline_elements.rl_sm_blur_xy.buffer,
+        sizeof(state->pipeline_elements.rl_sm_blur_xy.buffer),
         pipeline_elements.fb_sm_blur_xy,
         pipeline_elements.fb_sm_blur_x,
         ApplyFilterType::gaussian_7x1_y,
@@ -230,6 +251,41 @@ CreatePipeline(game_state *state)
         -1,
     };
 
+    pipeline_elements.fb_reflection = RenderPipelineAddFramebuffer(pipeline);
+    auto &fb_reflection = pipeline->framebuffers[pipeline_elements.fb_reflection];
+    fb_reflection.half_size = 1;
+    pipeline_elements.r_reflection = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *reflection = pipeline->entries + pipeline_elements.r_reflection;
+    pipeline_elements.rl_reflection.list.name = DEBUG_NAME("reflection");
+    pipeline_elements.rl_reflection.list.flags.use_clipping_plane = 1;
+    pipeline_elements.rl_reflection.list.clipping_plane = {{0,1,0}, 0};
+    *reflection = {
+        &pipeline_elements.rl_reflection.list,
+        pipeline_elements.rl_reflection.buffer,
+        sizeof(pipeline_elements.rl_reflection.buffer),
+        pipeline_elements.fb_reflection,
+        -1,
+    };
+
+    pipeline_elements.fb_refraction = RenderPipelineAddFramebuffer(pipeline);
+    auto &fb_refraction = pipeline->framebuffers[pipeline_elements.fb_refraction];
+    fb_refraction.half_size = 1;
+    pipeline_elements.r_refraction = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *refraction = pipeline->entries + pipeline_elements.r_refraction;
+    pipeline_elements.rl_refraction.list.name = DEBUG_NAME("refraction");
+    pipeline_elements.rl_refraction.list.flags.use_clipping_plane = 1;
+    pipeline_elements.rl_refraction.list.clipping_plane = {{0,-1,0}, 0};
+    *refraction = {
+        &pipeline_elements.rl_refraction.list,
+        pipeline_elements.rl_refraction.buffer,
+        sizeof(pipeline_elements.rl_refraction.buffer),
+        pipeline_elements.fb_refraction,
+        -1,
+    };
+
+    PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_water, pipeline_elements.r_reflection);
+    PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_water, pipeline_elements.r_refraction);
+    PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_water, pipeline_elements.r_three_dee);
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee, pipeline_elements.r_sm_blur_xy);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_xy, pipeline_elements.r_sm_blur_x);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_x, pipeline_elements.r_shadowmap);

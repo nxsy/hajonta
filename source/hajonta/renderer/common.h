@@ -160,7 +160,8 @@ render_entry_type_descriptors
 
 #define SHADER_TYPES \
     X(standard) \
-    X(variance_shadow_map)
+    X(variance_shadow_map) \
+    X(water) \
 
 enum struct
 ShaderType
@@ -449,12 +450,27 @@ render_entry_type_QUADS_lookup
 };
 
 struct
+RenderEntryListFlags
+{
+    unsigned int use_clipping_plane:1;
+};
+
+struct
 render_entry_list
 {
     const char *name;
     int32_t slot;
     uint32_t depends_on_slots;
 
+    RenderEntryListFlags flags;
+
+    int32_t reflection_asset_descriptor;
+    int32_t refraction_asset_descriptor;
+    int32_t dudv_map_asset_descriptor;
+    int32_t normal_map_asset_descriptor;
+    v3 camera_position;
+
+    Plane clipping_plane;
     uint32_t max_size;
     uint32_t current_size;
     uint8_t *base;

@@ -397,7 +397,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
             v3 pq_size = {l->direction.x, l->direction.y, 0};
             pq_size = v3add(pq_size, {0.05f, 0.05f, 0});
 
-            PushQuad(&_hidden_state->two_dee_debug_renderer.list, pq, pq_size, {1,0,1,0.5f}, 1, -1);
+            PushQuad(&_hidden_state->pipeline_elements.rl_two_dee_debug.list, pq, pq_size, {1,0,1,0.5f}, 1, -1);
 
             v2 n = v2normalize({-l->direction.y,  l->direction.x});
             if (v2dot(movement, n) > 0)
@@ -410,7 +410,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
             v3 npq_size = {n.x, n.y, 0};
             npq_size = v3add(npq_size, {0.05f, 0.05f, 0});
 
-            PushQuad(&_hidden_state->two_dee_debug_renderer.list, npq, npq_size, {1,1,0,0.5f}, 1, -1);
+            PushQuad(&_hidden_state->pipeline_elements.rl_two_dee_debug.list, npq, npq_size, {1,1,0,0.5f}, 1, -1);
 
         }
 
@@ -569,7 +569,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
                 {
                     v3 q = {l->position.x + closest_point_on_line.x - 0.05f, l->position.y + closest_point_on_line.y - 0.05f, 0};
                     v3 q_size = {0.1f, 0.1f, 0};
-                    PushQuad(&_hidden_state->two_dee_debug_renderer.list, q, q_size, {0,1,0,0.5f}, 1, -1);
+                    PushQuad(&_hidden_state->pipeline_elements.rl_two_dee_debug.list, q, q_size, {0,1,0,0.5f}, 1, -1);
 
                     if (distance < 0.002f)
                     {
