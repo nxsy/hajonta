@@ -1,7 +1,7 @@
 #version 410 core
 
 uniform sampler2D tex;
-uniform sampler2DArray TexContainer[10];
+uniform sampler2DArray TexContainer[14];
 uniform int u_texaddress_index = -1;
 
 in vec2 v_uv;
@@ -23,14 +23,14 @@ void main()
 {
     if (u_texaddress_index < 0)
     {
-        o_color = v_color * texture(tex, v_uv.st);
+        o_color = v_color;
     }
     else
     {
         Tex2DAddress addr = texAddress[u_texaddress_index];
         vec3 texCoord = vec3(v_uv.st, addr.Page);
         vec4 diffuse_color = texture(TexContainer[addr.Container], texCoord);
-        o_color = vec4(0.5, 0.5, 0.5, 1.0) * diffuse_color;
+        o_color = v_color * diffuse_color;
     }
     if (o_color.a < 0.001)
     {

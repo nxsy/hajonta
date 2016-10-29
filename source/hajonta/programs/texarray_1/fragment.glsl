@@ -76,7 +76,7 @@ layout(std140) uniform CB2
     Light lights[32];
 };
 
-uniform sampler2DArray TexContainer[10];
+uniform sampler2DArray TexContainer[14];
 
 uniform bool do_not_skip = true;
  uniform bool skip = false;

@@ -1655,6 +1655,29 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             rebuild |= ImGui::DragFloat("Lacunarity", &perlin.lacunarity, 0.001f, 0.001f, 1000.0f, "%0.3f");
             rebuild |= ImGui::DragFloat2("Offset", &perlin.offset.x, 1.00f, -100.0f, 100.0f, "%0.2f");
             rebuild |= ImGui::DragFloat("Height Multiplier", &perlin.height_multiplier, 0.01f, 0.01f, 1000.0f, "%0.2f");
+
+            ImGui::DragFloat2("Control point 0", &state->debug.perlin.control_point_0.x, 0.01f, 0.0f, 1.0f, "%.02f");
+            ImGui::DragFloat2("Control point 1", &state->debug.perlin.control_point_1.x, 0.01f, 0.0f, 1.0f, "%.02f");
+
+            float values[100];
+            v2 p1 = state->debug.perlin.control_point_0;
+            v2 p2 = state->debug.perlin.control_point_1;
+            for (uint32_t i = 0; i < harray_count(values); ++i)
+            {
+                float t = 1.0f / (harray_count(values) - 1) * i;
+                values[i] = cubic_bezier(p1, p2, t).y;
+            }
+            ImGui::PlotLines(
+                (const char *)"Perlin Cubic bezier",
+                (const float *)values,
+                100, // number of values
+                0, // offset of first value
+                (const char *)0,
+                0.0f, // scale_min
+                FLT_MAX, // scale_max
+                ImVec2(600,600), // size
+                sizeof(float)
+            );
             ImGui::End();
         }
         if (rebuild)
@@ -2150,43 +2173,5 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
         ImGui::End();
-    }
-
-    {
-        ImGui::DragFloat2(
-            "Control point 0",
-            &state->debug.perlin.control_point_0.x,
-            0.01f,
-            0.0f,
-            1.0f,
-            "%.02f"
-        );
-        ImGui::DragFloat2(
-            "Control point 1",
-            &state->debug.perlin.control_point_1.x,
-            0.01f,
-            0.0f,
-            1.0f,
-            "%.02f"
-        );
-        float values[100];
-        v2 p1 = state->debug.perlin.control_point_0;
-        v2 p2 = state->debug.perlin.control_point_1;
-        for (uint32_t i = 0; i < harray_count(values); ++i)
-        {
-            float t = 1.0f / (harray_count(values) - 1) * i;
-            values[i] = cubic_bezier(p1, p2, t).y;
-        }
-        ImGui::PlotLines(
-            (const char *)"Perlin Cubic bezier",
-            (const float *)values,
-            100, // number of values
-            0, // offset of first value
-            (const char *)0,
-            0.0f, // scale_min
-            FLT_MAX, // scale_max
-            ImVec2(600,600), // size
-            sizeof(float)
-        );
     }
 }

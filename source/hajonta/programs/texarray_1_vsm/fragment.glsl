@@ -1,6 +1,6 @@
 #version 410 core
 
-uniform sampler2DArray TexContainer[10];
+uniform sampler2DArray TexContainer[14];
 
 in vec2 v_texcoord;
 in vec4 v_position;
