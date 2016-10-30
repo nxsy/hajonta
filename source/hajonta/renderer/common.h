@@ -444,6 +444,9 @@ struct
 RenderEntryListFlags
 {
     unsigned int use_clipping_plane:1;
+    unsigned int depth_disabled:1;
+    unsigned int cull_disabled:1;
+    unsigned int cull_front:1;
 };
 
 struct

@@ -491,6 +491,13 @@ TextureConfig
     };
 };
 
+struct
+TextureLayerInfo
+{
+    int32_t max_layers;
+    int32_t num_layers_used;
+};
+
 #define NUM_TEXARRAY_TEXTURES 14
 struct
 CommandState
@@ -511,7 +518,7 @@ CommandState
 
     uint32_t textures[NUM_TEXARRAY_TEXTURES];
     TextureConfig texture_configs[NUM_TEXARRAY_TEXTURES];
-    uint32_t texture_layer_count[NUM_TEXARRAY_TEXTURES];
+    TextureLayerInfo texture_layer_info[NUM_TEXARRAY_TEXTURES];
 
     uint32_t texture_address_count;
     TextureAddress texture_addresses[100];
@@ -827,6 +834,7 @@ container_index_for_size(CommandState *_command_state, int32_t x, int32_t y, Tex
             int32_t xy = x * y;
             const int32_t target_size = 4096 * 4096 * 10;
             int32_t texture_space_max = min(target_size / xy, 100);
+            command_state.texture_layer_info[container_index].max_layers = texture_space_max;
             hglTexStorage3D(
                 GL_TEXTURE_2D_ARRAY,
                 1,
@@ -843,7 +851,7 @@ uint32_t
 new_texaddress(CommandState *command_state, int32_t x, int32_t y, TextureFormat format)
 {
     uint32_t container_index = container_index_for_size(command_state, x, y, format);
-    auto &layer = command_state->texture_layer_count[container_index];
+    auto &layer = command_state->texture_layer_info[container_index].num_layers_used;
 
     auto &ta_count = command_state->texture_address_count;
     TextureAddress &ta = command_state->texture_addresses[ta_count];
@@ -881,7 +889,7 @@ load_texture_array_asset(
     auto &tex = command_state.textures[container_index];
     GLuint lod = 0;
 
-    auto &layer = command_state.texture_layer_count[container_index];
+    auto &layer = command_state.texture_layer_info[container_index].num_layers_used;
     hglBindTexture(GL_TEXTURE_2D_ARRAY, tex);
     hglTexSubImage3D(
         GL_TEXTURE_2D_ARRAY,
@@ -1922,6 +1930,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_asset(state, "familiar_ship", "testing/kenney/shipBlue.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "familiar", "testing/kenney/alienBlue_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "plane_mesh", "testing/plane.hjm");
+        add_mesh_asset(state, "ground_plane_mesh", "testing/ground_plane.hjm");
         add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
         add_asset(state, "tree_texture", "testing/low_poly_tree/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "horse_mesh", "testing/rigged_horse/horse.hjm");
@@ -2031,6 +2040,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
 
         add_asset(state, "water_normal", "testing/water_normal.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "water_dudv", "testing/water_dudv.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_asset(state, "square_texture", "testing/square.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -3771,9 +3781,32 @@ draw_indirect(
     auto &command_lists = command_state.lists;
 
     //hglDisable(GL_BLEND);
-    hglEnable(GL_DEPTH_TEST);
-    hglDepthFunc(GL_LESS);
-    hglEnable(GL_CULL_FACE);
+    if (!list->flags.depth_disabled)
+    {
+        hglEnable(GL_DEPTH_TEST);
+        hglDepthFunc(GL_LESS);
+    }
+    else
+    {
+        hglDisable(GL_DEPTH_TEST);
+    }
+
+    if (!list->flags.cull_disabled)
+    {
+        hglEnable(GL_CULL_FACE);
+        if (!list->flags.cull_front)
+        {
+            hglCullFace(GL_BACK);
+        }
+        else
+        {
+            hglCullFace(GL_FRONT);
+        }
+    }
+    else
+    {
+        hglDisable(GL_CULL_FACE);
+    }
 
     bool found_commands = false;
     ShaderType shader_type = {};
@@ -3847,7 +3880,6 @@ draw_indirect(
             hglUniform1f(program.u_bias_id, state->shadowmap_bias);
             hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
             hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
-            hglCullFace(GL_BACK);
             shaderconfig.texarray_1_shaderconfig = {
                 list->clipping_plane,
                 (int32_t)list->flags.use_clipping_plane,
@@ -3866,7 +3898,6 @@ draw_indirect(
             auto &program = state->texarray_1_water_program;
 
             hglUseProgram(program.program);
-            hglCullFace(GL_BACK);
             hglEnable(GL_BLEND);
             hglBlendEquation(GL_FUNC_ADD);
             hglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -4472,6 +4503,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
         render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
+        ImGui::Text("Render list: %s", strrchr(render_list->name, '|') + 1);
         {
             RecordDebugEvent(DebugType::BeginBlock, render_list->name);
         }
@@ -4749,14 +4781,17 @@ extern "C" RENDERER_RENDER(renderer_render)
     for (uint32_t i = 0; i < harray_count(command_state.texture_configs); ++i)
     {
         TextureConfig ts = command_state.texture_configs[i];
+        TextureLayerInfo &tli = command_state.texture_layer_info[i];
         if (ts.width)
         {
             ImGui::Text(
-                "Texture container %d, size %dx%d, format %s",
+                "Texture container %d, size %dx%d, format %s, %d/%d used",
                 i,
                 ts.width,
                 ts.height,
-                texture_format_configs[(uint32_t)ts.format].name
+                texture_format_configs[(uint32_t)ts.format].name,
+                tli.num_layers_used,
+                tli.max_layers
                 );
         }
     }
