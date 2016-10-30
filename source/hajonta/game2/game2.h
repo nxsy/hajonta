@@ -239,6 +239,8 @@ astar_data
     uint32_t log_position;
     void *map;
     bool (*astar_passable)(astar_data *data, v2i current, v2i neighbour);
+    float (*initial_cost_estimate)(astar_data *data, v2i location, v2i target);
+    float (*neighbour_cost_estimate)(astar_data *data, v2i current, v2i neighbour);
 };
 
 
@@ -683,7 +685,7 @@ struct game_state
     AssetClassEntry asset_classes[10];
     const char *asset_class_names[10];
 
-#define MESH_SURROUND 2
+#define MESH_SURROUND 0
 #define MESH_WIDTH (1+2*MESH_SURROUND)
 #define MESH_SQUARE (MESH_WIDTH*MESH_WIDTH)
     Mesh test_meshes[MESH_SQUARE];
@@ -693,6 +695,7 @@ struct game_state
 #define NOISE_WIDTH (TERRAIN_MAP_CHUNK_WIDTH / 2 + 1)
 #define NOISE_HEIGHT (TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1)
     array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemaps[MESH_SQUARE];
+    array2<NOISE_WIDTH, NOISE_HEIGHT, float> heightmaps[MESH_SQUARE];
     array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratches[MESH_SQUARE];
     int32_t test_mesh_descriptors[MESH_SQUARE];
     int32_t test_texture_descriptors[MESH_SQUARE];

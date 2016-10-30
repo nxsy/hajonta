@@ -554,8 +554,8 @@ initialize(platform_memory *memory, game_state *state)
         auto &mesh = state->ui_mesh;
         mesh.dynamic = true;
         mesh.vertexformat = 1;
-        mesh.dynamic_max_vertices = 1000;
-        mesh.dynamic_max_triangles = 1000;
+        mesh.dynamic_max_vertices = 10000;
+        mesh.dynamic_max_triangles = 10000;
         mesh.mesh_format = MeshFormat::v3_boneless;
         mesh.vertices.size = sizeof(_vertexformat_1) * mesh.dynamic_max_vertices;
         mesh.vertices.data = malloc(mesh.vertices.size);
@@ -960,6 +960,26 @@ perturb_raw(float raw)
 {
     return fmod(raw, 0.001f) * 100.0f;
 }
+
+void
+generate_heightmap(array2p<float> map, array2p<float> heights, float height_multiplier, v2 cp0, v2 cp1)
+{
+    for (int32_t y = 0; y < map.height - 1; ++y)
+    {
+        for (int32_t x = 0; x < map.width - 1; ++x)
+        {
+            v2 uv_base = {x + 0.5f, y + 0.5f};
+            float raw_base_height = cubic_bezier(
+                cp0,
+                cp1,
+                map.get({x,y})).y;
+            float base_height = roundf(raw_base_height * height_multiplier) / 4 +
+                perturb_raw(raw_base_height);
+            heights.set({x,y}, base_height);
+        }
+    }
+}
+
 
 void
 generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, v2 cp0, v2 cp1)
@@ -1627,12 +1647,76 @@ add_mesh_to_render_lists(game_state *state, m4 model, int32_t mesh, int32_t text
     );
 }
 
+float
+height_for(astar_data *data, v2i tile)
+{
+    array2<NOISE_WIDTH, NOISE_HEIGHT, float> *map = (array2<NOISE_WIDTH, NOISE_HEIGHT, float> *)data->map;
+    v2 noise_location_f = {
+        (float)tile.x / 2,
+        NOISE_HEIGHT - (float)tile.y / 2 - 1,
+    };
+
+    v2i noise_location = {
+        (int32_t)floorf(noise_location_f.x),
+        (int32_t)floorf(noise_location_f.y),
+    };
+
+    bool lerp_x = fmod(noise_location_f.x, 1.0f) > 0.0f;
+    bool lerp_y = fmod(noise_location_f.y, 1.0f) > 0.0f;
+
+    float height = map->get(noise_location);
+
+    if (lerp_x)
+    {
+        v2i noise_location_x = v2add(noise_location, {1,0});
+        height = min(height, map->get(noise_location_x));
+    }
+
+    if (lerp_y)
+    {
+        v2i noise_location_y = v2add(noise_location, {0,1});
+        height = min(height, map->get(noise_location_y));
+    }
+
+    if (lerp_x && lerp_y)
+    {
+        v2i noise_location_xy = v2add(noise_location, {1,1});
+        height = min(height, map->get(noise_location_xy));
+    }
+
+    height += 0.1f;
+    return height;
+}
+
 bool
 noise_passable(astar_data *data, v2i current, v2i neighbour)
 {
-    array2<NOISE_WIDTH, NOISE_HEIGHT, float> *map = (array2<NOISE_WIDTH, NOISE_HEIGHT, float> *)data->map;
-    (void)map;
+#if 0
     return true;
+#else
+    float height = height_for(data, neighbour);
+    return height >= 0;
+#endif
+}
+
+float
+initial_cost_estimate(astar_data *data, v2i tile_start, v2i tile_end)
+{
+    v2 movement = {(float)(tile_start.x - tile_end.x), (float)(tile_start.y - tile_end.y)};
+    return v2length(movement);
+}
+
+float
+neighbour_cost_estimate(astar_data *data, v2i tile_start, v2i tile_end)
+{
+    v2 movement = {(float)(tile_start.x - tile_end.x), (float)(tile_start.y - tile_end.y)};
+    float length = v2length(movement);
+
+    float current_height = height_for(data, tile_start);
+    float neighbour_height = height_for(data, tile_end);
+
+    float diff = abs(current_height - neighbour_height);
+    return pow(length + diff * 2.0f, 3.0f);
 }
 
 void
@@ -1655,16 +1739,18 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
     {
         path.initialized = true;
         path.data.astar_passable = noise_passable;
+        path.data.initial_cost_estimate = initial_cost_estimate;
+        path.data.neighbour_cost_estimate = neighbour_cost_estimate;
         queue_init(
             &path.data.queue,
             harray_count(path.data.entries),
             path.data.entries
         );
-        astar_start(&path.data, &state->noisemaps[MESH_SQUARE / 2 + 1], cowboy_location2, target_tile);
+        astar_start(&path.data, &state->heightmaps[MESH_SQUARE / 2], cowboy_location2, target_tile);
     }
 
     bool next_step = true;
-    bool single_step = true;
+    bool single_step = false;
     if (path.show)
     {
         ImGui::Begin("Path", &path.show);
@@ -1736,7 +1822,67 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
 
     if (path.show)
     {
+        static bool lt = true;
+        static float threshold = 0.0f;
+        ImGui::Checkbox("Less than", &lt);
+        ImGui::DragFloat("Threshold", &threshold, 0.05f);
         ImGui::PushStyleColor(ImGuiCol_WindowBg, {0,0,0,0});
+        /*
+        for (int32_t y = 0; y < TERRAIN_MAP_CHUNK_HEIGHT; ++y)
+        {
+            for (int32_t x = 0; x < TERRAIN_MAP_CHUNK_WIDTH; ++x)
+            {
+                v2 window_location = world_to_screen(
+                    state,
+                    {
+                        (float)x - 32,
+                        0,
+                        (float)y - 32
+                    });
+
+                auto &window = state->frame_state.input->window;
+                float height = height_for(&path.data, {x, y});
+                //height += 0.1f;
+                if ((height > threshold) ? lt : !lt)
+                {
+                    continue;
+                }
+                if (window_location.x < 0)
+                {
+                    continue;
+                }
+                if (window_location.x >= window.width)
+                {
+                    continue;
+                }
+                if (window_location.y < 0)
+                {
+                    continue;
+                }
+                if (window_location.y >= window.height)
+                {
+                    continue;
+                }
+                ImVec2 text_size = ImGui::CalcTextSize("11,11: -0.02");
+                text_size *= 1.1f;
+                ImVec2 window_position = {
+                    window_location.x - text_size.x / 2.0f,
+                    window_location.y - text_size.y / 2.0f + 10,
+                };
+                ImGui::SetNextWindowPos(window_position);
+                ImGui::SetNextWindowSize(text_size);
+                int32_t i = 5000 + (y * TERRAIN_MAP_CHUNK_WIDTH + x);
+                ImGui::PushID((void *)(intptr_t)i);
+                char label[100];
+                sprintf(label, "Overlay coord##%d", i);
+                ImGui::Begin(label, 0, imgui_flags);
+                ImGui::Text("%d,%d: %0.2f", x, y, height);
+                ImGui::End();
+                ImGui::PopID();
+            }
+        }
+        */
+
         auto &queue = path.data.queue;
         for (uint32_t i = 0; i < queue.num_entries; ++i)
         {
@@ -1749,11 +1895,11 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
                     (float)entry.tile_position.y - 32
                 });
 
-            ImVec2 text_size = ImGui::CalcTextSize("11: 11.11");
+            ImVec2 text_size = ImGui::CalcTextSize("11, 11: 11.11\n11: 11.11");
             text_size *= 1.1f;
             ImVec2 window_position = {
                 window_location.x - text_size.x / 2.0f,
-                window_location.y - text_size.y / 2.0f
+                window_location.y - text_size.y / 2.0f - 10,
             };
             ImGui::SetNextWindowPos(window_position);
             ImGui::SetNextWindowSize(text_size);
@@ -1761,7 +1907,9 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
             char label[100];
             sprintf(label, "Overlay##%d", i);
             ImGui::Begin(label, 0, imgui_flags);
-            ImGui::Text("%d: %.2f", i, entry.score);
+            ImGui::Text("%d,%d: %.2f\n%d: %.2f",
+                entry.tile_position.x, entry.tile_position.y, height_for(&path.data, entry.tile_position),
+                i, entry.score);
             ImGui::End();
             ImGui::PopID();
         }
@@ -1799,7 +1947,7 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
             (float)cowboy_location2.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
         };
         auto *path_next_tile = path.data.path + path.data.path_length - 1;
-        while (path_next_tile != path.data.path)
+        while (path_next_tile >= path.data.path)
         {
             ImGui::Text("Next tile in path: %d, %d", path_next_tile->x, path_next_tile->y);
             v2 next_location = {
@@ -2056,6 +2204,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             auto &offset = noisemap_data.offset;
 
             array2p<float> noisemap = state->noisemaps[noisemap_id].array2p();
+            array2p<float> heightmap = state->heightmaps[noisemap_id].array2p();
+
             array2p<v4b> noisemap_scratch = state->noisemap_scratches[noisemap_id].array2p();
             Mesh *test_mesh = state->test_meshes + noisemap_id;
             DynamicTextureDescriptor *test_texture = state->test_textures + noisemap_id;
@@ -2071,6 +2221,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 &perlin.min_noise_height,
                 &perlin.max_noise_height
             );
+
+            generate_heightmap(
+                noisemap,
+                heightmap,
+                perlin.height_multiplier,
+                perlin.control_point_0,
+                perlin.control_point_1);
+
             noise_map_to_texture<TerrainMode::color>(
                 noisemap,
                 noisemap_scratch,
@@ -2338,17 +2496,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 0,
             };
             Ray r = screen_to_ray(state);
-            r.location = state->camera.relative_location;
+            r.location = state->camera.location;
 
+            v3 b = v3mul(r.direction, 1000);
             float t;
             v3 q;
-            if (ray_plane_intersect(r, p, &t, &q))
+            if (segment_plane_intersect(r.location, b, p, &t, &q))
             {
+                ImGui::Text("v3 plane location: %0.2f, %0.2f, %0.2f",
+                    q.x, q.y, q.z);
                 v2 plane_location = {q.x, q.z};
                 ImGui::Text("Plane location: %0.2f, %0.2f", plane_location.x, plane_location.y);
                 target_tile = {
-                    TERRAIN_MAP_CHUNK_WIDTH / 2 + (int32_t)plane_location.x,
-                    TERRAIN_MAP_CHUNK_HEIGHT / 2 + (int32_t)plane_location.y,
+                    TERRAIN_MAP_CHUNK_WIDTH / 2 + (int32_t)roundf(plane_location.x),
+                    TERRAIN_MAP_CHUNK_HEIGHT / 2 + (int32_t)roundf(plane_location.y),
                 };
             }
         }

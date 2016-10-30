@@ -15,6 +15,13 @@ v2add(v2 left, v2 right)
     return result;
 }
 
+v2i
+v2add(v2i left, v2i right)
+{
+    v2i result = {left.x + right.x, left.y + right.y};
+    return result;
+}
+
 template<typename T>
 T
 v2sub(T left, T right)

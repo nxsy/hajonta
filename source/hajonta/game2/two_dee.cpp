@@ -616,7 +616,7 @@ void
 astar_start(astar_data *data, void *map, v2i start_tile, v2i end_tile)
 {
     _astar_init(data);
-    float cost = cost_estimate(start_tile, end_tile);
+    float cost = data->initial_cost_estimate(data, start_tile, end_tile);
 
     auto *open_set_queue = &data->queue;
     queue_add(open_set_queue, { cost, start_tile });
@@ -698,9 +698,6 @@ astar_passable(astar_data *data, v2i current, v2i neighbour)
 void
 astar(astar_data *data, bool one_step = false)
 {
-    auto &log = data->log;
-    auto &log_position = data->log_position;
-
     auto &open_set_queue = data->queue;
     auto &open_set = data->open_set;
     auto &closed_set = data->open_set;
@@ -709,18 +706,14 @@ astar(astar_data *data, bool one_step = false)
     auto &came_from = data->came_from;
 
     v2i result = {};
-    log_position = 0;
-    log_position += sprintf(log + log_position, "End tile is %d, %d!\n", end_tile.x, end_tile.y);
     while (!data->completed && open_set_queue.num_entries)
     {
         auto current = queue_pop(&open_set_queue);
         open_set.set(current.tile_position, false);
         closed_set.set(current.tile_position, true);
 
-        log_position += sprintf(log + log_position, "Lowest score tile is %d, %d with score %f!\n", current.tile_position.x, current.tile_position.y, current.score);
         if (v2iequal(current.tile_position, end_tile))
         {
-            log_position += sprintf(log + log_position, "Current tile is end tile!\n");
             data->completed = true;
             data->found_path = true;
             break;
@@ -760,25 +753,20 @@ astar(astar_data *data, bool one_step = false)
                     current.tile_position.y + y,
                 };
 
-                log_position += sprintf(log + log_position, "Considering neighbour %d, %d!\n", neighbour_position.x, neighbour_position.y);
                 if (!data->astar_passable(data, current.tile_position, neighbour_position))
                 {
-                    log_position += sprintf(log + log_position, "Path impassable, ignoring.\n");
                     continue;
 
                 }
                 if (closed_set.get(neighbour_position))
                 {
-                    log_position += sprintf(log + log_position, "Neighbour is in closed set, ignoring.\n");
                     continue;
                 }
-                float tentative_g_score = g_score.get(current.tile_position) + cost_estimate(current.tile_position, neighbour_position);
+                float tentative_g_score = g_score.get(current.tile_position) + data->neighbour_cost_estimate(data, current.tile_position, neighbour_position);
                 if (open_set.get(neighbour_position))
                 {
                     if (tentative_g_score >= g_score.get(neighbour_position))
                     {
-                        log_position += sprintf(log + log_position, "Neighbour is in open set, but tentative g_score of %f is higher than existing g_score of %f.",
-                                tentative_g_score, g_score.get(neighbour_position));
                         continue;
                     }
                 }
