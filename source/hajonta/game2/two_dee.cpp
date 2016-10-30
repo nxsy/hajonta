@@ -613,7 +613,7 @@ _astar_init(astar_data *data)
     data->completed = false;
 }
 void
-astar_start(astar_data *data, v2i start_tile, v2i end_tile)
+astar_start(astar_data *data, void *map, v2i start_tile, v2i end_tile)
 {
     _astar_init(data);
     float cost = cost_estimate(start_tile, end_tile);
@@ -625,11 +625,13 @@ astar_start(astar_data *data, v2i start_tile, v2i end_tile)
     data->g_score.set(start_tile, 0);
     data->end_tile = end_tile;
     data->start_tile = start_tile;
+    data->map = map;
 }
 
 bool
-astar_passable(astar_data *data, map_data *map, v2i current, v2i neighbour)
+astar_passable(astar_data *data, v2i current, v2i neighbour)
 {
+    map_data *map = (map_data *)data->map;
     auto &log = data->log;
     auto &log_position = data->log_position;
 
@@ -694,7 +696,7 @@ astar_passable(astar_data *data, map_data *map, v2i current, v2i neighbour)
 }
 
 void
-astar(astar_data *data, map_data *map, bool one_step = false)
+astar(astar_data *data, bool one_step = false)
 {
     auto &log = data->log;
     auto &log_position = data->log_position;
@@ -759,7 +761,7 @@ astar(astar_data *data, map_data *map, bool one_step = false)
                 };
 
                 log_position += sprintf(log + log_position, "Considering neighbour %d, %d!\n", neighbour_position.x, neighbour_position.y);
-                if (!astar_passable(data, map, current.tile_position, neighbour_position))
+                if (!data->astar_passable(data, current.tile_position, neighbour_position))
                 {
                     log_position += sprintf(log + log_position, "Path impassable, ignoring.\n");
                     continue;
@@ -999,7 +1001,7 @@ calculate_familiar_acceleration(game_state *state)
     {
         ImGui::Text("Selected tile %d,%d is different from astar end tile of %d,%d, restarting.",
             target_tile.x, target_tile.y, data.end_tile.x, data.end_tile.y);
-        astar_start(&data, familiar_tile, target_tile);
+        astar_start(&data, &state->map, familiar_tile, target_tile);
     }
 
     bool single_step = false;
@@ -1024,7 +1026,7 @@ calculate_familiar_acceleration(game_state *state)
     }
     if (next_step && !data.completed)
     {
-        astar(&data, &state->map, single_step);
+        astar(&data, single_step);
     }
 
     if (familiar_window_shown)

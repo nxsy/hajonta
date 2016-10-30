@@ -16,8 +16,8 @@ struct demo_context
 #define DEMO(func_name) void func_name(platform_memory *memory, game_input *input, game_sound_output *sound_output, demo_context *context)
 typedef DEMO(demo_func);
 
-#define MAP_HEIGHT 32
-#define MAP_WIDTH 32
+#define MAP_HEIGHT 64
+#define MAP_WIDTH 64
 
 struct demo_data {
     const char *name;
@@ -52,6 +52,7 @@ _asset_ids
     int32_t familiar_ship;
     int32_t familiar;
     int32_t plane_mesh;
+    int32_t ground_plane_mesh;
     int32_t tree_mesh;
     int32_t tree_texture;
     int32_t horse_mesh;
@@ -77,6 +78,7 @@ _asset_ids
     int32_t knp_palette;
     int32_t cube_bounds_mesh;
     int32_t white_texture;
+    int32_t square_texture;
     int32_t dog2_mesh;
     int32_t dog2_texture;
     int32_t water_normal;
@@ -235,6 +237,8 @@ astar_data
 
     char log[1024 * 1024];
     uint32_t log_position;
+    void *map;
+    bool (*astar_passable)(astar_data *data, v2i current, v2i neighbour);
 };
 
 
@@ -692,6 +696,9 @@ struct game_state
     array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratches[MESH_SQUARE];
     int32_t test_mesh_descriptors[MESH_SQUARE];
     int32_t test_texture_descriptors[MESH_SQUARE];
+
+    int32_t ui_mesh_descriptor;
+    Mesh ui_mesh;
 
     Landmass landmass;
 

@@ -80,8 +80,24 @@ union triangle3
 
 struct rectangle2
 {
-    v2 position;
-    v2 dimension;
+    union
+    {
+        v2 position;
+        struct
+        {
+            float x;
+            float y;
+        };
+    };
+    union
+    {
+        v2 dimension;
+        struct
+        {
+            float width;
+            float height;
+        };
+    };
 };
 
 struct line2

@@ -291,6 +291,7 @@ initialize(platform_memory *memory, game_state *state)
     state->asset_ids.player = add_asset(asset_descriptors, "player");
     state->asset_ids.familiar_ship = add_asset(asset_descriptors, "familiar_ship");
     state->asset_ids.plane_mesh = add_asset(asset_descriptors, "plane_mesh");
+    state->asset_ids.ground_plane_mesh = add_asset(asset_descriptors, "ground_plane_mesh");
     state->asset_ids.tree_mesh = add_asset(asset_descriptors, "tree_mesh");
     state->asset_ids.tree_texture = add_asset(asset_descriptors, "tree_texture");
     state->asset_ids.horse_mesh = add_asset(asset_descriptors, "horse_mesh", true);
@@ -319,6 +320,7 @@ initialize(platform_memory *memory, game_state *state)
     state->asset_ids.knp_palette = add_asset(asset_descriptors, "knp_palette");
     state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
     state->asset_ids.white_texture = add_asset(asset_descriptors, "white_texture");
+    state->asset_ids.square_texture = add_asset(asset_descriptors, "square_texture");
     state->asset_ids.knp_plate_grass = add_asset(asset_descriptors, "knp_Plate_Grass_01");
     state->asset_ids.dog2_mesh = add_asset(asset_descriptors, "dog2_mesh");
     state->asset_ids.dog2_texture = add_asset(asset_descriptors, "dog2_texture");
@@ -548,6 +550,20 @@ initialize(platform_memory *memory, game_state *state)
         state->test_texture_descriptors[i] = add_dynamic_texture_asset(asset_descriptors, state->test_textures + i);
     }
 
+    {
+        auto &mesh = state->ui_mesh;
+        mesh.dynamic = true;
+        mesh.vertexformat = 1;
+        mesh.dynamic_max_vertices = 1000;
+        mesh.dynamic_max_triangles = 1000;
+        mesh.mesh_format = MeshFormat::v3_boneless;
+        mesh.vertices.size = sizeof(_vertexformat_1) * mesh.dynamic_max_vertices;
+        mesh.vertices.data = malloc(mesh.vertices.size);
+        mesh.indices.size = 4 * 3 * mesh.dynamic_max_triangles;
+        mesh.indices.data = malloc(mesh.indices.size);
+        state->ui_mesh_descriptor = add_dynamic_mesh_asset(asset_descriptors, &mesh);
+    }
+
     for (uint32_t i = 0; i < (uint32_t)TerrainType::MAX + 1; ++i)
     {
         TerrainTypeInfo *ti = state->landmass.terrains + i;
@@ -653,6 +669,206 @@ CornerHeights
     float E[4];
 };
 
+struct
+MeshProxy
+{
+    _vertexformat_1 *vertices;
+    v3i *triangles;
+    uint32_t *vertex_index;
+    uint32_t *num_triangles;
+};
+
+void
+meshp_reset(const MeshProxy &meshp)
+{
+    *meshp.vertex_index = 0;
+    *meshp.num_triangles = 0;
+}
+
+rectangle2
+uv_square = {
+    { 64 / 512.0f, 64 / 512.0f },
+    { 384 / 512.0f , 384  / 512.0f }
+};
+
+rectangle2
+uv_line =
+{
+    { 128 / 512.0f, 65 / 512.0f },
+    { 16 / 512.0f, 14 / 512.0f },
+};
+
+void
+append_square(const MeshProxy &meshp, rectangle2 rect)
+{
+    int32_t base_vertex_index = (int32_t)*meshp.vertex_index;
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { rect.x,0,rect.y },
+        { 0,1,0 },
+        { uv_square.x, uv_square.y },
+    };
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { rect.x,0, rect.y + rect.height },
+        { 0,1,0 },
+        { uv_square.x, uv_square.y + uv_square.height },
+    };
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { rect.x + rect.width,0,rect.y + rect.height },
+        { 0,1,0 },
+        { uv_square.x + uv_square.width, uv_square.y + uv_square.height },
+    };
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { rect.x + rect.width,0,rect.y },
+        { 0,1,0 },
+        { uv_square.x + uv_square.width, uv_square.y },
+    };
+
+    meshp.triangles[(*meshp.num_triangles)++] = {
+        base_vertex_index,
+        base_vertex_index + 1,
+        base_vertex_index + 2,
+    };
+
+    meshp.triangles[(*meshp.num_triangles)++] = {
+        base_vertex_index + 2,
+        base_vertex_index + 3,
+        base_vertex_index,
+    };
+}
+
+void
+append_line(const MeshProxy &meshp, line2 line, float width)
+{
+    v2 direction = line.direction;
+    v2 normal = v2mul(v2normalize({-direction.y, direction.x}), width);
+
+    v2 from = line.position;
+    v2 to = v2add(line.position, line.direction);
+
+    v2 bl = v2sub(from, normal);
+    v2 tl = v2add(from, normal);
+    v2 br = v2sub(to, normal);
+    v2 tr = v2add(to, normal);
+
+
+    int32_t base_vertex_index = (int32_t)*meshp.vertex_index;
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { bl.x, 0, bl.y },
+        { 0,1,0 },
+        { uv_line.x, uv_line.y },
+    };
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { tl.x,0, tl.y },
+        { 0,1,0 },
+        { uv_line.x, uv_line.y + uv_line.height },
+    };
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { tr.x,0,tr.y },
+        { 0,1,0 },
+        { uv_line.x + uv_line.width, uv_line.y + uv_line.height },
+    };
+    meshp.vertices[(*meshp.vertex_index)++] =
+    {
+        { br.x,0, br.y},
+        { 0,1,0 },
+        { uv_line.x + uv_line.width, uv_line.y },
+    };
+
+    meshp.triangles[(*meshp.num_triangles)++] = {
+        base_vertex_index,
+        base_vertex_index + 1,
+        base_vertex_index + 2,
+    };
+
+    meshp.triangles[(*meshp.num_triangles)++] = {
+        base_vertex_index + 2,
+        base_vertex_index + 3,
+        base_vertex_index,
+    };
+
+}
+
+void
+append_arrow(const MeshProxy &meshp, line2 line, float width)
+{
+    append_line(meshp, line, width);
+
+    v2 tip = v2add(line.position, line.direction);
+    v2 tip_start = v2sub(
+        tip,
+        v2mul(v2normalize(line.direction), width * 3)
+    );
+
+    v2 normal = v2mul(v2normalize({-line.direction.y, line.direction.x}), width * 3);
+
+    v2 tip_left_start = v2add(tip_start, normal);
+    v2 tip_left_direction = v2sub(tip, tip_left_start);
+    float tip_left_length = v2length(tip_left_direction);
+    tip_left_direction = v2mul(
+        v2normalize(tip_left_direction),
+        tip_left_length + width
+    );
+    line2 tip_left = {
+        tip_left_start,
+        tip_left_direction,
+    };
+    append_line(meshp, tip_left, width);
+
+    v2 tip_right_start = v2sub(tip_start, normal);
+    line2 tip_right = {
+        tip_right_start,
+        v2sub(tip, tip_right_start),
+    };
+    append_line(meshp, tip_right, width);
+}
+
+void
+test_append(const MeshProxy &meshp, v2i target_tile)
+{
+    /*
+    rectangle2 rect = { {-0.5, -0.5 }, {1, 1} };
+    append_square(meshp, rect);
+    rect = { {-1.5, -1.5 }, {1, 1} };
+    append_square(meshp, rect);
+    rect = { { 0.5,  0.5 }, {1, 1} };
+    append_square(meshp, rect);
+    */
+
+    /*
+    append_arrow(meshp, {{0,0}, {-0.8f,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-1,1}, {0,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-1,2}, {0,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-1,3}, {0,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-1,4}, {0,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-1,5}, {-0.8f,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-2,6}, {-0.8f,0.8f}}, 0.1f);
+    append_arrow(meshp, {{-3,7}, {0,0.8f}}, 0.1f);
+    */
+
+
+    v2 target_tile_f = {
+        (float)target_tile.x - TERRAIN_MAP_CHUNK_WIDTH/2 + 0.5f,
+        (float)target_tile.y - TERRAIN_MAP_CHUNK_WIDTH/2 + 0.5f,
+    };
+    rectangle2 r = {
+        target_tile_f,
+        {1,1},
+    };
+    ImGui::Text("BBB: %.2f, %.2f", r.position.x, r.position.y);
+    append_square(meshp, {{-3.5, 7.5}, {1,1}});
+    append_square(meshp, r);
+    append_square(meshp, {{-1.5, 7.5}, {1,1}});
+    append_square(meshp, {{-3.5, 9.5}, {1,1}});
+}
+
+
 void
 append_block_mesh(
     _vertexformat_1 *vertices,
@@ -675,8 +891,6 @@ append_block_mesh(
     v3 lower_bottom_left = { -0.5f, -10.0f + ch.bottom_left, -0.5f };
     v3 lower_bottom_right = { 0.5f, -10.0f + ch.bottom_right, -0.5f };
 
-    //int32_t base_vertex_index = *vertex_index;
-
     triangle3 tris[] =
     {
         {
@@ -690,13 +904,6 @@ append_block_mesh(
             upper_bottom_right,
         },
     };
-
-    /*
-    int32_t utl = base_vertex_index + 1;
-    int32_t utr = base_vertex_index + 2;
-    int32_t ubl = base_vertex_index + 0;
-    int32_t ubr = base_vertex_index + 5;
-    */
 
     for (uint32_t i = 0; i < harray_count(tris); ++i)
     {
@@ -746,97 +953,6 @@ append_block_mesh(
             tri_base_vertex_index + 0,
         };
     }
-
-    /*
-    int32_t ltl = (*vertex_index)++;
-    vertices[ltl] = {
-        v3add(base_location, lower_top_left),
-        {0,1,0},
-        {
-            (uv_base.x + lower_top_left.x * 0.1f) / uv_size.x,
-            (uv_base.y - lower_top_left.z * 0.1f) / uv_size.y,
-        },
-    };
-
-    int32_t ltr = (*vertex_index)++;
-    vertices[ltr] = {
-        v3add(base_location, lower_top_right),
-        {0,1,0},
-        {
-            (uv_base.x + lower_top_right.x * 0.1f) / uv_size.x,
-            (uv_base.y - lower_top_right.z * 0.1f) / uv_size.y,
-        },
-    };
-    int32_t lbl = (*vertex_index)++;
-    vertices[lbl] = {
-        v3add(base_location, lower_bottom_left),
-        {0,1,0},
-        {
-            (uv_base.x + lower_bottom_left.x * 0.1f) / uv_size.x,
-            (uv_base.y - lower_bottom_left.z * 0.1f) / uv_size.y,
-        },
-    };
-    int32_t lbr = (*vertex_index)++;
-    vertices[lbr] = {
-        v3add(base_location, lower_bottom_right),
-        {0,1,0},
-        {
-            (uv_base.x + lower_bottom_right.x * 0.1f) / uv_size.x,
-            (uv_base.y - lower_bottom_right.z * 0.1f) / uv_size.y,
-        },
-    };
-
-    struct
-    {
-        v4i indices;
-    } other_faces[] =
-    {
-        {
-            lbr,
-            ltr,
-            ltl,
-            lbl,
-        },
-        {
-            lbl,
-            ltl,
-            utl,
-            ubl,
-        },
-        {
-            utr,
-            ltr,
-            lbr,
-            ubr,
-        },
-        {
-            lbl,
-            ubl,
-            ubr,
-            lbr,
-        },
-        {
-            utr,
-            utl,
-            ltl,
-            ltr,
-        },
-    };
-    for (uint32_t i = 0; i < harray_count(other_faces); ++i)
-    {
-        v4i &indices = other_faces[i].indices;
-        triangles[(*num_triangles)++] = {
-            indices.E[0],
-            indices.E[1],
-            indices.E[2],
-        };
-        triangles[(*num_triangles)++] = {
-            indices.E[0],
-            indices.E[2],
-            indices.E[3],
-        };
-    }
-    */
 }
 
 float
@@ -1425,14 +1541,28 @@ screen_to_ray(game_state *state)
         worldspace_ray4.z,
     });
 
-    Plane p = {
-        {0,1,0},
-        0,
-    };
     return {
         state->camera.relative_location,
         worldspace_ray3,
     };
+}
+
+v2
+world_to_screen(game_state *state, v3 pos)
+{
+    v4 pos4 = {pos.x, pos.y, pos.z, 1};
+    v4 view_space = m4mul(state->camera.view, pos4);
+    v4 clip = m4mul(state->camera.projection, view_space);
+    clip = v4div(clip, clip.w);
+
+    v2 clip2 = v2add({0.5f,0.5f}, v2mul({clip.x, -clip.y}, 0.5f));
+
+    auto &window = state->frame_state.input->window;
+    v2 screen_coords = {
+        clip2.x * window.width,
+        clip2.y * window.height,
+    };
+    return screen_coords;
 }
 
 void
@@ -1495,6 +1625,210 @@ add_mesh_to_render_lists(game_state *state, m4 model, int32_t mesh, int32_t text
         three_dee_mesh_flags,
         ShaderType::standard
     );
+}
+
+bool
+noise_passable(astar_data *data, v2i current, v2i neighbour)
+{
+    array2<NOISE_WIDTH, NOISE_HEIGHT, float> *map = (array2<NOISE_WIDTH, NOISE_HEIGHT, float> *)data->map;
+    (void)map;
+    return true;
+}
+
+void
+do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
+{
+    static struct
+    {
+        bool initialized;
+        bool show;
+        astar_data data;
+        bool single_step;
+    } path = {
+        false,
+        true,
+        {},
+        true,
+    };
+
+    if (!path.initialized || !v2iequal(path.data.end_tile, target_tile))
+    {
+        path.initialized = true;
+        path.data.astar_passable = noise_passable;
+        queue_init(
+            &path.data.queue,
+            harray_count(path.data.entries),
+            path.data.entries
+        );
+        astar_start(&path.data, &state->noisemaps[MESH_SQUARE / 2 + 1], cowboy_location2, target_tile);
+    }
+
+    bool next_step = true;
+    bool single_step = true;
+    if (path.show)
+    {
+        ImGui::Begin("Path", &path.show);
+
+        ImGui::Text("Current location: %d, %d", cowboy_location2.x, cowboy_location2.y);
+        ImGui::Text("Target location: %d, %d", target_tile.x, target_tile.y);
+
+        if (ImGui::Button("Restart"))
+        {
+            path.initialized = false;
+        }
+
+        ImGui::Checkbox("Single step", &path.single_step);
+
+        if (path.single_step)
+        {
+            single_step = true;
+            next_step = false;
+            if (ImGui::Button("Next iteration"))
+            {
+                next_step = true;
+            }
+        }
+        bool _c = path.data.completed;
+        ImGui::Checkbox("Completed", &_c);
+        bool _p = path.data.found_path;
+        ImGui::Checkbox("Path found", &_p);
+        ImGui::End();
+    }
+
+    if (next_step && !path.data.completed)
+    {
+        astar(&path.data, single_step);
+    }
+
+    if (path.show)
+    {
+        ImGui::Begin("Path", &path.show);
+        ImGui::InputTextMultiline("##source", path.data.log, path.data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
+
+        auto &queue = path.data.queue;
+        ImGui::Text("Queue has %d of %d entries", queue.num_entries, queue.max_entries);
+        for (uint32_t i = 0; i < queue.num_entries; ++i)
+        {
+            auto &entry = queue.entries[i];
+            ImGui::Text("%d: Score %f, Tile %d, %d", i, entry.score, entry.tile_position.x, entry.tile_position.y);
+        }
+
+        ImGui::Text("Found path: %d", path.data.found_path);
+
+        ImGui::Text("Path has %d entries", path.data.path_length);
+        for (uint32_t i = 0; i < path.data.path_length; ++i)
+        {
+            v2i *current = path.data.path + i;
+            ImGui::Text("%d: %d,%d", i, current->x, current->y);
+        }
+        ImGui::End();
+    }
+
+    ImGuiWindowFlags imgui_flags = 0 |
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse |
+        ImGuiWindowFlags_NoInputs |
+        0;
+
+    if (path.show)
+    {
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, {0,0,0,0});
+        auto &queue = path.data.queue;
+        for (uint32_t i = 0; i < queue.num_entries; ++i)
+        {
+            auto &entry = queue.entries[i];
+            v2 window_location = world_to_screen(
+                state,
+                {
+                    (float)entry.tile_position.x - 32,
+                    0,
+                    (float)entry.tile_position.y - 32
+                });
+
+            ImVec2 text_size = ImGui::CalcTextSize("11: 11.11");
+            text_size *= 1.1f;
+            ImVec2 window_position = {
+                window_location.x - text_size.x / 2.0f,
+                window_location.y - text_size.y / 2.0f
+            };
+            ImGui::SetNextWindowPos(window_position);
+            ImGui::SetNextWindowSize(text_size);
+            ImGui::PushID((void *)(uintptr_t)i);
+            char label[100];
+            sprintf(label, "Overlay##%d", i);
+            ImGui::Begin(label, 0, imgui_flags);
+            ImGui::Text("%d: %.2f", i, entry.score);
+            ImGui::End();
+            ImGui::PopID();
+        }
+        //float height = ImGui::GetItemsLineHeightWithSpacing();
+
+        ImGui::PopStyleColor();
+    }
+
+    auto &mesh = state->ui_mesh;
+    MeshProxy meshp = {
+        (_vertexformat_1 *)mesh.vertices.data,
+        (v3i *)mesh.indices.data,
+        &mesh.v3_boneless.vertex_count,
+        &mesh.num_triangles,
+    };
+    m4 model = m4identity();
+    MeshFromAssetFlags flags = {};
+    flags.depth_disabled = 1;
+    meshp_reset(meshp);
+
+    v2 target_tile_f = {
+        (float)target_tile.x - TERRAIN_MAP_CHUNK_WIDTH/2 - 0.5f,
+        (float)target_tile.y - TERRAIN_MAP_CHUNK_WIDTH/2 - 0.5f,
+    };
+    rectangle2 r = {
+        target_tile_f,
+        {1,1},
+    };
+    append_square(meshp, r);
+
+    if (path.data.found_path)
+    {
+        v2 previous_location = {
+            (float)cowboy_location2.x - TERRAIN_MAP_CHUNK_WIDTH/2,
+            (float)cowboy_location2.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+        };
+        auto *path_next_tile = path.data.path + path.data.path_length - 1;
+        while (path_next_tile != path.data.path)
+        {
+            ImGui::Text("Next tile in path: %d, %d", path_next_tile->x, path_next_tile->y);
+            v2 next_location = {
+                (float)path_next_tile->x - TERRAIN_MAP_CHUNK_WIDTH/2,
+                (float)path_next_tile->y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+            };
+            v2 direction = v2mul(v2sub(next_location, previous_location), 0.8f);
+            line2 line = {previous_location, direction};
+            append_arrow(meshp, line, 0.1f);
+            --path_next_tile;
+            previous_location = next_location;
+        }
+    }
+
+    mesh.reload = true;
+
+    PushMeshFromAsset(
+        &state->pipeline_elements.rl_three_dee_debug.list,
+        (uint32_t)matrix_ids::mesh_projection_matrix,
+        (uint32_t)matrix_ids::mesh_view_matrix,
+        model,
+        state->ui_mesh_descriptor,
+        state->asset_ids.square_texture,
+        0,
+        -1,
+        flags,
+        ShaderType::standard
+    );
+
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -1985,6 +2319,43 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
     advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t);
 
+    static v3 cowboy_location = {};
+    v2i cowboy_location2 = {
+        (int32_t)roundf(cowboy_location.x) + TERRAIN_MAP_CHUNK_WIDTH / 2,
+        (int32_t)roundf(cowboy_location.z) + TERRAIN_MAP_CHUNK_HEIGHT / 2,
+    };
+    static v2i target_tile = {
+        TERRAIN_MAP_CHUNK_WIDTH / 2 + 1,
+        TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1,
+    };
+    {
+        MouseInput *mouse = &input->mouse;
+
+        if (BUTTON_ENDED_DOWN(mouse->buttons.left))
+        {
+            Plane p = {
+                {0,1,0},
+                0,
+            };
+            Ray r = screen_to_ray(state);
+            r.location = state->camera.relative_location;
+
+            float t;
+            v3 q;
+            if (ray_plane_intersect(r, p, &t, &q))
+            {
+                v2 plane_location = {q.x, q.z};
+                ImGui::Text("Plane location: %0.2f, %0.2f", plane_location.x, plane_location.y);
+                target_tile = {
+                    TERRAIN_MAP_CHUNK_WIDTH / 2 + (int32_t)plane_location.x,
+                    TERRAIN_MAP_CHUNK_HEIGHT / 2 + (int32_t)plane_location.y,
+                };
+            }
+        }
+    }
+
+    do_path_stuff(state, cowboy_location2, target_tile);
+
     {
         array2p<float> noise2p = state->noisemaps[12].array2p();
         v2i middle = {
@@ -1996,9 +2367,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->debug.perlin.control_point_0,
                 state->debug.perlin.control_point_1,
                 noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
-        m4 model = m4translate({0,height,0});
 
-        add_mesh_to_render_lists(state, model, state->asset_ids.blocky_advanced_mesh, state->asset_ids.blocky_advanced_texture, (int32_t)ArmatureIds::test1);
+
+        add_mesh_to_render_lists(
+            state,
+            m4translate({0,height,0}),
+            state->asset_ids.blocky_advanced_mesh,
+            state->asset_ids.blocky_advanced_texture,
+            (int32_t)ArmatureIds::test1);
 
         /*
         model = m4translate({0, height + 0.5f, 0});
@@ -2017,6 +2393,25 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             ShaderType::standard
         );
         */
+        /*
+        {
+            m4 model = m4scale(0.5);
+            MeshFromAssetFlags flags = {};
+            flags.depth_disabled = 1;
+            PushMeshFromAsset(
+                &state->pipeline_elements.rl_three_dee_debug.list,
+                (uint32_t)matrix_ids::mesh_projection_matrix,
+                (uint32_t)matrix_ids::mesh_view_matrix,
+                model,
+                state->asset_ids.ground_plane_mesh,
+                state->asset_ids.square_texture,
+                0,
+                -1,
+                flags,
+                ShaderType::standard
+            );
+        }
+        */
 
         v2i noise_location = {
             (int32_t)(noise2p.width / 2) + 1,
@@ -2027,8 +2422,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->debug.perlin.control_point_0,
                 state->debug.perlin.control_point_1,
                 noise2p.get(noise_location)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
-        model = m4translate({2,height,2});
-        add_mesh_to_render_lists(state, model, state->asset_ids.dog2_mesh, state->asset_ids.dog2_texture, -1);
+        add_mesh_to_render_lists(
+            state,
+            m4translate({2,height,2}),
+            state->asset_ids.dog2_mesh,
+            state->asset_ids.dog2_texture,
+            -1);
 
         /*
         model = m4translate({2,height + 0.5f,2});

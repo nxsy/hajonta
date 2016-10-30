@@ -58,7 +58,7 @@ RenderPipeline
     RenderPipelineFramebuffer framebuffers[10];
 
     uint8_t dependency_count;
-    RenderPipelineDependency dependencies[10];
+    RenderPipelineDependency dependencies[20];
 };
 
 typedef uint8_t RenderPipelineFramebufferId;
@@ -91,6 +91,7 @@ GamePipelineElements
     RenderPipelineRendererId r_nature_pack_debug;
     RenderPipelineRendererId r_reflection;
     RenderPipelineRendererId r_refraction;
+    RenderPipelineRendererId r_three_dee_debug;
 
     _render_list<1024 * 100> rl_nature_pack_debug;
     _render_list<2 * 1024 * 1024> rl_sky;
@@ -102,6 +103,7 @@ GamePipelineElements
     _render_list<4*1024*1024> rl_two_dee_debug;
     _render_list<4*1024*1024> rl_three_dee;
     _render_list<1024> rl_three_dee_water;
+    _render_list<1024*1024> rl_three_dee_debug;
     _render_list<4*1024*1024> rl_shadowmap;
     _render_list<1024*1024> rl_framebuffer;
     _render_list<1024> rl_multisample;

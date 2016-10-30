@@ -207,6 +207,19 @@ CreatePipeline(game_state *state)
         -1,
     };
 
+    pipeline_elements.r_three_dee_debug = RenderPipelineAddRenderer(pipeline);
+    RenderPipelineEntry *three_dee_debug = pipeline->entries + pipeline_elements.r_three_dee_debug;
+    state->pipeline_elements.rl_three_dee_debug.list.name = DEBUG_NAME("three_dee_debug");
+    state->pipeline_elements.rl_three_dee_debug.list.flags.depth_disabled = 1;
+    state->pipeline_elements.rl_three_dee_debug.list.flags.cull_disabled = 1;
+    *three_dee_debug = {
+        &state->pipeline_elements.rl_three_dee_debug.list,
+        state->pipeline_elements.rl_three_dee_debug.buffer,
+        sizeof(state->pipeline_elements.rl_three_dee_debug.buffer),
+        pipeline_elements.fb_multisample,
+        -1,
+    };
+
     pipeline_elements.r_shadowmap = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *shadowmap = pipeline->entries + pipeline_elements.r_shadowmap;
     state->pipeline_elements.rl_shadowmap.list.name = DEBUG_NAME("shadowmap");
@@ -289,10 +302,13 @@ CreatePipeline(game_state *state)
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_water, pipeline_elements.r_reflection);
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_water, pipeline_elements.r_refraction);
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_water, pipeline_elements.r_three_dee);
+    PipelineAddDependency(pipeline, pipeline_elements.r_three_dee_debug, pipeline_elements.r_three_dee_water);
     PipelineAddDependency(pipeline, pipeline_elements.r_three_dee, pipeline_elements.r_sm_blur_xy);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_xy, pipeline_elements.r_sm_blur_x);
     PipelineAddDependency(pipeline, pipeline_elements.r_sm_blur_x, pipeline_elements.r_shadowmap);
     PipelineAddDependency(pipeline, pipeline_elements.r_multisample, pipeline_elements.r_three_dee);
+    PipelineAddDependency(pipeline, pipeline_elements.r_multisample, pipeline_elements.r_three_dee_water);
+    PipelineAddDependency(pipeline, pipeline_elements.r_multisample, pipeline_elements.r_three_dee_debug);
     PipelineAddDependency(pipeline, pipeline_elements.r_framebuffer, pipeline_elements.r_sky);
     PipelineAddDependency(pipeline, pipeline_elements.r_sky, pipeline_elements.r_multisample);
 }
