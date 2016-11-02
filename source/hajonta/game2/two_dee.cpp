@@ -399,12 +399,12 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
 
             PushQuad(&_hidden_state->pipeline_elements.rl_two_dee_debug.list, pq, pq_size, {1,0,1,0.5f}, 1, -1);
 
-            v2 n = v2normalize({-l->direction.y,  l->direction.x});
+            v2 n = v2normalize(v2{-l->direction.y,  l->direction.x});
             if (v2dot(movement, n) > 0)
             {
-                n = v2normalize({ l->direction.y, -l->direction.x});
+                n = v2normalize(v2{ l->direction.y, -l->direction.x});
             }
-            v3 nq = v3add(q, v3mul({l->direction.x, l->direction.y, 0}, 0.5f));
+            v3 nq = v3add(q, v3mul(v3{l->direction.x, l->direction.y, 0}, 0.5f));
 
             v3 npq = v3sub(nq, {0.05f, 0.05f, 0});
             v3 npq_size = {n.x, n.y, 0};
@@ -510,7 +510,7 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
                 }
                 movement = new_movement;
 
-                v2 rhn = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
+                v2 rhn = v2normalize(v2{-intersecting_direction.y,  intersecting_direction.x});
                 v2 velocity_projection = v2projection(rhn, data.velocity);
                 v2 new_velocity = v2sub(data.velocity, velocity_projection);
                 if (debug)
@@ -519,10 +519,10 @@ apply_movement(map_data *map, movement_data data_in, bool debug)
                 }
                 data.velocity = new_velocity;
 
-                v2 n = v2normalize({-intersecting_direction.y,  intersecting_direction.x});
+                v2 n = v2normalize(v2{-intersecting_direction.y,  intersecting_direction.x});
                 if (v2dot(used_movement, n) > 0)
                 {
-                    n = v2normalize({ intersecting_direction.y, -intersecting_direction.x});
+                    n = v2normalize(v2{ intersecting_direction.y, -intersecting_direction.x});
                 }
                 n = v2mul(n, 0.002f);
 

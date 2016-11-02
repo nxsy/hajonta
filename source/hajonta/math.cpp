@@ -51,10 +51,11 @@ v2div(v2i v, int32_t divisor)
     return result;
 }
 
+template<typename T>
 float
-v2length(v2 v)
+v2length(T v)
 {
-    float result = sqrtf(v.x * v.x + v.y * v.y);
+    float result = sqrtf((float)(v.x * v.x + v.y * v.y));
     return result;
 }
 
@@ -65,6 +66,19 @@ v2normalize(v2 v)
     if (length == 0)
     {
         return v;
+    }
+
+    v2 result = {v.x / length, v.y / length};
+    return result;
+}
+
+v2
+v2normalize(v2i v)
+{
+    float length = v2length(v);
+    if (length == 0)
+    {
+        return {(float)v.x, (float)v.y};
     }
 
     v2 result = {v.x / length, v.y / length};
@@ -95,6 +109,12 @@ v2projection(v2 q, v2 p)
 
 bool
 v2iequal(v2i left, v2i right)
+{
+    return left.x == right.x && left.y == right.y;
+};
+
+bool
+v2equal(v2 left, v2 right)
 {
     return left.x == right.x && left.y == right.y;
 };

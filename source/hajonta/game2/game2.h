@@ -609,6 +609,15 @@ Landmass
     TerrainTypeInfo terrains[(uint32_t)TerrainType::MAX + 1];
 };
 
+struct
+Pathfinding
+{
+    bool initialized;
+    bool show;
+    astar_data data;
+    bool single_step;
+};
+
 struct game_state
 {
     bool initialized;
@@ -711,5 +720,8 @@ struct game_state
         bool rebuild;
     } noisemaps_data[MESH_SQUARE];
     v2 noisemap_base;
+
+    Pathfinding cowboy_path;
+    float cowboy_rotation;
 };
 

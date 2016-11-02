@@ -744,7 +744,7 @@ void
 append_line(const MeshProxy &meshp, line2 line, float width)
 {
     v2 direction = line.direction;
-    v2 normal = v2mul(v2normalize({-direction.y, direction.x}), width);
+    v2 normal = v2mul(v2normalize(v2{-direction.y, direction.x}), width);
 
     v2 from = line.position;
     v2 to = v2add(line.position, line.direction);
@@ -806,7 +806,7 @@ append_arrow(const MeshProxy &meshp, line2 line, float width)
         v2mul(v2normalize(line.direction), width * 3)
     );
 
-    v2 normal = v2mul(v2normalize({-line.direction.y, line.direction.x}), width * 3);
+    v2 normal = v2mul(v2normalize(v2{-line.direction.y, line.direction.x}), width * 3);
 
     v2 tip_left_start = v2add(tip_start, normal);
     v2 tip_left_direction = v2sub(tip, tip_left_start);
@@ -1345,7 +1345,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
     }
     if (armature->proceed_time)
     {
-        armature->tick += 1.0f / 60.0f * 24.0f * playback_speed;
+        armature->tick += delta_t * 24.0f * playback_speed;
     }
     int32_t first_bone = 0;
     for (uint32_t i = 0; i < mesh_data.num_bones; ++i)
@@ -1665,25 +1665,30 @@ height_for(astar_data *data, v2i tile)
     bool lerp_y = fmod(noise_location_f.y, 1.0f) > 0.0f;
 
     float height = map->get(noise_location);
+    uint32_t num_heights = 1;
 
     if (lerp_x)
     {
         v2i noise_location_x = v2add(noise_location, {1,0});
-        height = min(height, map->get(noise_location_x));
+        height += map->get(noise_location_x);
+        ++num_heights;
     }
 
     if (lerp_y)
     {
         v2i noise_location_y = v2add(noise_location, {0,1});
-        height = min(height, map->get(noise_location_y));
+        height += map->get(noise_location_y);
+        ++num_heights;
     }
 
     if (lerp_x && lerp_y)
     {
         v2i noise_location_xy = v2add(noise_location, {1,1});
-        height = min(height, map->get(noise_location_xy));
+        height += map->get(noise_location_xy);
+        ++num_heights;
     }
 
+    height /= num_heights;
     height += 0.1f;
     return height;
 }
@@ -1720,52 +1725,39 @@ neighbour_cost_estimate(astar_data *data, v2i tile_start, v2i tile_end)
 }
 
 void
-do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
+do_path_stuff(game_state *state, Pathfinding *path, v2i cowboy_location2, v2i target_tile)
 {
-    static struct
+    if (!path->initialized || !v2iequal(path->data.end_tile, target_tile))
     {
-        bool initialized;
-        bool show;
-        astar_data data;
-        bool single_step;
-    } path = {
-        false,
-        true,
-        {},
-        true,
-    };
-
-    if (!path.initialized || !v2iequal(path.data.end_tile, target_tile))
-    {
-        path.initialized = true;
-        path.data.astar_passable = noise_passable;
-        path.data.initial_cost_estimate = initial_cost_estimate;
-        path.data.neighbour_cost_estimate = neighbour_cost_estimate;
+        path->initialized = true;
+        path->data.astar_passable = noise_passable;
+        path->data.initial_cost_estimate = initial_cost_estimate;
+        path->data.neighbour_cost_estimate = neighbour_cost_estimate;
         queue_init(
-            &path.data.queue,
-            harray_count(path.data.entries),
-            path.data.entries
+            &path->data.queue,
+            harray_count(path->data.entries),
+            path->data.entries
         );
-        astar_start(&path.data, &state->heightmaps[MESH_SQUARE / 2], cowboy_location2, target_tile);
+        astar_start(&path->data, &state->heightmaps[MESH_SQUARE / 2], cowboy_location2, target_tile);
     }
 
     bool next_step = true;
     bool single_step = false;
-    if (path.show)
+    if (path->show)
     {
-        ImGui::Begin("Path", &path.show);
+        ImGui::Begin("Path", &path->show);
 
         ImGui::Text("Current location: %d, %d", cowboy_location2.x, cowboy_location2.y);
         ImGui::Text("Target location: %d, %d", target_tile.x, target_tile.y);
 
         if (ImGui::Button("Restart"))
         {
-            path.initialized = false;
+            path->initialized = false;
         }
 
-        ImGui::Checkbox("Single step", &path.single_step);
+        ImGui::Checkbox("Single step", &path->single_step);
 
-        if (path.single_step)
+        if (path->single_step)
         {
             single_step = true;
             next_step = false;
@@ -1774,24 +1766,24 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
                 next_step = true;
             }
         }
-        bool _c = path.data.completed;
+        bool _c = path->data.completed;
         ImGui::Checkbox("Completed", &_c);
-        bool _p = path.data.found_path;
+        bool _p = path->data.found_path;
         ImGui::Checkbox("Path found", &_p);
         ImGui::End();
     }
 
-    if (next_step && !path.data.completed)
+    if (next_step && !path->data.completed)
     {
-        astar(&path.data, single_step);
+        astar(&path->data, single_step);
     }
 
-    if (path.show)
+    if (path->show)
     {
-        ImGui::Begin("Path", &path.show);
-        ImGui::InputTextMultiline("##source", path.data.log, path.data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
+        ImGui::Begin("Path", &path->show);
+        ImGui::InputTextMultiline("##source", path->data.log, path->data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
 
-        auto &queue = path.data.queue;
+        auto &queue = path->data.queue;
         ImGui::Text("Queue has %d of %d entries", queue.num_entries, queue.max_entries);
         for (uint32_t i = 0; i < queue.num_entries; ++i)
         {
@@ -1799,12 +1791,12 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
             ImGui::Text("%d: Score %f, Tile %d, %d", i, entry.score, entry.tile_position.x, entry.tile_position.y);
         }
 
-        ImGui::Text("Found path: %d", path.data.found_path);
+        ImGui::Text("Found path: %d", path->data.found_path);
 
-        ImGui::Text("Path has %d entries", path.data.path_length);
-        for (uint32_t i = 0; i < path.data.path_length; ++i)
+        ImGui::Text("Path has %d entries", path->data.path_length);
+        for (uint32_t i = 0; i < path->data.path_length; ++i)
         {
-            v2i *current = path.data.path + i;
+            v2i *current = path->data.path + i;
             ImGui::Text("%d: %d,%d", i, current->x, current->y);
         }
         ImGui::End();
@@ -1820,7 +1812,7 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
         ImGuiWindowFlags_NoInputs |
         0;
 
-    if (path.show)
+    if (path->show)
     {
         static bool lt = true;
         static float threshold = 0.0f;
@@ -1841,7 +1833,7 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
                     });
 
                 auto &window = state->frame_state.input->window;
-                float height = height_for(&path.data, {x, y});
+                float height = height_for(&path->data, {x, y});
                 //height += 0.1f;
                 if ((height > threshold) ? lt : !lt)
                 {
@@ -1883,7 +1875,7 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
         }
         */
 
-        auto &queue = path.data.queue;
+        auto &queue = path->data.queue;
         for (uint32_t i = 0; i < queue.num_entries; ++i)
         {
             auto &entry = queue.entries[i];
@@ -1908,7 +1900,7 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
             sprintf(label, "Overlay##%d", i);
             ImGui::Begin(label, 0, imgui_flags);
             ImGui::Text("%d,%d: %.2f\n%d: %.2f",
-                entry.tile_position.x, entry.tile_position.y, height_for(&path.data, entry.tile_position),
+                entry.tile_position.x, entry.tile_position.y, height_for(&path->data, entry.tile_position),
                 i, entry.score);
             ImGui::End();
             ImGui::PopID();
@@ -1940,14 +1932,14 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
     };
     append_square(meshp, r);
 
-    if (path.data.found_path)
+    if (path->data.found_path)
     {
         v2 previous_location = {
             (float)cowboy_location2.x - TERRAIN_MAP_CHUNK_WIDTH/2,
             (float)cowboy_location2.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
         };
-        auto *path_next_tile = path.data.path + path.data.path_length - 1;
-        while (path_next_tile >= path.data.path)
+        auto *path_next_tile = path->data.path + path->data.path_length - 1;
+        while (path_next_tile >= path->data.path)
         {
             ImGui::Text("Next tile in path: %d, %d", path_next_tile->x, path_next_tile->y);
             v2 next_location = {
@@ -1977,6 +1969,44 @@ do_path_stuff(game_state *state, v2i cowboy_location2, v2i target_tile)
         ShaderType::standard
     );
 
+}
+
+struct
+Motion
+{
+    v2 movement;
+    float rotation;
+};
+
+Motion
+direction_to_motion(v2 direction, float current_rotation, float speed)
+{
+    v2 normalized_direction = v2normalize(direction);
+    v2 movement = v2mul(normalized_direction, speed);
+    float target_rotation = -atan2(normalized_direction.x, normalized_direction.y);
+
+    float rotation_diff = target_rotation - current_rotation;
+
+    if (rotation_diff > h_pi)
+    {
+        rotation_diff -= h_twopi;
+    }
+    else if (rotation_diff < -h_pi)
+    {
+        rotation_diff += h_twopi;
+    }
+
+    float rotation_per_frame_percentage = abs(rotation_diff / (h_halfpi / 8));
+    if (rotation_per_frame_percentage > 1.0f)
+    {
+        rotation_diff /= rotation_per_frame_percentage;
+        movement = {};
+    }
+    else
+    {
+        movement = v2mul(movement, (1 - rotation_per_frame_percentage));
+    }
+    return Motion{movement, rotation_diff};
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -2015,6 +2045,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.height_multiplier = 113.0f;
         perlin.min_noise_height = FLT_MAX;
         perlin.max_noise_height = FLT_MIN;
+        //auto &path = state->cowboy_path;
     }
 
     if (memory->imgui_state)
@@ -2473,9 +2504,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
     //three_dee_mesh_flags_debug.debug = 1;
-    //
-    advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, input->delta_t);
-    advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t);
 
     static v3 cowboy_location = {};
     v2i cowboy_location2 = {
@@ -2486,6 +2514,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         TERRAIN_MAP_CHUNK_WIDTH / 2 + 1,
         TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1,
     };
+    float cowboy_speed = 0;
     {
         MouseInput *mouse = &input->mouse;
 
@@ -2515,7 +2544,70 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    do_path_stuff(state, cowboy_location2, target_tile);
+    auto path = &state->cowboy_path;
+    do_path_stuff(state, path, cowboy_location2, target_tile);
+
+    static char log[100][100] = {};
+    static uint32_t log_pos = 0;
+
+    if (path->data.found_path)
+    {
+        v2 previous_location = {
+            (float)cowboy_location2.x - TERRAIN_MAP_CHUNK_WIDTH/2,
+            (float)cowboy_location2.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+        };
+
+        auto *path_next_tile = path->data.path + path->data.path_length - 1;
+        v2 next_location = {};
+        bool have_next_location = false;
+        while (path_next_tile >= path->data.path)
+        {
+            next_location = {
+                (float)path_next_tile->x - TERRAIN_MAP_CHUNK_WIDTH/2,
+                (float)path_next_tile->y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+            };
+            if (v2equal(previous_location, next_location))
+            {
+                --path->data.path_length;
+                --path_next_tile;
+                continue;
+            }
+            have_next_location = true;
+            break;
+        }
+
+        if (have_next_location)
+        {
+            v2 direction = v2sub(
+                next_location,
+                {cowboy_location.x, cowboy_location.z});
+
+            Motion motion = direction_to_motion(direction, state->cowboy_rotation, input->delta_t * 3);
+            cowboy_location = v3add(
+                cowboy_location,
+                {
+                    motion.movement.x,
+                    0,
+                    motion.movement.y
+                });
+            state->cowboy_rotation += motion.rotation;
+            cowboy_speed = v2length(motion.movement);
+        }
+    }
+
+    for (uint32_t i = log_pos; (i + 1) % harray_count(log) != log_pos; ++i)
+    {
+        const char *log_message = log[i % harray_count(log)];
+        if (strlen(log_message))
+        {
+           ImGui::Text(log_message);
+        }
+    }
+
+
+    advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, cowboy_speed);
+    //advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t * 3);
+
 
     {
         array2p<float> noise2p = state->noisemaps[12].array2p();
@@ -2530,9 +2622,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 noise2p.get(middle)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
 
 
+        m4 model = m4mul(
+            m4translate({cowboy_location.x,height,cowboy_location.z}),
+            m4rotation({0,1,0}, state->cowboy_rotation)
+        );
         add_mesh_to_render_lists(
             state,
-            m4translate({0,height,0}),
+            model,
             state->asset_ids.blocky_advanced_mesh,
             state->asset_ids.blocky_advanced_texture,
             (int32_t)ArmatureIds::test1);
