@@ -350,6 +350,7 @@ debug_state
     bool cull_front;
     bool show_camera;
     bool show_nature_pack;
+    bool show_arena;
     struct
     {
         int32_t asset_num;
@@ -375,7 +376,7 @@ debug_state
         bool show;
     } armature;
 
-    DebugSystem debug_system;
+    DebugSystem *debug_system;
 };
 
 enum struct
@@ -618,8 +619,20 @@ Pathfinding
     bool single_step;
 };
 
+#define MESH_SURROUND 2
+#define MESH_WIDTH (1+2*MESH_SURROUND)
+#define MESH_SQUARE (MESH_WIDTH*MESH_WIDTH)
+#define TERRAIN_MAP_CHUNK_WIDTH 64
+#define TERRAIN_MAP_CHUNK_HEIGHT 64
+#define NOISE_WIDTH (TERRAIN_MAP_CHUNK_WIDTH / 2 + 1)
+#define NOISE_HEIGHT (TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1)
+
+typedef array2<NOISE_WIDTH,NOISE_HEIGHT,float> noise_float_array;
+typedef array2<NOISE_WIDTH,NOISE_HEIGHT,v4b> noise_v4b_array;
+
 struct game_state
 {
+    MemoryArena arena;
     bool initialized;
 
     uint32_t shadowmap_size;
@@ -650,8 +663,6 @@ struct game_state
     _asset_ids asset_ids;
     AssetDescriptors assets;
 
-
-    uint32_t elements[6000 / 4 * 6];
 
     int32_t active_demo;
 
@@ -686,26 +697,18 @@ struct game_state
     CameraState camera;
     CameraState np_camera;
 
-    uint32_t blocks[20*20*10];
-
     uint32_t num_assets;
     AssetListEntry asset_lists[100];
     uint32_t num_asset_classes;
     AssetClassEntry asset_classes[10];
     const char *asset_class_names[10];
 
-#define MESH_SURROUND 0
-#define MESH_WIDTH (1+2*MESH_SURROUND)
-#define MESH_SQUARE (MESH_WIDTH*MESH_WIDTH)
-    Mesh test_meshes[MESH_SQUARE];
-    DynamicTextureDescriptor test_textures[MESH_SQUARE];
-#define TERRAIN_MAP_CHUNK_WIDTH 64
-#define TERRAIN_MAP_CHUNK_HEIGHT 64
-#define NOISE_WIDTH (TERRAIN_MAP_CHUNK_WIDTH / 2 + 1)
-#define NOISE_HEIGHT (TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1)
-    array2<NOISE_WIDTH, NOISE_HEIGHT, float> noisemaps[MESH_SQUARE];
-    array2<NOISE_WIDTH, NOISE_HEIGHT, float> heightmaps[MESH_SQUARE];
-    array2<NOISE_WIDTH, NOISE_HEIGHT, v4b> noisemap_scratches[MESH_SQUARE];
+    uint32_t num_squares;
+    Mesh *test_meshes;
+    DynamicTextureDescriptor *test_textures;
+    noise_float_array *noisemaps; // [MESH_SQUARE];
+    noise_float_array *heightmaps; // [MESH_SQUARE];
+    noise_v4b_array *noisemap_scratches; // [MESH_SQUARE];
     int32_t test_mesh_descriptors[MESH_SQUARE];
     int32_t test_texture_descriptors[MESH_SQUARE];
 

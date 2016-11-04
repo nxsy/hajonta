@@ -26,6 +26,51 @@ struct loaded_file
     char file_path[MAX_PATH]; // platform path for load_nearby
 };
 
+struct
+MemoryBlockDebugData
+{
+    char guid[256];
+    char label[64];
+    uint64_t used_before;
+    uint64_t alignment;
+    uint64_t location;
+    uint64_t size;
+    uint64_t used_after;
+};
+
+struct
+MemoryBlockDebugList
+{
+    uint32_t num_data;
+    MemoryBlockDebugData data[20];
+
+    MemoryBlockDebugList *next;
+};
+
+struct
+MemoryBlock
+{
+    uint64_t size;
+    uint8_t *base;
+    uint64_t used;
+#ifdef HAJONTA_DEBUG
+    char label[64];
+#endif
+};
+
+struct
+MemoryArena
+{
+    MemoryBlock *block;
+    uint32_t minimum_block_size;
+
+    // flags?
+#ifdef HAJONTA_DEBUG
+    MemoryBlockDebugList debug_list_builtin;
+    MemoryBlockDebugList *debug_list;
+#endif
+};
+
 #define PLATFORM_FAIL(func_name) void func_name(const char *failure_reason)
 typedef PLATFORM_FAIL(platform_fail_func);
 
@@ -47,6 +92,9 @@ typedef PLATFORM_EDITOR_LOAD_NEARBY_FILE(platform_editor_load_nearby_file_func);
 #define PLATFORM_GET_THREAD_ID(func_name) uint32_t func_name()
 typedef PLATFORM_GET_THREAD_ID(platform_get_thread_id_func);
 
+#define PLATFORM_ALLOCATE_MEMORY(func_name) MemoryBlock *func_name(const char *comment, uint64_t size)
+typedef PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory_func);
+
 struct
 PlatformApi
 {
@@ -57,6 +105,7 @@ PlatformApi
     platform_editor_load_file_func *editor_load_file;
     platform_editor_load_nearby_file_func *editor_load_nearby_file;
     platform_get_thread_id_func *get_thread_id;
+    platform_allocate_memory_func *allocate_memory;
 
     bool stopping;
     char *stop_reason;
@@ -92,6 +141,8 @@ struct platform_memory
     bool initialized;
     uint64_t size;
     void *memory;
+    MemoryBlock *renderer_block;
+    MemoryBlock *game_block;
     bool quit;
     bool debug_keyboard;
 
@@ -394,7 +445,7 @@ DebugTable
 extern DebugTable *GlobalDebugTable;
 
 /*
- * These debug macros from Casey Muratori's Handmade Hero
+ * These debug macros largely from Casey Muratori's Handmade Hero
  */
 #define RecordDebugEvent(event_type, _guid)  \
 uint32_t _h_event_index_count = (uint32_t)std::atomic_fetch_add(&GlobalDebugTable->event_index_count, 1);  \
@@ -450,3 +501,144 @@ struct timed_block
 /*
  * End of debug macros from Handmade Hero
  */
+
+/*
+ * These arena macros/functions largely from Casey Muratori's Handmade Hero
+ */
+#ifdef HAJONTA_DEBUG
+#define PushStruct_(_guid, Comment, Arena, type, ...) (type *)_PushSize_DEBUG(_guid, Comment, Arena, sizeof(type), ## __VA_ARGS__)
+#define PushStruct(Comment, Arena, type, ...) PushStruct_(DEBUG_NAME(__FUNCTION__), Comment, Arena, type, ## __VA_ARGS__)
+
+#define PushArray_(_guid, Comment, Arena, type, count, ...) (type *)_PushSize_DEBUG(_guid, Comment, Arena, (count)*sizeof(type), ## __VA_ARGS__)
+#define PushArray(Comment, Arena, type, count, ...) PushArray_(DEBUG_NAME(__FUNCTION__), Comment, Arena, type, count, ## __VA_ARGS__)
+
+#define PushSize_(_guid, Comment, Arena, Size, ...) _PushSize_DEBUG(_guid, Comment, Arena, Size, ## __VA_ARGS__)
+#define PushSize(Comment, Arena, Size, ...) PushSize_(DEBUG_NAME(__FUNCTION__), Comment, Arena, Size, ## __VA_ARGS__)
+#else
+#define PushStruct(Comment, Arena, type, ...) (type *)_PushSize(Arena, sizeof(type), ## __VA_ARGS__)
+#define PushArray(Comment, Arena, type, count, ...) (type *)_PushSize(Arena, (count)*sizeof(type), ## __VA_ARGS__)
+#define PushSize(Comment, Arena, Size, ...) _PushSize(Arena, Size, ## __VA_ARGS__)
+#endif
+
+struct
+ArenaPushParams
+{
+    uint32_t alignment;
+    struct
+    {
+        unsigned int clear:1;
+    };
+};
+
+inline
+ArenaPushParams
+default_arena_params()
+{
+    ArenaPushParams result = {};
+    result.alignment = 4;
+    result.clear = false;
+    return result;
+}
+
+uint64_t
+get_alignment_offset(MemoryArena *arena, uint64_t alignment)
+{
+    uint64_t result = 0;
+
+    uint64_t next_pointer = (uint64_t)arena->block->base + arena->block->used;
+    uint64_t mask = alignment - 1;
+    if(next_pointer & mask)
+    {
+        result = alignment - (next_pointer & mask);
+    }
+    return result;
+}
+
+inline void *
+_PushSize(MemoryArena *arena, uint64_t size, MemoryBlockDebugData *debug_data = 0, ArenaPushParams params = default_arena_params())
+{
+    void *result = {};
+
+    hassert((arena->block->used + size) <= arena->block->size);
+
+    uint64_t alignment = get_alignment_offset(arena, params.alignment);
+    if (debug_data)
+    {
+        debug_data->used_before = arena->block->used;
+        debug_data->alignment = alignment;
+        debug_data->size = size;
+    }
+    arena->block->used += alignment;
+    uint64_t location = arena->block->used;
+    result = arena->block->base + location;
+    arena->block->used += size;
+
+    if (debug_data)
+    {
+        debug_data->location = location;
+        debug_data->used_after = arena->block->used;
+    }
+
+    if(params.clear)
+    {
+        memset(result, 0, size);
+    }
+
+    return result;
+}
+/*
+ * End of arena macros/functions from Handmade Hero
+ */
+
+inline
+MemoryBlockDebugData *
+get_next_block_debug_data(MemoryArena *arena)
+{
+    auto &debug_list = arena->debug_list;
+    if (debug_list->num_data == harray_count(debug_list->data) - 1)
+    {
+        auto &data = debug_list->data[debug_list->num_data];
+        strcpy(data.label, "memory_block_debug_data");
+        MemoryBlockDebugList *new_debug_list = (MemoryBlockDebugList *)_PushSize(arena, sizeof(MemoryBlockDebugList), &data);
+        new_debug_list->next = arena->debug_list;
+        arena->debug_list = new_debug_list;
+    }
+
+    return debug_list->data + debug_list->num_data++;
+}
+
+inline void *
+_PushSize_DEBUG(const char *guid, const char *comment, MemoryArena *arena, uint64_t size, ArenaPushParams params = default_arena_params())
+{
+    MemoryBlockDebugData *d = get_next_block_debug_data(arena);
+    strncpy(d->label, comment, 63);
+    d->label[63] = 0;
+    strncpy(d->guid, guid, 255);
+    d->guid[255] = 0;
+    return _PushSize(arena, size, d, params);
+}
+
+#define bootstrap_memory_arena(block, typename, member, ...) (typename *)bootstrap_memory_arena_(block, sizeof(typename), offsetof(typename, member), ## __VA_ARGS__)
+void *
+bootstrap_memory_arena_(
+    MemoryBlock *block,
+    uint32_t size,
+    uint32_t offset_to_arena)
+{
+
+    uint32_t header_size = size;
+    header_size += (64 - header_size) % 64;
+    MemoryArena bootstrap = {};
+    bootstrap.block = block;
+#ifdef HAJONTA_DEBUG
+    bootstrap.debug_list = &bootstrap.debug_list_builtin;
+#endif
+    void *base = PushSize("Bootstrap", &bootstrap, header_size);
+    MemoryArena *arena = (MemoryArena *)((uint8_t *)base + offset_to_arena);
+    *arena = bootstrap;
+#ifdef HAJONTA_DEBUG
+    arena->debug_list = &arena->debug_list_builtin;
+#endif
+    return base;
+}
+

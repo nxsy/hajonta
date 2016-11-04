@@ -32,7 +32,15 @@ find_register_event_location(DebugProfileEventLocationHash *hash, const char *gu
     hassert(between_file_and_number);
     char *between_number_and_name = strchr(between_file_and_number + 1, '|');
     hassert(between_number_and_name);
-    item->file_name_starts_at = 0;
+    char *relative_path_starts = strstr(item->guid, "hajonta");
+    if (relative_path_starts && relative_path_starts < between_file_and_number)
+    {
+        item->file_name_starts_at = (uint32_t)(relative_path_starts - item->guid);
+    }
+    else
+    {
+        item->file_name_starts_at = 0;
+    }
     item->file_name_length = (uint32_t)(between_file_and_number - (item->guid + item->file_name_starts_at));
     item->name_starts_at = (uint32_t)(between_number_and_name - item->guid + 1);
     item->line_number = (uint32_t)strtol(between_file_and_number + 1, 0, 10);
@@ -217,7 +225,7 @@ show_profiling(DebugSystem *debug_system)
 extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
 {
     TIMED_FUNCTION();
-    game_state *state = (game_state *)memory->memory;
+    game_state *state = (game_state *)memory->game_block->base;
     uint32_t index_count = (uint32_t)GlobalDebugTable->event_index_count;
     uint32_t replacement_index_count = ~(index_count >> 31) << 31;
     index_count = (uint32_t)std::atomic_exchange(
@@ -227,7 +235,7 @@ extern "C" GAME_DEBUG_FRAME_END(game_debug_frame_end)
     uint32_t index = index_count >> 31;
     index_count &= 0x7FFFFFFF;
 
-    auto *debug_system = &state->debug.debug_system;
+    auto *debug_system = state->debug.debug_system;
     DebugFrame *previous_frame = 0;
     auto *current_frame = debug_system->frames + debug_system->current_frame;
     if (debug_system->oldest_frame != debug_system->current_frame)

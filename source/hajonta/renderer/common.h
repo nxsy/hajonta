@@ -131,7 +131,7 @@ ArmatureDescriptor
     MeshBoneDescriptor *bone_descriptors;
     m4 *bones;
     float tick;
-    bool proceed_time;
+    bool halt_time;
 };
 
 struct
@@ -199,6 +199,14 @@ MeshFormat {
     first,
     v3_boneless,
     v3_bones,
+};
+
+enum struct
+AnimationType
+{
+    Unknown,
+    Idle,
+    Walk,
 };
 
 struct

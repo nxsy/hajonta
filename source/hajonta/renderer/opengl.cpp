@@ -527,8 +527,9 @@ CommandState
 
 struct renderer_state
 {
+    MemoryArena arena;
     bool initialized;
-    CommandState command_state;
+    CommandState *command_state;
 
     TimerQueryData timer_query_data;
 
@@ -577,8 +578,12 @@ struct renderer_state
     uint32_t font_texture;
     uint32_t white_texture;
 
-    char bitmap_scratch[4096 * 4096 * 4];
-    uint8_t asset_scratch[4096 * 4096 * 4];
+    //char bitmap_scratch[4096 * 4096 * 4];
+    //uint8_t asset_scratch[4096 * 4096 * 4];
+    char *bitmap_scratch;
+    uint8_t *asset_scratch;
+    uint32_t bitmap_scratch_size;
+    uint32_t asset_scratch_size;
     game_input *input;
 
     uint32_t textures[32];
@@ -628,6 +633,7 @@ struct renderer_state
     bool show_debug;
     bool show_animation_debug;
     bool show_gl_debug;
+    bool show_arena;
     bool gl_debug_toggles[harray_count(counter_names_and_offsets)];
 
     struct
@@ -664,6 +670,8 @@ struct renderer_state
     bool flush_for_profiling;
     bool crash_on_gl_errors;
 };
+
+renderer_state *_state;
 
 int32_t
 lookup_asset_file_to_texaddress_index(renderer_state *state, int32_t asset_file_id)
@@ -743,8 +751,6 @@ add_asset_file_mesh_lookup(renderer_state *state, int32_t asset_file_id, int32_t
     lookup->mesh_offset = mesh_offset;
 }
 
-static renderer_state _GlobalRendererState;
-
 bool
 load_texture_asset(
     renderer_state *state,
@@ -762,7 +768,7 @@ load_texture_asset(
     }
 
     uint32_t actual_size;
-    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
+    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, state->bitmap_scratch_size,
             x, y, &actual_size);
 
     if (tex)
@@ -880,10 +886,10 @@ load_texture_array_asset(
     }
 
     uint32_t actual_size;
-    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, sizeof(state->bitmap_scratch),
+    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, state->bitmap_scratch_size,
             x, y, &actual_size);
 
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     TextureFormat format = TextureFormat::srgba;
     uint32_t container_index = container_index_for_size(&command_state, *x, *y, format);
     auto &tex = command_state.textures[container_index];
@@ -1439,7 +1445,7 @@ program_init(renderer_state *state)
         int width, height;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
-        auto &command_state = state->command_state;
+        auto &command_state = *state->command_state;
 
         {
             state->font_texture = new_texaddress(&command_state, width, height, TextureFormat::srgba);
@@ -1593,7 +1599,7 @@ program_init(renderer_state *state)
     hglFlush();
     hglErrorAssert();
 
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     hglGenVertexArrays(1, &command_state.vao);
     hglGenBuffers(1, &command_state.vertex_buffers[0].vbo);
     hglGenBuffers(1, &command_state.index_buffers[0].ibo);
@@ -1684,7 +1690,7 @@ add_asset_file_texture(renderer_state *state, int32_t asset_file_id)
     {
         int32_t x, y;
         asset_file *asset_file0 = state->asset_files + asset_file_id;
-        bool loaded = load_texture_asset(state, asset_file0->asset_file_path, state->asset_scratch, sizeof(state->asset_scratch), &x, &y, state->textures + state->texture_count, GL_TEXTURE_2D);
+        bool loaded = load_texture_asset(state, asset_file0->asset_file_path, state->asset_scratch, state->asset_scratch_size, &x, &y, state->textures + state->texture_count, GL_TEXTURE_2D);
         if (!loaded)
         {
             load_texture_asset_failed(asset_file0->asset_file_path);
@@ -1711,7 +1717,7 @@ add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id)
             state,
             asset_file0->asset_file_path,
             state->asset_scratch,
-            sizeof(state->asset_scratch),
+            state->asset_scratch_size,
             &x,
             &y,
             &texaddress_index);
@@ -1739,7 +1745,7 @@ add_asset_file_mesh(renderer_state *state, int32_t asset_file_id)
             state,
             asset_file0->asset_file_path,
             state->asset_scratch,
-            sizeof(state->asset_scratch),
+            state->asset_scratch_size,
             state->meshes + state->mesh_count);
         if (!loaded)
         {
@@ -1831,6 +1837,17 @@ extern "C" RENDERER_SETUP(renderer_setup)
     static std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
 
     _platform = memory->platform_api;
+    if (!memory->renderer_block)
+    {
+        memory->renderer_block = _platform->allocate_memory("renderer", 256 * 1024 * 1024);
+        bootstrap_memory_arena(memory->renderer_block, renderer_state, arena);
+        renderer_state *state = (renderer_state *)memory->renderer_block->base;
+        state->command_state = PushStruct("command_state", &state->arena, CommandState);
+        state->bitmap_scratch_size = 4096 * 4096 * 4;
+        state->bitmap_scratch = (char *)PushSize("bitmap_scratch", &state->arena, state->bitmap_scratch_size);
+        state->asset_scratch_size = 4096 * 4096 * 4;
+        state->asset_scratch = (uint8_t *)PushSize("asset_scratch", &state->arena, state->bitmap_scratch_size);
+    }
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
 
@@ -1842,16 +1859,17 @@ extern "C" RENDERER_SETUP(renderer_setup)
 #endif
     */
     memory->render_lists_count = 0;
-    renderer_state *state = &_GlobalRendererState;
+    renderer_state *state = (renderer_state *)memory->renderer_block->base;
+    _state = state;
 
-    if (_GlobalRendererState.initialized)
+    if (state->initialized)
     {
         // OpenGL hooks for OBS, ..., can introduce errors between frames...
         if (state->crash_on_gl_errors) hglErrorAssert(true);
     }
 
     memory->imgui_state = ImGui::GetCurrentContext();
-    if (!_GlobalRendererState.initialized)
+    if (!state->initialized)
     {
         glsetup_counters = &state->glsetup_counters;
         for (uint32_t i = 0; i < 6; ++i)
@@ -1900,13 +1918,13 @@ extern "C" RENDERER_SETUP(renderer_setup)
         }
         hglFlush();
         hglErrorAssert();
-        bool loaded = program_init(&_GlobalRendererState);
+        bool loaded = program_init(state);
         hglFlush();
         hglErrorAssert();
         hassert(loaded);
         hglFlush();
         hglErrorAssert();
-        _GlobalRendererState.initialized = true;
+        state->initialized = true;
         state->generation_id = 1;
         state->crash_on_gl_errors = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
@@ -2076,7 +2094,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
 
     if (state->crash_on_gl_errors) hglErrorAssert();
 
-    _GlobalRendererState.input = input;
+    state->input = input;
 
     ImGuiIO& io = ImGui::GetIO();
 
@@ -2174,7 +2192,7 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
     hglBindTexture(GL_TEXTURE_2D, 0);
     hglUseProgram(state->imgui_program.program);
 
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
         0,
@@ -2519,7 +2537,7 @@ get_texaddress_index_from_asset_descriptor(
             } break;
             case asset_descriptor_type::dynamic_texture:
             {
-                auto &command_state = state->command_state;
+                auto &command_state = *state->command_state;
                 DynamicTextureDescriptor *d = descriptor->dynamic_texture_descriptor;
                 if (!d->_loaded)
                 {
@@ -2930,7 +2948,7 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
     hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->QUADS_ibo);
     if (state->crash_on_gl_errors) hglErrorAssert();
 
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
         0,
@@ -3039,7 +3057,7 @@ draw_mesh_from_asset_v3_bones(
 {
     TIMED_FUNCTION();
     if (state->crash_on_gl_errors) hglErrorAssert();
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
 
     bool debug = false;
     if (mesh_from_asset->mesh_asset_descriptor_id == 997)
@@ -3111,7 +3129,7 @@ draw_mesh_from_asset_v3_bones(
     };
     _SearchResult search_result = _SearchResult::notfound;
     int32_t key_index = -1;
-    auto &command_lists = state->command_state.lists;
+    auto &command_lists = state->command_state->lists;
     for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
     {
         key_index = (int32_t)i;
@@ -3256,7 +3274,7 @@ draw_mesh_from_asset_v3_boneless(
 )
 {
     TIMED_FUNCTION();
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
 
     bool debug = false;
     if (mesh_from_asset->mesh_asset_descriptor_id == 97)
@@ -3388,7 +3406,7 @@ draw_mesh_from_asset_v3_boneless(
     };
     _SearchResult search_result = _SearchResult::notfound;
     int32_t key_index = -1;
-    auto &command_lists = state->command_state.lists;
+    auto &command_lists = state->command_state->lists;
     for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
     {
         key_index = (int32_t)i;
@@ -3550,7 +3568,7 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
 {
     hglDisable(GL_CULL_FACE);
     hglDisable(GL_DEPTH_TEST);
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     int32_t a_position_id = 0;
     int32_t a_texcoord_id = 0;
 
@@ -3777,7 +3795,7 @@ draw_indirect(
 {
     if (state->crash_on_gl_errors) hglErrorAssert();
     TIMED_FUNCTION();
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     auto &command_lists = command_state.lists;
 
     //hglDisable(GL_BLEND);
@@ -4298,7 +4316,7 @@ framebuffer_initialize_color_buffer_texarray(
         format = TextureFormat::rg32f;
 
     }
-    framebuffer->_texture = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y, format);
+    framebuffer->_texture = new_texaddress(state->command_state, framebuffer_size.x, framebuffer_size.y, format);
 }
 
 
@@ -4310,7 +4328,7 @@ framebuffer_initialize_depth_buffer_texarray(
     v2i framebuffer_size,
     uint32_t multisample_samples)
 {
-    framebuffer->_renderbuffer = new_texaddress(&state->command_state, framebuffer_size.x, framebuffer_size.y, TextureFormat::depth24stencil8);
+    framebuffer->_renderbuffer = new_texaddress(state->command_state, framebuffer_size.x, framebuffer_size.y, TextureFormat::depth24stencil8);
 }
 
 void
@@ -4361,7 +4379,7 @@ framebuffer_texture_attach(
     FramebufferDescriptor *framebuffer,
     FramebufferTextureConfig texture_config)
 {
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
     hassert(framebuffer->_fbo);
     if (!framebuffer->_flags.no_color_buffer)
@@ -4439,12 +4457,45 @@ framebuffer_setup(
     if (state->flush_for_profiling) hglFlush();
 }
 
+void
+arena_debug(renderer_state *state, bool *show)
+{
+    if (ImGui::Begin("Renderer Memory Arena", show))
+    {
+        ImGui::Columns(3, "mycolumns");
+        ImGui::Separator();
+        ImGui::Text("Name"); ImGui::NextColumn();
+        ImGui::Text("Size"); ImGui::NextColumn();
+        ImGui::Text("Code"); ImGui::NextColumn();
+        ImGui::Separator();
+        MemoryBlockDebugList *list = state->arena.debug_list;
+        while (list)
+        {
+            for (uint32_t i = 0; i < list->num_data; ++i)
+            {
+                MemoryBlockDebugData *data = list->data + i;
+                ImGui::Text("%s", data->label);
+                ImGui::NextColumn();
+                ImGui::Text("% 12d", data->size);
+                ImGui::NextColumn();
+                ImGui::Text("%64s", data->guid);
+                ImGui::NextColumn();
+            }
+            list = list->next;
+        }
+        ImGui::Columns(1);
+        ImGui::Separator();
+    }
+    ImGui::End();
+}
+
 extern "C" RENDERER_RENDER(renderer_render)
 {
-    renderer_state *state = &_GlobalRendererState;
+    renderer_state *state = (renderer_state *)memory->renderer_block->base;
     {
         TIMED_BLOCK("Wait for vsync");
         if (state->flush_for_profiling) hglFlush();
+
         if (state->crash_on_gl_errors) hglErrorAssert();
     }
     TIMED_FUNCTION();
@@ -4777,7 +4828,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         ImGui::End();
     }
 
-    auto &command_state = state->command_state;
+    auto &command_state = *state->command_state;
     for (uint32_t i = 0; i < harray_count(command_state.texture_configs); ++i)
     {
         TextureConfig ts = command_state.texture_configs[i];
@@ -4796,6 +4847,10 @@ extern "C" RENDERER_RENDER(renderer_render)
         }
     }
 
+    if (state->show_arena) {
+        arena_debug(state, &state->show_arena);
+    }
+
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("Renderer"))
@@ -4803,6 +4858,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             ImGui::MenuItem("Debug rendering", "", &state->show_debug);
             ImGui::MenuItem("Mesh animation debug", "", &state->show_animation_debug);
             ImGui::MenuItem("OpenGL debug", "", &state->show_gl_debug);
+            ImGui::MenuItem("Memory Arena", "", &state->show_arena);
             ImGui::EndMenu();
         }
     }

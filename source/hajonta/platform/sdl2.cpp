@@ -23,6 +23,15 @@ struct sdl2_audio_buffer
     uint32_t write_position;
 };
 
+struct
+Sdl2MemoryBlock
+{
+    MemoryBlock block;
+    Sdl2MemoryBlock *next;
+    Sdl2MemoryBlock *prev;
+    uint64_t reserved;
+};
+
 struct sdl2_state
 {
     bool stopping;
@@ -59,6 +68,8 @@ struct sdl2_state
     float window_gl_ratio_height;
 
     bool no_borderless_fullscreen;
+
+    Sdl2MemoryBlock memory_sentinel;
 };
 
 sdl2_state *_state;
@@ -333,6 +344,33 @@ PLATFORM_GET_THREAD_ID(platform_get_thread_id)
     return SDL_GetThreadID(0);
 }
 
+PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory)
+{
+    uint32_t header_size = sizeof(Sdl2MemoryBlock);
+    header_size += (64 - header_size) % 64;
+    uint64_t total_size = size + header_size;
+
+    Sdl2MemoryBlock *block = (Sdl2MemoryBlock *)malloc(total_size);
+    block->block.base = (uint8_t *)block + header_size;
+    Sdl2MemoryBlock *sentinel = &_state->memory_sentinel;
+#ifdef HAJONTA_DEBUG
+    strncpy(block->block.label, comment, 63);
+    block->block.label[63] = 0;
+#endif
+
+    block->next = sentinel;
+    block->block.size = size;
+
+    // mutex
+    // {
+    block->prev = sentinel->prev;
+    block->prev->next = block;
+    block->next->prev = block;
+    // }
+    MemoryBlock *result = &block->block;
+    return result;
+}
+
 PLATFORM_LOAD_ASSET(platform_load_asset)
 {
     char *asset_folder_paths[] = {
@@ -568,10 +606,15 @@ main(int argc, char *argv[])
     pa.load_asset = platform_load_asset;
     pa.debug_message = platform_debug_message;
     pa.get_thread_id = platform_get_thread_id;
+    pa.allocate_memory = platform_allocate_memory;
     _platform = &pa;
 
     sdl2_state state = {};
     _state = &state;
+
+    _state->memory_sentinel.prev = &_state->memory_sentinel;
+    _state->memory_sentinel.next = &_state->memory_sentinel;
+
     bool sdl_init_successful = sdl_init(&state);
     if (!sdl_init_successful)
     {

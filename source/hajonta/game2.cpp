@@ -42,7 +42,7 @@ DebugTable *GlobalDebugTable;
 
 DEMO(demo_b)
 {
-    game_state *state = (game_state *)memory->memory;
+    game_state *state = (game_state *)memory->game_block->base;
     ImGui::ShowTestWindow(&state->b.show_window);
 
 }
@@ -136,7 +136,7 @@ show_debug_main_menu(game_state *state)
             if (ImGui::BeginMenu("General"))
             {
                 ImGui::MenuItem("Debug rendering", "", &state->debug.rendering);
-                ImGui::MenuItem("Profiling", "", &state->debug.debug_system.show);
+                ImGui::MenuItem("Profiling", "", &state->debug.debug_system->show);
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Movement"))
@@ -157,6 +157,11 @@ show_debug_main_menu(game_state *state)
             ImGui::MenuItem("Show nature pack", "", &state->debug.show_nature_pack);
             ImGui::MenuItem("Show perlin", "", &state->debug.perlin.show);
             ImGui::MenuItem("Show armature", "", &state->debug.armature.show);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Game"))
+        {
+            ImGui::MenuItem("Memory arena", "", &state->debug.show_arena);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -384,7 +389,9 @@ initialize(platform_memory *memory, game_state *state)
     state->debug.cull_front = 1;
     state->debug.show_nature_pack = 0;
     state->debug.show_camera = 0;
-    state->debug.debug_system.show = 0;
+
+    state->debug.debug_system = PushStruct("debug_system", &state->arena, DebugSystem);
+
 
     state->camera.distance = 7.0f;
     state->camera.near_ = 1.0f;
@@ -533,7 +540,34 @@ initialize(platform_memory *memory, game_state *state)
         state->asset_class_names[i] = state->asset_classes[i].name;
     }
 
-    for (uint32_t i = 0; i < harray_count(state->test_meshes); ++i)
+    state->num_squares = MESH_SQUARE;
+    state->test_meshes = PushArray(
+        "test_meshes",
+        &state->arena,
+        Mesh,
+        state->num_squares);
+    state->test_textures = PushArray(
+        "test_textures",
+        &state->arena,
+        DynamicTextureDescriptor,
+        state->num_squares);
+    state->noisemaps = PushArray(
+        "noisemaps",
+        &state->arena,
+        noise_float_array,
+        state->num_squares);
+    state->heightmaps = PushArray(
+        "heightmaps",
+        &state->arena,
+        noise_float_array,
+        state->num_squares);
+    state->noisemap_scratches = PushArray(
+        "noisemap_scratches",
+        &state->arena,
+        noise_v4b_array,
+        state->num_squares);
+
+    for (uint32_t i = 0; i < state->num_squares; ++i)
     {
         auto &mesh = state->test_meshes[i];
         mesh.dynamic = true;
@@ -1333,7 +1367,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
         sprintf(label, "Armature Animation##%p", armature);
         ImGui::Begin(label);
 
-        ImGui::Checkbox("Animation proceed", &armature->proceed_time);
+        ImGui::Checkbox("Animation proceed", &armature->halt_time);
         ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
         if (ImGui::Button("Reset to start"))
         {
@@ -1343,7 +1377,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
             (uint32_t)armature->tick % mesh_data.num_ticks,
             mesh_data.num_ticks - 1);
     }
-    if (armature->proceed_time)
+    if (!armature->halt_time)
     {
         armature->tick += delta_t * 24.0f * playback_speed;
     }
@@ -1450,7 +1484,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
         MeshBoneDescriptor &d = armature->bone_descriptors[bone];
 
-        if (armature->proceed_time)
+        if (!armature->halt_time)
         {
             d = mesh_data.animation_ticks[((uint32_t)armature->tick % mesh_data.num_ticks) * mesh_data.num_animtick_bones + bone].transform;
         }
@@ -1987,11 +2021,11 @@ direction_to_motion(v2 direction, float current_rotation, float speed)
 
     float rotation_diff = target_rotation - current_rotation;
 
-    if (rotation_diff > h_pi)
+    while (rotation_diff > h_pi)
     {
         rotation_diff -= h_twopi;
     }
-    else if (rotation_diff < -h_pi)
+    while (rotation_diff < -h_pi)
     {
         rotation_diff += h_twopi;
     }
@@ -2009,12 +2043,53 @@ direction_to_motion(v2 direction, float current_rotation, float speed)
     return Motion{movement, rotation_diff};
 }
 
+void
+arena_debug(game_state *state, bool *show)
+{
+    if (ImGui::Begin("Game memory arenas", show))
+    {
+        ImGui::Columns(3, "mycolumns");
+        ImGui::Separator();
+        ImGui::Text("Name"); ImGui::NextColumn();
+        ImGui::Text("Size"); ImGui::NextColumn();
+        ImGui::Text("Code"); ImGui::NextColumn();
+        ImGui::Separator();
+        MemoryBlockDebugList *list = state->arena.debug_list;
+        while (list)
+        {
+            for (uint32_t i = 0; i < list->num_data; ++i)
+            {
+                MemoryBlockDebugData *data = list->data + i;
+                ImGui::Text("%s", data->label);
+                ImGui::NextColumn();
+                ImGui::Text("% 12d", data->size);
+                ImGui::NextColumn();
+                ImGui::Text("%64s", data->guid);
+                ImGui::NextColumn();
+            }
+            list = list->next;
+        }
+        ImGui::Columns(1);
+        ImGui::Separator();
+    }
+    ImGui::End();
+}
+
+
+
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     _platform = memory->platform_api;
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
-    game_state *state = (game_state *)memory->memory;
+
+    if (!memory->game_block)
+    {
+        memory->game_block = _platform->allocate_memory("game", 256 * 1024 * 1024);
+        bootstrap_memory_arena(memory->game_block, game_state, arena);
+    }
+
+    game_state *state = (game_state *)memory->game_block->base;
     _hidden_state = state;
 
     state->frame_state.delta_t = input->delta_t;
@@ -2594,6 +2669,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             cowboy_speed = v2length(motion.movement);
         }
     }
+    if (!path->data.found_path)
+    {
+        target_tile = cowboy_location2;
+    }
+    if (v2iequal(cowboy_location2, target_tile))
+    {
+        v2 direction = v2sub(
+            v2{
+                (float)target_tile.x - TERRAIN_MAP_CHUNK_WIDTH/2,
+                (float)target_tile.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+            },
+            v2{cowboy_location.x, cowboy_location.z}
+        );
+        if (v2length(direction) > 0.1)
+        {
+            Motion motion = direction_to_motion(direction, state->cowboy_rotation, input->delta_t * 2);
+            cowboy_location = v3add(
+                cowboy_location,
+                {
+                    motion.movement.x,
+                    0,
+                    motion.movement.y
+                });
+            state->cowboy_rotation += motion.rotation;
+            cowboy_speed = v2length(motion.movement);
+        }
+    }
 
     for (uint32_t i = log_pos; (i + 1) % harray_count(log) != log_pos; ++i)
     {
@@ -2605,7 +2707,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
 
-    advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, cowboy_speed);
+    if (cowboy_speed)
+    {
+        advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, cowboy_speed);
+    }
     //advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t * 3);
 
 
@@ -2829,5 +2934,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
         ImGui::End();
+    }
+
+    if (state->debug.show_arena) {
+        arena_debug(state, &state->debug.show_arena);
     }
 }
