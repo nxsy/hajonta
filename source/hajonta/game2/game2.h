@@ -567,9 +567,11 @@ CameraState
     v3 target;
     float near_;
     float far_;
+    float fov;
     struct
     {
         unsigned int orthographic:1;
+        unsigned int frustum:1;
     };
 
     v3 location;
@@ -726,5 +728,8 @@ struct game_state
 
     Pathfinding cowboy_path;
     float cowboy_rotation;
+
+    Pathfinding dog_path;
+    float dog_rotation;
 };
 

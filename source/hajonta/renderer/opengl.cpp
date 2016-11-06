@@ -298,25 +298,36 @@ struct
 TimerQueryData
 {
     uint32_t query_count[2];
-    uint32_t query_ids[2][20];
-    const char *guid[2][20];
+    uint32_t query_ids[2][40];
+    const char *guid[2][40];
     uint32_t buffer;
 };
 
 inline void
+EndTimerQuery()
+{
+#if 0
+    hglEndQuery(GL_TIME_ELAPSED);
+#endif
+}
+
+inline void
 RecordTimerQuery(TimerQueryData *timer_query_data, const char *guid)
 {
+#if 0
     auto &buffer = timer_query_data->buffer;
     auto &query_count = timer_query_data->query_count[buffer];
     auto &query_id = timer_query_data->query_ids[buffer][query_count];
     timer_query_data->guid[buffer][query_count] = guid;
     hglBeginQuery(GL_TIME_ELAPSED, query_id);
     ++query_count;
+#endif
 }
 
 inline void
 CollectAndSwapTimers(TimerQueryData *timer_query_data)
 {
+#if 0
     auto &buffer = timer_query_data->buffer;
     buffer = (uint32_t)!buffer;
 
@@ -329,6 +340,7 @@ CollectAndSwapTimers(TimerQueryData *timer_query_data)
         OPENGL_TIMER_RESULT(guid, time_taken);
     }
     timer_query_data->query_count[buffer] = 0;
+#endif
 }
 
 struct
@@ -520,6 +532,7 @@ CommandState
     TextureConfig texture_configs[NUM_TEXARRAY_TEXTURES];
     TextureLayerInfo texture_layer_info[NUM_TEXARRAY_TEXTURES];
 
+    uint32_t texture_address_last_buffer_count;
     uint32_t texture_address_count;
     TextureAddress texture_addresses[100];
     uint32_t vao;
@@ -936,6 +949,25 @@ load_texture_asset_failed(
     _platform->quit = true;
 }
 
+V3Bones *
+build_base_v3bones(MemoryArena *parent_arena, uint32_t size, uint32_t num_bones, uint32_t num_animations)
+{
+    V3Bones *result = create_sub_arena("v3_bones_arena", parent_arena, size, V3Bones, arena);
+    auto arena = &result->arena;
+    result->num_animations = num_animations;
+    result->num_bones = num_bones;
+    result->animation_names = PushArray("animation_names", arena, V3Name, num_animations);
+    result->animations = PushArray("animations", arena, V3Animation, num_animations);
+
+    result->bone_names = PushArray("bone_names", arena, V3Name, num_bones);
+    result->bone_parents = PushArray("bone_parents", arena, int32_t, num_bones);
+    result->bone_offsets = PushArray("bone_offsets", arena, m4, num_bones);
+    result->default_bones = PushArray("default_bones", arena, m4, num_bones);
+    result->default_transforms = PushArray("default_transforms", arena, MeshBoneDescriptor, num_bones);
+
+    return result;
+}
+
 bool
 load_mesh_asset(
     renderer_state *state,
@@ -970,10 +1002,6 @@ load_mesh_asset(
     {
         uint32_t vertices_offset;
         uint32_t vertices_size;
-        uint32_t normals_offset;
-        uint32_t normals_size;
-        uint32_t texcoords_offset;
-        uint32_t texcoords_size;
         uint32_t indices_offset;
         uint32_t indices_size;
         uint32_t num_triangles;
@@ -994,92 +1022,7 @@ load_mesh_asset(
         uint32_t animation_size;
     } format = {};
 
-    if (version->version == 1)
-    {
-        struct binary_format_v1
-        {
-            uint32_t vertices_offset;
-            uint32_t vertices_size;
-            uint32_t normals_offset;
-            uint32_t normals_size;
-            uint32_t texcoords_offset;
-            uint32_t texcoords_size;
-            uint32_t indices_offset;
-            uint32_t indices_size;
-            uint32_t num_triangles;
-        } *v1_format = (binary_format_v1 *)mesh_buffer;
-        format.vertices_offset = v1_format->vertices_offset;
-        format.vertices_size = v1_format->vertices_size;
-        format.normals_offset = v1_format->normals_offset;
-        format.normals_size = v1_format->normals_size;
-        format.texcoords_offset = v1_format->texcoords_offset;
-        format.texcoords_size = v1_format->texcoords_size;
-        format.indices_offset = v1_format->indices_offset;
-        format.indices_size = v1_format->indices_size;
-        format.num_triangles = v1_format->num_triangles;
-        mesh_buffer += sizeof(binary_format_v1);
-        mesh->num_triangles = format.num_triangles;
-        mesh->num_bones = format.num_bones;
-    }
-    else if (version->version == 2)
-    {
-        struct binary_format_v2
-        {
-            uint32_t header_size;
-            uint32_t vertices_offset;
-            uint32_t vertices_size;
-            uint32_t normals_offset;
-            uint32_t normals_size;
-            uint32_t texcoords_offset;
-            uint32_t texcoords_size;
-            uint32_t indices_offset;
-            uint32_t indices_size;
-            uint32_t num_triangles;
-            uint32_t num_bones;
-            uint32_t bone_names_offset;
-            uint32_t bone_names_size;
-            uint32_t bone_ids_offset;
-            uint32_t bone_ids_size;
-            uint32_t bone_weights_offset;
-            uint32_t bone_weights_size;
-            uint32_t bone_parent_offset;
-            uint32_t bone_parent_size;
-            uint32_t bone_offsets_offset;
-            uint32_t bone_offsets_size;
-            uint32_t bone_default_transform_offset;
-            uint32_t bone_default_transform_size;
-            uint32_t animation_offset;
-            uint32_t animation_size;
-        } *v2_format = (binary_format_v2 *)mesh_buffer;
-        format.vertices_offset = v2_format->vertices_offset;
-        format.vertices_size = v2_format->vertices_size;
-        format.normals_offset = v2_format->normals_offset;
-        format.normals_size = v2_format->normals_size;
-        format.texcoords_offset = v2_format->texcoords_offset;
-        format.texcoords_size = v2_format->texcoords_size;
-        format.indices_offset = v2_format->indices_offset;
-        format.indices_size = v2_format->indices_size;
-        format.num_triangles = v2_format->num_triangles;
-        format.num_bones = v2_format->num_bones;
-        format.bone_names_offset = v2_format->bone_names_offset;
-        format.bone_names_size = v2_format->bone_names_size;
-        format.bone_ids_offset = v2_format->bone_ids_offset;
-        format.bone_ids_size = v2_format->bone_ids_size;
-        format.bone_weights_offset = v2_format->bone_weights_offset;
-        format.bone_weights_size = v2_format->bone_weights_size;
-        format.bone_parent_offset = v2_format->bone_parent_offset;
-        format.bone_parent_size = v2_format->bone_parent_size;
-        format.bone_offsets_offset = v2_format->bone_offsets_offset;
-        format.bone_offsets_size = v2_format->bone_offsets_size;
-        format.bone_default_transform_offset = v2_format->bone_default_transform_offset;
-        format.bone_default_transform_size = v2_format->bone_default_transform_size;
-        format.animation_offset = v2_format->animation_offset;
-        format.animation_size = v2_format->animation_size;
-        mesh_buffer += v2_format->header_size;
-        mesh->num_triangles = format.num_triangles;
-        mesh->num_bones = format.num_bones;
-    }
-    else if (version->version == 3)
+    if (version->version == 3)
     {
         struct binary_format_v3_boneless
         {
@@ -1112,7 +1055,7 @@ load_mesh_asset(
         mesh->num_triangles = format.num_triangles;
         mesh->num_bones = format.num_bones;
     }
-    else
+    else if (version->version == 4)
     {
         struct binary_format_v3_bones
         {
@@ -1134,8 +1077,14 @@ load_mesh_asset(
             uint32_t bone_offsets_size;
             uint32_t bone_default_transform_offset;
             uint32_t bone_default_transform_size;
-            uint32_t animation_offset;
-            uint32_t animation_size;
+
+            uint32_t num_animations;
+            uint32_t animation_names_offset;
+            uint32_t animation_names_size;
+            uint32_t animation_type_offsets_offset;
+            uint32_t animation_type_offsets_size;
+            uint32_t animations_offset;
+            uint32_t animations_size;
         } *v3_format = (binary_format_v3_bones *)mesh_buffer;
         format.vertices_offset = v3_format->vertices_offset;
         format.vertices_size = v3_format->vertices_size;
@@ -1155,24 +1104,16 @@ load_mesh_asset(
         format.bone_offsets_size = v3_format->bone_offsets_size;
         format.bone_default_transform_offset = v3_format->bone_default_transform_offset;
         format.bone_default_transform_size = v3_format->bone_default_transform_size;
-        format.animation_offset = v3_format->animation_offset;
-        format.animation_size = v3_format->animation_size;
+        format.animation_offset = v3_format->animations_offset;
+        format.animation_size = v3_format->animations_size;
 
         mesh_buffer += v3_format->header_size;
-        vertexformat_2 *vf = (vertexformat_2 *)mesh_buffer;
-        vertexformat_2 vf0 = vf[0];
-        vertexformat_2 vf1 = vf[1];
-        vertexformat_2 vf2 = vf[2];
-        vertexformat_2 vf3 = vf[3];
-        vertexformat_2 vf4 = vf[4];
-        vertexformat_2 vf5 = vf[5];
-        vertexformat_2 vf6 = vf[6];
         mesh->num_triangles = format.num_triangles;
         mesh->num_bones = format.num_bones;
 
         uint8_t *base_offset = mesh_buffer;
 
-        uint32_t memory_size = format.vertices_size + format.normals_size + format.texcoords_size + format.indices_size;
+        uint32_t memory_size = format.vertices_size + format.indices_size;
         memory_size += format.bone_ids_size + format.bone_weights_size;
         uint8_t *m = (uint8_t *)malloc(memory_size);
 
@@ -1191,42 +1132,85 @@ load_mesh_asset(
         };
         offset += format.indices_size;
 
+        uint32_t v3bones_size = 1024 * 1024; // TODO: calculate this
+        mesh->v3_bones.v3bones = build_base_v3bones(
+            &state->arena,
+            v3bones_size,
+            v3_format->num_bones,
+            v3_format->num_animations
+        );
+        auto &v3bones = *mesh->v3_bones.v3bones;
+
         int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
         m4 *bone_offsets = (m4 *)(base_offset + format.bone_offsets_offset);
         MeshBoneDescriptor *default_transforms = (MeshBoneDescriptor *)(base_offset + format.bone_default_transform_offset);
         uint8_t *bone_name = base_offset + format.bone_names_offset;
         for (uint32_t i = 0; i < format.num_bones; ++i)
         {
-            mesh->v3_bones.bone_parents[i] = bone_parents[i];
-            mesh->v3_bones.bone_offsets[i] = bone_offsets[i];
-            mesh->v3_bones.default_transforms[i] = default_transforms[i];
+            v3bones.bone_parents[i] = bone_parents[i];
+            v3bones.bone_offsets[i] = bone_offsets[i];
+            v3bones.default_transforms[i] = default_transforms[i];
+
             uint8_t bone_name_length = *bone_name;
-            snprintf(mesh->v3_bones.bone_names[i], bone_name_length, "%*s", bone_name_length, bone_name + 1);
+            v3bones.bone_names[i].name = PushStringWithLength("bone_name", &v3bones.arena, bone_name[0], (char *)(bone_name + 1));
 
             bone_name += bone_name_length + 1;
         }
 
-        mesh->v3_bones.num_ticks = 0;
-        if (format.animation_size)
+        AnimationTypeOffset *atos = (AnimationTypeOffset *)(base_offset + v3_format->animation_type_offsets_offset);
+        uint8_t *animation_name = base_offset + v3_format->animation_names_offset;
+        bool found_idle = false;
+        bool found_walk = false;
+        for (uint32_t k = 0; k < v3_format->num_animations; ++k)
         {
-            BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
+            uint8_t animation_name_length = *animation_name;
+            v3bones.animation_names[k].name = PushStringWithLength("animation_name", &v3bones.arena, animation_name[0], (char *)(animation_name + 1));
+            if (!found_idle && strstr(v3bones.animation_names[k].name, "Idle"))
+            {
+                v3bones.idle_animation = k;
+                found_idle = true;
+            }
+            if (!found_idle && strstr(v3bones.animation_names[k].name, "Rest"))
+            {
+                v3bones.idle_animation = k;
+                found_idle = true;
+            }
+            if (!found_walk && strstr(v3bones.animation_names[k].name, "Walk"))
+            {
+                v3bones.walk_animation = k;
+                found_walk = true;
+            }
+            animation_name += animation_name_length + 1;
+
+            AnimationTypeOffset &ato = atos[k];
+            BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + v3_format->animations_offset + ato.animation_offset);
             AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
+
+            uint32_t total_ticks = format.num_bones * (uint32_t)bone_animation_header->num_ticks;
+            v3bones.animations[k].animation_ticks = PushArray("animation_ticks", &v3bones.arena, AnimTick, total_ticks);
+            AnimTick *dest_anim_tick = v3bones.animations[k].animation_ticks;
+
             for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
             {
                 for (uint32_t j = 0; j < format.num_bones; ++j)
                 {
-                    mesh->v3_bones.animation_ticks[i][j].transform = anim_tick->transform;
+                    dest_anim_tick->transform = anim_tick->transform;
                     ++anim_tick;
+                    ++dest_anim_tick;
                 }
             }
-            mesh->v3_bones.num_ticks = (uint32_t)bone_animation_header->num_ticks;
+            v3bones.animations[k].num_ticks = (uint32_t)bone_animation_header->num_ticks;
         }
         return true;
+    }
+    else
+    {
+        hassert(!"unimplemented");
     }
 
     uint8_t *base_offset = mesh_buffer;
 
-    uint32_t memory_size = format.vertices_size + format.normals_size + format.texcoords_size + format.indices_size;
+    uint32_t memory_size = format.vertices_size + format.indices_size;
     memory_size += format.bone_ids_size + format.bone_weights_size;
     uint8_t *m = (uint8_t *)malloc(memory_size);
 
@@ -1245,79 +1229,6 @@ load_mesh_asset(
     };
     offset += format.indices_size;
 
-    if (format.texcoords_size)
-    {
-        memcpy((void *)(m + offset), base_offset + format.texcoords_offset, format.texcoords_size);
-        mesh->legacy.uvs = {
-            (void *)(m + offset),
-            format.texcoords_size,
-        };
-        offset += format.texcoords_size;
-    }
-
-    if (format.normals_size)
-    {
-        memcpy((void *)(m + offset), base_offset + format.normals_offset, format.normals_size);
-        mesh->legacy.normals = {
-            (void *)(m + offset),
-            format.normals_size,
-        };
-        offset += format.normals_size;
-    }
-
-    if (format.bone_ids_size)
-    {
-        memcpy((void *)(m + offset), base_offset + format.bone_ids_offset, format.bone_ids_size);
-        mesh->legacy.bone_ids = {
-            (void *)(m + offset),
-            format.bone_ids_size,
-        };
-        offset += format.bone_ids_size;
-    }
-
-    if (format.bone_weights_size)
-    {
-        memcpy((void *)(m + offset), base_offset + format.bone_weights_offset, format.bone_weights_size);
-        mesh->legacy.bone_weights = {
-            (void *)(m + offset),
-            format.bone_weights_size,
-        };
-        offset += format.bone_weights_size;
-    }
-
-    if (format.num_bones)
-    {
-        int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
-        m4 *bone_offsets = (m4 *)(base_offset + format.bone_offsets_offset);
-        MeshBoneDescriptor *default_transforms = (MeshBoneDescriptor *)(base_offset + format.bone_default_transform_offset);
-        uint8_t *bone_name = base_offset + format.bone_names_offset;
-        for (uint32_t i = 0; i < format.num_bones; ++i)
-        {
-            mesh->legacy.bone_parents[i] = bone_parents[i];
-            mesh->legacy.bone_offsets[i] = bone_offsets[i];
-            mesh->legacy.default_transforms[i] = default_transforms[i];
-            uint8_t bone_name_length = *bone_name;
-            snprintf(mesh->legacy.bone_names[i], bone_name_length, "%*s", bone_name_length, bone_name + 1);
-
-            bone_name += bone_name_length + 1;
-        }
-
-        mesh->legacy.num_ticks = 0;
-        if (format.animation_size)
-        {
-            BoneAnimationHeader *bone_animation_header = (BoneAnimationHeader *)(base_offset + format.animation_offset);
-            AnimTick *anim_tick = (AnimTick *)(bone_animation_header + 1);
-            for (uint32_t i = 0; i < bone_animation_header->num_ticks; ++i)
-            {
-                for (uint32_t j = 0; j < format.num_bones; ++j)
-                {
-                    mesh->legacy.animation_ticks[i][j].transform = anim_tick->transform;
-                    ++anim_tick;
-                }
-            }
-            mesh->legacy.num_ticks = (uint32_t)bone_animation_header->num_ticks;
-        }
-    }
     return true;
 }
 
@@ -1482,11 +1393,6 @@ program_init(renderer_state *state)
             state->imgui_cb0,
             0);
     }
-    hglFlush();
-    hglErrorAssert();
-
-    hglFlush();
-    hglErrorAssert();
 
     {
         texarray_1_program_struct *program = &state->texarray_1_program;
@@ -1523,9 +1429,6 @@ program_init(renderer_state *state)
         state->texarray_1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
 
-    hglFlush();
-    hglErrorAssert();
-
     {
         texarray_1_vsm_program_struct *program = &state->texarray_1_vsm_program;
         loaded &= texarray_1_vsm_program(program);
@@ -1546,9 +1449,6 @@ program_init(renderer_state *state)
             3);
         state->texarray_1_vsm_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
-
-    hglFlush();
-    hglErrorAssert();
 
     {
         texarray_1_water_program_struct *program = &state->texarray_1_water_program;
@@ -1575,8 +1475,6 @@ program_init(renderer_state *state)
             9);
         state->texarray_1_water_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
-    hglFlush();
-    hglErrorAssert();
 
     {
         filter_gaussian_7x1_program_struct *program = &state->filter_gaussian_7x1_program;
@@ -1588,16 +1486,12 @@ program_init(renderer_state *state)
             0);
         state->filter_gaussian_7x1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
-    hglFlush();
-    hglErrorAssert();
 
     {
         sky_program_struct *program = &state->sky_program;
         loaded &= sky_program(program);
         populate_skybox(state, &state->skybox);
     }
-    hglFlush();
-    hglErrorAssert();
 
     auto &command_state = *state->command_state;
     hglGenVertexArrays(1, &command_state.vao);
@@ -1611,32 +1505,22 @@ program_init(renderer_state *state)
     hglGenBuffers(1, &command_state.indirect_buffer.ubo);
     hglGenBuffers(1, &command_state.lights_buffer.ubo);
     hglGenBuffers(1, &command_state.shaderconfig_buffer.ubo);
-    hglFlush();
-    hglErrorAssert();
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(command_state.texture_addresses), (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    hglFlush();
-    hglErrorAssert();
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.draw_data_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(DrawDataList), (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    hglFlush();
-    hglErrorAssert();
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.lights_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(LightList), (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    hglFlush();
-    hglErrorAssert();
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.shaderconfig_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(ShaderConfig), (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    hglFlush();
-    hglErrorAssert();
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.bone_data_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(BoneDataList), (void *)0, GL_DYNAMIC_DRAW);
@@ -1645,8 +1529,6 @@ program_init(renderer_state *state)
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.indirect_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(DrawElementsIndirectCommand) * 100, (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    hglFlush();
-    hglErrorAssert();
 
     return loaded;
 }
@@ -1916,17 +1798,11 @@ extern "C" RENDERER_SETUP(renderer_setup)
             state->framebuffer_scale = 1.0f;
             memory->shadowmap_size = 4096;
         }
-        hglFlush();
-        hglErrorAssert();
         bool loaded = program_init(state);
-        hglFlush();
-        hglErrorAssert();
         hassert(loaded);
-        hglFlush();
-        hglErrorAssert();
         state->initialized = true;
         state->generation_id = 1;
-        state->crash_on_gl_errors = 1;
+        //state->crash_on_gl_errors = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
@@ -2046,15 +1922,15 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "knp_Wood_Fence_Broken_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Broken_01.hjm");
         add_mesh_asset(state, "knp_Wood_Fence_Gate_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Gate_01.hjm");
 
-        add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced3.hjm");
-        add_mesh_asset(state, "kenney_blocky_advanced_mesh2", "testing/kenney/blocky_advanced3.hjm");
+        add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced4.hjm");
+        add_mesh_asset(state, "kenney_blocky_advanced_mesh2", "testing/kenney/blocky_advanced4.hjm");
         add_asset(state, "kenney_blocky_advanced_cowboy_texture", "testing/kenney/skin_exclusiveCowboy.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "blockfigureRigged6_mesh", "testing/human_low.hjm");
         add_asset(state, "blockfigureRigged6_texture", "testing/blockfigureRigged6.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "cube_bounds_mesh", "testing/cube_bounds.hjm");
         add_asset(state, "white_texture", "testing/white.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "dog2_mesh", "testing/dog2/dog2.hjm");
-        add_asset(state, "dog2_texture", "testing/dog2/dog2Color.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_mesh_asset(state, "dog2_mesh", "testing/dog2/dog3.hjm");
+        add_asset(state, "dog2_texture", "testing/dog2/dog3C.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         add_asset(state, "water_normal", "testing/water_normal.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "water_dudv", "testing/water_dudv.png", {0.0f, 1.0f}, {1.0f, 0.0f});
@@ -2188,8 +2064,6 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
     hglDisable(GL_CULL_FACE);
     hglDisable(GL_DEPTH_TEST);
     hglEnable(GL_SCISSOR_TEST);
-    hglActiveTexture(GL_TEXTURE0);
-    hglBindTexture(GL_TEXTURE_2D, 0);
     hglUseProgram(state->imgui_program.program);
 
     auto &command_state = *state->command_state;
@@ -2198,9 +2072,15 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
         0,
         command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
-    GLvoid* p = hglMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
-    memcpy(p, command_state.texture_addresses, sizeof(command_state.texture_addresses));
-    hglUnmapBuffer(GL_UNIFORM_BUFFER);
+    if (command_state.texture_address_count != command_state.texture_address_last_buffer_count)
+    {
+        hglBufferSubData(
+            GL_UNIFORM_BUFFER,
+            0,
+            sizeof(command_state.texture_addresses),
+            command_state.texture_addresses);
+        command_state.texture_address_last_buffer_count = command_state.texture_address_count;
+    }
 
     static int32_t texcontainer_textures[harray_count(command_state.textures)] =
     {
@@ -2702,27 +2582,17 @@ get_mesh_from_asset_descriptor(
         if (result)
         {
             descriptor->load_state = 2;
-            descriptor->mesh_data.num_bones = mesh->num_bones;
             switch (mesh->mesh_format)
             {
                 case MeshFormat::v3_bones:
                 {
-                    descriptor->mesh_data.num_ticks = mesh->v3_bones.num_ticks;
-                    descriptor->mesh_data.bone_offsets = mesh->v3_bones.bone_offsets;
-                    descriptor->mesh_data.bone_parents = mesh->v3_bones.bone_parents;
-                    descriptor->mesh_data.default_transforms = mesh->v3_bones.default_transforms;
-                    descriptor->mesh_data.animation_ticks = (AnimTick *)mesh->v3_bones.animation_ticks;
-                    descriptor->mesh_data.num_animtick_ticks = harray_count(mesh->v3_bones.animation_ticks);
-                    descriptor->mesh_data.num_animtick_bones = harray_count(mesh->v3_bones.animation_ticks[0]);
-
-                    descriptor->mesh_data.bone_names = (char *)mesh->v3_bones.bone_names;
-                    descriptor->mesh_data.num_bonename_bones = harray_count(mesh->v3_bones.bone_names);
-                    descriptor->mesh_data.num_bonename_chars = harray_count(mesh->v3_bones.bone_names[0]);
+                    auto &v3bones = *mesh->v3_bones.v3bones;
+                    descriptor->v3bones = mesh->v3_bones.v3bones;
 
                     int32_t first_bone = 0;
                     for (uint32_t i = 0; i < mesh->num_bones; ++i)
                     {
-                        if (mesh->v3_bones.bone_parents[i] == -1)
+                        if (v3bones.bone_parents[i] == -1)
                         {
                             first_bone = (int32_t)i;
                             break;
@@ -2744,7 +2614,7 @@ get_mesh_from_asset_descriptor(
                     {
                         int32_t bone = stack[stack_location];
 
-                        int32_t parent_bone = mesh->v3_bones.bone_parents[bone];
+                        int32_t parent_bone = v3bones.bone_parents[bone];
                         --stack_location;
                         while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
                         {
@@ -2758,9 +2628,9 @@ get_mesh_from_asset_descriptor(
                             parent_matrix = parent_list[parent_list_location - 1].transform;
                         }
 
-                        m4 scale = m4scale(mesh->v3_bones.default_transforms[bone].scale);
-                        m4 translate = m4translate(mesh->v3_bones.default_transforms[bone].translate);
-                        m4 rotate = m4rotation(mesh->v3_bones.default_transforms[bone].q);
+                        m4 scale = m4scale(v3bones.default_transforms[bone].scale);
+                        m4 translate = m4translate(v3bones.default_transforms[bone].translate);
+                        m4 rotate = m4rotation(v3bones.default_transforms[bone].q);
                         m4 local_matrix = m4mul(translate,m4mul(rotate, scale));
 
 
@@ -2771,11 +2641,11 @@ get_mesh_from_asset_descriptor(
                             global_transform,
                         };
 
-                        mesh->v3_bones.default_bones[bone] = m4mul(global_transform, mesh->v3_bones.bone_offsets[bone]);
+                        v3bones.default_bones[bone] = m4mul(global_transform, v3bones.bone_offsets[bone]);
 
                         for (uint32_t i = 0; i < mesh->num_bones; ++i)
                         {
-                            if (mesh->v3_bones.bone_parents[i] == bone)
+                            if (v3bones.bone_parents[i] == bone)
                             {
                                 stack_location++;
                                 stack[stack_location] = (int32_t)i;
@@ -2791,82 +2661,7 @@ get_mesh_from_asset_descriptor(
 
                 case MeshFormat::first:
                 {
-                    descriptor->mesh_data.num_ticks = mesh->legacy.num_ticks;
-                    descriptor->mesh_data.bone_offsets = mesh->legacy.bone_offsets;
-                    descriptor->mesh_data.bone_parents = mesh->legacy.bone_parents;
-                    descriptor->mesh_data.default_transforms = mesh->legacy.default_transforms;
-                    descriptor->mesh_data.animation_ticks = (AnimTick *)mesh->legacy.animation_ticks;
-                    descriptor->mesh_data.num_animtick_ticks = harray_count(mesh->legacy.animation_ticks);
-                    descriptor->mesh_data.num_animtick_bones = harray_count(mesh->legacy.animation_ticks[0]);
-
-                    descriptor->mesh_data.bone_names = (char *)mesh->legacy.bone_names;
-                    descriptor->mesh_data.num_bonename_bones = harray_count(mesh->legacy.bone_names);
-                    descriptor->mesh_data.num_bonename_chars = harray_count(mesh->legacy.bone_names[0]);
-
-                    int32_t first_bone = 0;
-                    for (uint32_t i = 0; i < mesh->num_bones; ++i)
-                    {
-                        if (mesh->legacy.bone_parents[i] == -1)
-                        {
-                            first_bone = (int32_t)i;
-                            break;
-                        }
-                    }
-
-                    int32_t stack_location = 0;
-
-                    int32_t stack[100];
-                    stack[0] = first_bone;
-                    struct
-                    {
-                        int32_t bone_id;
-                        m4 transform;
-                    } parent_list[100];
-                    int32_t parent_list_location = 0;
-
-                    while (stack_location >= 0)
-                    {
-                        int32_t bone = stack[stack_location];
-
-                        int32_t parent_bone = mesh->legacy.bone_parents[bone];
-                        --stack_location;
-                        while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
-                        {
-                            --parent_list_location;
-                        }
-                        ++parent_list_location;
-
-                        m4 parent_matrix = m4identity();
-                        if (parent_list_location)
-                        {
-                            parent_matrix = parent_list[parent_list_location - 1].transform;
-                        }
-
-                        m4 scale = m4scale(mesh->legacy.default_transforms[bone].scale);
-                        m4 translate = m4translate(mesh->legacy.default_transforms[bone].translate);
-                        m4 rotate = m4rotation(mesh->legacy.default_transforms[bone].q);
-                        m4 local_matrix = m4mul(translate,m4mul(rotate, scale));
-
-
-                        m4 global_transform = m4mul(parent_matrix, local_matrix);
-
-                        parent_list[parent_list_location] = {
-                            bone,
-                            global_transform,
-                        };
-
-                        mesh->legacy.default_bones[bone] = m4mul(global_transform, mesh->legacy.bone_offsets[bone]);
-
-                        for (uint32_t i = 0; i < mesh->num_bones; ++i)
-                        {
-                            if (mesh->legacy.bone_parents[i] == bone)
-                            {
-                                stack_location++;
-                                stack[stack_location] = (int32_t)i;
-                            }
-                        }
-                    }
-
+                    hassert(!"deprecated");
                 } break;
             }
         }
@@ -2954,17 +2749,17 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
         0,
         command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
-    GLvoid* p = hglMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
-    memcpy(p, command_state.texture_addresses, sizeof(command_state.texture_addresses));
-    hglUnmapBuffer(GL_UNIFORM_BUFFER);
+
+    if (command_state.texture_address_count != command_state.texture_address_last_buffer_count)
+    {
+        hglBufferSubData(
+            GL_UNIFORM_BUFFER,
+            0,
+            sizeof(command_state.texture_addresses),
+            command_state.texture_addresses);
+        command_state.texture_address_last_buffer_count = command_state.texture_address_count;
+    }
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
-    if (state->crash_on_gl_errors) hglErrorAssert();
-
-    if (state->crash_on_gl_errors) hglErrorAssert();
-    hglUniform1i(state->imgui_tex, 0);
-    hglActiveTexture(GL_TEXTURE0);
-
-    if (state->crash_on_gl_errors) hglErrorAssert();
     static int32_t texcontainer_textures[harray_count(command_state.textures)] =
     {
         0,
@@ -3231,7 +3026,7 @@ draw_mesh_from_asset_v3_bones(
     {
         armature = armature_descriptors + mesh_from_asset->armature_descriptor_id;
     }
-    m4 *bones = mesh->v3_bones.default_bones;
+    m4 *bones = mesh->v3_bones.v3bones->default_bones;
     if (armature)
     {
         bones = armature->bones;
@@ -4008,11 +3803,16 @@ draw_indirect(
         0,
         command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texture_address_buffers[0].uniform_buffer.ubo);
-    hglBufferSubData(
-        GL_UNIFORM_BUFFER,
-        0,
-        sizeof(command_state.texture_addresses),
-        command_state.texture_addresses);
+
+    if (command_state.texture_address_count != command_state.texture_address_last_buffer_count)
+    {
+        hglBufferSubData(
+            GL_UNIFORM_BUFFER,
+            0,
+            sizeof(command_state.texture_addresses),
+            command_state.texture_addresses);
+        command_state.texture_address_last_buffer_count = command_state.texture_address_count;
+    }
 
     if (state->crash_on_gl_errors) hglErrorAssert();
     hglBindBufferBase(
@@ -4380,7 +4180,6 @@ framebuffer_texture_attach(
     FramebufferTextureConfig texture_config)
 {
     auto &command_state = *state->command_state;
-    hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
     hassert(framebuffer->_fbo);
     if (!framebuffer->_flags.no_color_buffer)
     {
@@ -4446,13 +4245,14 @@ framebuffer_setup(
     if (!FramebufferInitialized(framebuffer))
     {
         framebuffer_initialize(state, framebuffer, texture_config, framebuffer_size, multisample_samples);
+        hglViewport(0, 0, framebuffer_size.x, framebuffer_size.y);
+        framebuffer_texture_attach(state, framebuffer, texture_config);
+        hglViewport(0, 0, framebuffer_size.x, framebuffer_size.y);
+        GLenum framebuffer_status = hglCheckFramebufferStatus(GL_FRAMEBUFFER);
+        hassert(framebuffer_status == GL_FRAMEBUFFER_COMPLETE);
     }
+    hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
 
-    framebuffer_texture_attach(state, framebuffer, texture_config);
-
-    hglViewport(0, 0, framebuffer_size.x, framebuffer_size.y);
-    GLenum framebuffer_status = hglCheckFramebufferStatus(GL_FRAMEBUFFER);
-    hassert(framebuffer_status == GL_FRAMEBUFFER_COMPLETE);
     *size = framebuffer_size;
     if (state->flush_for_profiling) hglFlush();
 }
@@ -4491,6 +4291,9 @@ arena_debug(renderer_state *state, bool *show)
 
 extern "C" RENDERER_RENDER(renderer_render)
 {
+#if 0
+    return true;
+#else
     renderer_state *state = (renderer_state *)memory->renderer_block->base;
     {
         TIMED_BLOCK("Wait for vsync");
@@ -4549,6 +4352,10 @@ extern "C" RENDERER_RENDER(renderer_render)
         }
     }
 
+    RecordTimerQuery(&state->timer_query_data, DEBUG_NAME("initial error check"));
+    hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    EndTimerQuery();
+
     uint32_t quads_drawn = 0;
     uint32_t meshes_drawn[1000] = {};
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
@@ -4562,8 +4369,6 @@ extern "C" RENDERER_RENDER(renderer_render)
         RecordTimerQuery(&state->timer_query_data, render_list->name);
 
         v2i size = {window->width, window->height};
-        hglActiveTexture(GL_TEXTURE0);
-        hglBindTexture(GL_TEXTURE_2D, 0);
         hglEnable(GL_BLEND);
         hglDisable(GL_CULL_FACE);
         hglDisable(GL_DEPTH_TEST);
@@ -4726,7 +4531,7 @@ extern "C" RENDERER_RENDER(renderer_render)
             hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         }
         if (state->flush_for_profiling) hglFlush();
-        hglEndQuery(GL_TIME_ELAPSED);
+        EndTimerQuery();
         END_BLOCK();
         if (state->crash_on_gl_errors) hglErrorAssert();
     }
@@ -4870,7 +4675,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     RecordTimerQuery(&state->timer_query_data, DEBUG_NAME("render_draw_lists"));
     hglBindVertexArray(0);
     render_draw_lists(draw_data, state);
-    hglEndQuery(GL_TIME_ELAPSED);
+    EndTimerQuery();
 
     if (state->crash_on_gl_errors) hglErrorAssert();
 
@@ -4899,6 +4704,8 @@ extern "C" RENDERER_RENDER(renderer_render)
     input->mouse = state->original_mouse_input;
     (void)meshes_drawn;
 
-    hglErrorAssert();
+    hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    //hglErrorAssert();
     return true;
+#endif
 };

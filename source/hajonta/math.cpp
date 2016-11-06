@@ -444,6 +444,51 @@ v4dot(v4 left, v4 right)
     return result;
 }
 
+float
+lerp(float a, float b, float s)
+{
+    return a + (b - a) * s;
+}
+
+v3
+lerp(v3 a, v3 b, float s)
+{
+    return v3add(a, v3mul(v3sub(b, a), s));
+}
+
+v4
+lerp(v4 a, v4 b, float s)
+{
+    return v4add(a, v4mul(v4sub(b, a), s));
+}
+
+inline v4
+to_v4(Quaternion q)
+{
+    return {q.x, q.y, q.z, q.w};
+}
+
+inline Quaternion
+to_quaternion(v4 q)
+{
+    return {q.x, q.y, q.z, q.w};
+}
+
+Quaternion
+quatmix(Quaternion a, Quaternion b, float t)
+{
+    v4 result;
+    v4 v4a = to_v4(a);
+    v4 v4b = to_v4(b);
+    float dot = v4dot(v4a, v4b);
+    if(dot < 0.0f)
+    {
+        v4a = v4mul(v4a, -1);
+    }
+    result = v4normalize(lerp(v4a, v4b, t));
+    return to_quaternion(result);
+}
+
 
 m4
 m4identity()
@@ -927,6 +972,19 @@ m4frustumprojection(float near_, float far_, v2 bottom_left, v2 top_right)
 }
 
 m4
+m4perspectiveprojection(float near_, float far_, float aspect_ratio, float fov_y)
+{
+    float tan_half_fov_y = tanf(fov_y / 2.0f);
+    m4 result = {};
+    result.cols[0].E[0] = 1 / (aspect_ratio * tan_half_fov_y);
+    result.cols[1].E[1] = 1 / (tan_half_fov_y);
+    result.cols[2].E[3] = -1;
+    result.cols[2].E[2] = -(far_ + near_) / (far_ - near_);
+    result.cols[3].E[2] = -((2 * near_ * far_) / (far_ - near_));
+    return result;
+}
+
+m4
 m4orthographicprojection(float near_, float far_, v2 bottom_left, v2 top_right)
 {
     float b = bottom_left.y;
@@ -998,16 +1056,6 @@ m4lookat(v3 eye, v3 target, v3 up)
     view.cols[3].E[1] = -v3dot(calc_up, eye);
     view.cols[3].E[2] = v3dot(forward, eye);
     return view;
-}
-
-float lerp(float a, float b, float s)
-{
-    return a + (b - a) * s;
-}
-
-v4 lerp(v4 a, v4 b, float s)
-{
-    return v4add(a, v4mul(v4sub(b, a), s));
 }
 
 bool

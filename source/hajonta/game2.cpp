@@ -204,7 +204,32 @@ update_camera(CameraState *camera, float aspect_ratio, bool invert = false)
     }
     else
     {
-        camera->projection = m4frustumprojection(camera->near_, camera->far_, {-aspect_ratio, -1.0f}, {aspect_ratio, 1.0f});
+        if (camera->frustum)
+        {
+            static float foo = 1.0f;
+            ImGui::DragFloat("Foo", &foo, 0.01f, 0.01f, 100.0f);
+            float height = tan(camera->fov * 0.5f / (180.0f / h_pi)) * foo;
+            float width = height * aspect_ratio;
+            v2 dimension[] =
+            {
+                { width, height  },
+                {-width,-height  },
+            };
+            camera->projection = m4frustumprojection(
+                camera->near_,
+                camera->far_,
+                dimension[1],
+                dimension[0]);
+        }
+        else
+        {
+            float fov_radians = camera->fov / (180.0f / h_pi);
+            camera->projection = m4perspectiveprojection(
+                camera->near_,
+                camera->far_,
+                aspect_ratio,
+                fov_radians);
+        }
     }
 }
 
@@ -393,10 +418,11 @@ initialize(platform_memory *memory, game_state *state)
     state->debug.debug_system = PushStruct("debug_system", &state->arena, DebugSystem);
 
 
-    state->camera.distance = 7.0f;
-    state->camera.near_ = 1.0f;
+    state->camera.distance = 3.0f;
+    state->camera.near_ = 0.1f;
     state->camera.far_ = 1000.0f * 1.1f;
-    state->camera.target = {2, 2.5, 0};
+    state->camera.fov = 60;
+    state->camera.target = {2, 1.0, 0};
     state->camera.rotation = {-0.1f, -0.8f, 0};
     {
         float ratio = (float)state->frame_state.input->window.width / (float)state->frame_state.input->window.height;
@@ -406,6 +432,7 @@ initialize(platform_memory *memory, game_state *state)
     state->np_camera.distance = 2.0f;
     state->np_camera.near_ = 1.0f;
     state->np_camera.far_ = 100.0f;
+    state->np_camera.fov = 60;
     state->np_camera.target = {0.5f, 0.5f, 0.5f};
     state->np_camera.rotation.x = 0.5f * h_halfpi;
     state->np_camera.orthographic = 1;
@@ -1349,17 +1376,103 @@ noise_map_to_texture(array2p<float> map, array2p<v4b> scratch, DynamicTextureDes
     texture->reload = true;
 }
 
+MeshBoneDescriptor
+blend_transforms(uint32_t num_transforms, MeshBoneDescriptor *transforms, float *weights)
+{
+    if (num_transforms == 1)
+    {
+        return transforms[0];
+    }
+
+    float total_weight = 0;
+    for (uint32_t i = 0; i < num_transforms; ++i)
+    {
+        total_weight += weights[i];
+    }
+
+    float my_weight = weights[0] / total_weight;
+    MeshBoneDescriptor result = transforms[0];
+    MeshBoneDescriptor rest = blend_transforms(num_transforms - 1, transforms + 1, weights + 1);
+
+    result.scale = lerp(result.scale, rest.scale, my_weight);
+    result.translate = lerp(result.translate, rest.translate, my_weight);
+    result.q = quatmix(result.q, rest.q, my_weight);
+
+    return result;
+}
+
 void
-advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t)
+advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t, float speed, float time_to_idle)
 {
     if (asset->load_state != 2)
     {
         return;
     }
 
-    auto mesh_data = asset->mesh_data;
+    bool interpolate = false;
+    float interp_weight = 0;
 
-    static float playback_speed = 1.0f;
+    auto &v3bones = *asset->v3bones;
+
+    if (speed == 0 || time_to_idle < 0.3f)
+    {
+        if (armature->stance != v3bones.idle_animation)
+        {
+            armature->previous_stance = armature->stance;
+            armature->previous_stance_weight = 1;
+            armature->previous_stance_tick = armature->tick;
+        }
+        armature->stance = v3bones.idle_animation;
+
+        if (armature->previous_stance_weight || time_to_idle < 0.3f)
+        {
+            interpolate = true;
+            interp_weight = armature->previous_stance_weight;
+
+            if (time_to_idle < 0.3f)
+            {
+                armature->previous_stance_weight = time_to_idle / 0.3f;
+            }
+            else
+            {
+                armature->previous_stance_weight = max(0, armature->previous_stance_weight - 5 * delta_t);
+            }
+        }
+    }
+    else
+    {
+        if (armature->stance != v3bones.walk_animation)
+        {
+            armature->previous_stance = armature->stance;
+            armature->previous_stance_weight = 1;
+            armature->tick = 12;
+        }
+        armature->stance = v3bones.walk_animation;
+        if (armature->previous_stance_weight)
+        {
+            interpolate = true;
+            interp_weight = armature->previous_stance_weight;
+            armature->previous_stance_weight = max(0, armature->previous_stance_weight - 5 * delta_t);
+        }
+    }
+
+    auto &animation = v3bones.animations[armature->stance];
+    V3Animation *interp_animation = 0;
+    if (interpolate)
+    {
+        interp_animation = v3bones.animations + armature->previous_stance;
+    }
+
+    ImGui::Begin("Animation");
+    ImGui::Text("Animation: %s", v3bones.animation_names[armature->stance]);
+    ImGui::Text("Time to idle: %f", time_to_idle);
+    if (interpolate)
+    {
+        ImGui::Text("Interp Animation: %s", v3bones.animation_names[armature->previous_stance]);
+        ImGui::Text("Interp Weight: %f", interp_weight);
+    }
+    ImGui::End();
+
     bool opened_debug = state->debug.armature.show;
     if (opened_debug)
     {
@@ -1368,23 +1481,26 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
         ImGui::Begin(label);
 
         ImGui::Checkbox("Animation proceed", &armature->halt_time);
-        ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
         if (ImGui::Button("Reset to start"))
         {
             armature->tick = 0;
         }
         ImGui::Text("Tick %d of %d",
-            (uint32_t)armature->tick % mesh_data.num_ticks,
-            mesh_data.num_ticks - 1);
+            (uint32_t)armature->tick % animation.num_ticks,
+            animation.num_ticks - 1);
     }
     if (!armature->halt_time)
     {
-        armature->tick += delta_t * 24.0f * playback_speed;
+        armature->tick += delta_t * 24.0f * speed;
+        if (interpolate)
+        {
+            armature->previous_stance_tick += delta_t * 24.0f * speed;
+        }
     }
     int32_t first_bone = 0;
-    for (uint32_t i = 0; i < mesh_data.num_bones; ++i)
+    for (uint32_t i = 0; i < v3bones.num_bones; ++i)
     {
-        if (mesh_data.bone_parents[i] == -1)
+        if (v3bones.bone_parents[i] == -1)
         {
             first_bone = (int32_t)i;
             break;
@@ -1450,14 +1566,13 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2,2));
         ImGui::Columns(4);
         ImGui::Separator();
-
     }
 
     while (stack_location >= 0)
     {
         int32_t bone = stack[stack_location];
 
-        int32_t parent_bone = mesh_data.bone_parents[bone];
+        int32_t parent_bone = v3bones.bone_parents[bone];
         --stack_location;
         while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
         {
@@ -1474,7 +1589,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
         if (opened_debug)
         {
             char label[200];
-            sprintf(label, "%*s %s", parent_list_location * 2, "", mesh_data.bone_names + (bone * mesh_data.num_bonename_chars));
+            sprintf(label, "%*s %s", parent_list_location * 2, "", v3bones.bone_names[bone].name);
             auto size = ImGui::CalcTextSize("%s", label);
             ImGui::PushItemWidth(size.x);
             ImGui::Text("%s", label);
@@ -1486,13 +1601,28 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
         if (!armature->halt_time)
         {
-            d = mesh_data.animation_ticks[((uint32_t)armature->tick % mesh_data.num_ticks) * mesh_data.num_animtick_bones + bone].transform;
+            if (interpolate)
+            {
+                MeshBoneDescriptor ds[] = {
+                    animation.animation_ticks[((uint32_t)armature->tick % animation.num_ticks) * v3bones.num_bones + bone].transform,
+                    interp_animation->animation_ticks[((uint32_t)armature->previous_stance_tick % interp_animation->num_ticks) * v3bones.num_bones + bone].transform,
+                };
+                float weights[] = {
+                    armature->previous_stance_weight,
+                    1 - armature->previous_stance_weight,
+                };
+                d = blend_transforms(2, &ds[0], &weights[0]);
+            }
+            else
+            {
+                d = animation.animation_ticks[((uint32_t)armature->tick % animation.num_ticks) * v3bones.num_bones + bone].transform;
+            }
         }
         if (d.scale.x == 0)
         {
-            d.scale = mesh_data.default_transforms[bone].scale;
-            d.translate = mesh_data.default_transforms[bone].translate;
-            d.q = mesh_data.default_transforms[bone].q;
+            d.scale = v3bones.default_transforms[bone].scale;
+            d.translate = v3bones.default_transforms[bone].translate;
+            d.q = v3bones.default_transforms[bone].q;
         }
         if (opened_debug)
         {
@@ -1534,7 +1664,7 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
         if (opened_debug)
         {
-            m4 bone_offset = mesh_data.bone_offsets[bone];
+            m4 bone_offset = v3bones.bone_offsets[bone];
             for (uint32_t i = 0; i < 4; ++i)
             {
                 ImGui::Text("%0.3f %0.3f %0.3f %0.3f",
@@ -1550,11 +1680,11 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
             ImGui::NextColumn();
         }
 
-        armature->bones[bone] = m4mul(global_transform, mesh_data.bone_offsets[bone]);
+        armature->bones[bone] = m4mul(global_transform, v3bones.bone_offsets[bone]);
 
-        for (uint32_t i = 0; i < mesh_data.num_bones; ++i)
+        for (uint32_t i = 0; i < v3bones.num_bones; ++i)
         {
-            if (mesh_data.bone_parents[i] == bone)
+            if (v3bones.bone_parents[i] == bone)
             {
                 stack_location++;
                 stack[stack_location] = (int32_t)i;
@@ -1814,7 +1944,9 @@ do_path_stuff(game_state *state, Pathfinding *path, v2i cowboy_location2, v2i ta
 
     if (path->show)
     {
-        ImGui::Begin("Path", &path->show);
+        char label[64];
+        sprintf(label, "Path##%p", path);
+        ImGui::Begin(label, &path->show);
         ImGui::InputTextMultiline("##source", path->data.log, path->data.log_position, ImVec2(-1.0f, ImGui::GetTextLineHeight() * 16), ImGuiInputTextFlags_ReadOnly);
 
         auto &queue = path->data.queue;
@@ -1988,6 +2120,7 @@ do_path_stuff(game_state *state, Pathfinding *path, v2i cowboy_location2, v2i ta
         }
     }
 
+    meshp_reset(meshp);
     mesh.reload = true;
 
     PushMeshFromAsset(
@@ -2030,15 +2163,30 @@ direction_to_motion(v2 direction, float current_rotation, float speed)
         rotation_diff += h_twopi;
     }
 
-    float rotation_per_frame_percentage = abs(rotation_diff / (h_halfpi / 8));
-    if (rotation_per_frame_percentage > 1.0f)
+    if (abs(rotation_diff) > h_halfpi)
     {
-        rotation_diff /= rotation_per_frame_percentage;
-        movement = {};
+        rotation_diff /= 20;
+        movement = v2mul(movement, 0);
     }
-    else
+    else if (abs(rotation_diff) > h_pi / 3)
     {
-        movement = v2mul(movement, (1 - rotation_per_frame_percentage));
+        rotation_diff /= 15;
+        movement = v2mul(movement, 0.50f);
+    }
+    else if (abs(rotation_diff) > h_pi / 6)
+    {
+        rotation_diff /= 15;
+        movement = v2mul(movement, 0.75f);
+    }
+    else if (abs(rotation_diff) > h_pi / 12)
+    {
+        rotation_diff /= 10;
+        movement = v2mul(movement, 0.90f);
+    }
+    else if (abs(rotation_diff) > h_pi / 24)
+    {
+        rotation_diff /= 5;
+        movement = v2mul(movement, 0.95f);
     }
     return Motion{movement, rotation_diff};
 }
@@ -2075,6 +2223,108 @@ arena_debug(game_state *state, bool *show)
     ImGui::End();
 }
 
+void
+apply_path(
+    game_state *state,
+    Pathfinding *path,
+    v2i *cowboy_location2,
+    v3 *cowboy_location,
+    float *rotation,
+    v2i *target_tile,
+    int32_t mesh_id,
+    ArmatureIds armature_id,
+    float delta_t
+    )
+{
+    float cowboy_speed = 0;
+    float time_to_idle = 0;
+    static float playback_speed = 1.0f;
+    ImGui::DragFloat("Playback speed", &playback_speed, 0.01f, 0.01f, 10.0f, "%.2f");
+
+    if (path->data.found_path)
+    {
+        v2 previous_location = {
+            (float)cowboy_location2->x - TERRAIN_MAP_CHUNK_WIDTH/2,
+            (float)cowboy_location2->y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+        };
+
+        auto *path_next_tile = path->data.path + path->data.path_length - 1;
+        v2 next_location = {};
+        bool have_next_location = false;
+        while (path_next_tile >= path->data.path)
+        {
+            next_location = {
+                (float)path_next_tile->x - TERRAIN_MAP_CHUNK_WIDTH/2,
+                (float)path_next_tile->y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+            };
+            if (v2equal(previous_location, next_location))
+            {
+                --path->data.path_length;
+                --path_next_tile;
+                continue;
+            }
+            have_next_location = true;
+            break;
+        }
+
+        if (have_next_location)
+        {
+            v2 direction = v2sub(
+                next_location,
+                {cowboy_location->x, cowboy_location->z});
+
+            Motion motion = direction_to_motion(
+                direction,
+                *rotation,
+                delta_t * playback_speed * 3);
+            *cowboy_location = v3add(
+                *cowboy_location,
+                {
+                    motion.movement.x,
+                    0,
+                    motion.movement.y
+                });
+            *rotation += motion.rotation;
+            cowboy_speed = v2length(motion.movement) / (delta_t * playback_speed);
+            time_to_idle = FLT_MAX;
+        }
+    }
+    if (!path->data.found_path)
+    {
+        *target_tile = *cowboy_location2;
+    }
+    if (v2iequal(*cowboy_location2, *target_tile))
+    {
+        v2 direction = v2sub(
+            v2{
+                (float)target_tile->x - TERRAIN_MAP_CHUNK_WIDTH/2,
+                (float)target_tile->y - TERRAIN_MAP_CHUNK_HEIGHT/2,
+            },
+            v2{cowboy_location->x, cowboy_location->z}
+        );
+        float direction_length = v2length(direction);
+        if (direction_length > 0.1)
+        {
+            Motion motion = direction_to_motion(
+                direction,
+                *rotation,
+                delta_t * playback_speed * 2);
+            *cowboy_location = v3add(
+                *cowboy_location,
+                {
+                    motion.movement.x,
+                    0,
+                    motion.movement.y
+                });
+            *rotation += motion.rotation;
+            float movement_length = v2length(motion.movement);
+            cowboy_speed = movement_length / (delta_t * playback_speed);
+            time_to_idle = direction_length / movement_length * delta_t * playback_speed;
+        }
+    }
+
+    advance_armature(state, state->assets.descriptors + mesh_id, state->armatures + (uint32_t)armature_id, delta_t * playback_speed, cowboy_speed, time_to_idle);
+}
 
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -2082,6 +2332,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     _platform = memory->platform_api;
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
+
+    if (memory->imgui_state)
+    {
+        ImGui::SetCurrentContext((ImGuiContext *)memory->imgui_state);
+    }
 
     if (!memory->game_block)
     {
@@ -2121,11 +2376,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.min_noise_height = FLT_MAX;
         perlin.max_noise_height = FLT_MIN;
         //auto &path = state->cowboy_path;
-    }
-
-    if (memory->imgui_state)
-    {
-        ImGui::SetCurrentContext((ImGuiContext *)memory->imgui_state);
     }
 
     for (uint32_t i = 0;
@@ -2174,6 +2424,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
+        /*
         if (BUTTON_ENDED_DOWN(mouse->buttons.right))
         {
             Plane p = {
@@ -2205,6 +2456,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
             //ImGui::Text("t / q: %f / %f, %f, %f", t, q.x, q.y, q.z);
         }
+        */
     }
     //ImGui::Text("Hello");
 
@@ -2406,6 +2658,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     float ratio = (float)input->window.width / (float)input->window.height;
     //state->matrices[(uint32_t)matrix_ids::mesh_projection_matrix] = m4frustumprojection(1.0f, 100.0f, {-ratio, -1.0f}, {ratio, 1.0f});
 
+    static v3 cowboy_location = {};
+    static v3 dog_location = { 2, 2 };
     if (state->debug.show_camera) {
         ImGui::Begin("Camera", &state->debug.show_camera);
         ImGui::DragFloat3("Rotation", &state->camera.rotation.x, 0.1f);
@@ -2413,9 +2667,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::DragFloat("Distance", &state->camera.distance, 0.1f, 0.1f, 100.0f);
         ImGui::DragFloat("Near", &state->camera.near_, 0.1f, 0.1f, 5.0f);
         ImGui::DragFloat("Far", &state->camera.far_, 0.1f, 5.0f, 2000.0f);
+        ImGui::DragFloat("Field of View", &state->camera.fov, 1, 30, 150);
         bool orthographic = state->camera.orthographic;
+        bool frustum = state->camera.frustum;
         ImGui::Checkbox("Orthographic", &orthographic);
+        ImGui::Checkbox("Frustum", &frustum);
         state->camera.orthographic = (uint32_t)orthographic;
+        state->camera.frustum = (uint32_t)frustum;
 
         if (ImGui::Button("Top"))
         {
@@ -2438,6 +2696,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         ImGui::Text("Camera location: %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
         ImGui::End();
     }
+    state->camera.target = {cowboy_location.x, 1.0f, cowboy_location.z};
     update_camera(&state->camera, ratio);
     CameraState inverted_camera = state->camera;
     update_camera(&inverted_camera, ratio, true);
@@ -2580,7 +2839,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     MeshFromAssetFlags three_dee_mesh_flags_debug = three_dee_mesh_flags;
     //three_dee_mesh_flags_debug.debug = 1;
 
-    static v3 cowboy_location = {};
+    v2i dog_location2 = {
+        (int32_t)roundf(dog_location.x) + TERRAIN_MAP_CHUNK_WIDTH / 2,
+        (int32_t)roundf(dog_location.z) + TERRAIN_MAP_CHUNK_HEIGHT / 2,
+    };
     v2i cowboy_location2 = {
         (int32_t)roundf(cowboy_location.x) + TERRAIN_MAP_CHUNK_WIDTH / 2,
         (int32_t)roundf(cowboy_location.z) + TERRAIN_MAP_CHUNK_HEIGHT / 2,
@@ -2589,7 +2851,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         TERRAIN_MAP_CHUNK_WIDTH / 2 + 1,
         TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1,
     };
-    float cowboy_speed = 0;
+    static v2i target_tile2 = {
+        TERRAIN_MAP_CHUNK_WIDTH / 2 - 1,
+        TERRAIN_MAP_CHUNK_HEIGHT / 2 - 1,
+    };
     {
         MouseInput *mouse = &input->mouse;
 
@@ -2617,101 +2882,62 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 };
             }
         }
+
+        if (BUTTON_ENDED_DOWN(mouse->buttons.right))
+        {
+            Plane p = {
+                {0,1,0},
+                0,
+            };
+            Ray r = screen_to_ray(state);
+            r.location = state->camera.location;
+
+            v3 b = v3mul(r.direction, 1000);
+            float t;
+            v3 q;
+            if (segment_plane_intersect(r.location, b, p, &t, &q))
+            {
+                ImGui::Text("v3 plane location: %0.2f, %0.2f, %0.2f",
+                    q.x, q.y, q.z);
+                v2 plane_location = {q.x, q.z};
+                ImGui::Text("Plane location: %0.2f, %0.2f", plane_location.x, plane_location.y);
+                target_tile2 = {
+                    TERRAIN_MAP_CHUNK_WIDTH / 2 + (int32_t)roundf(plane_location.x),
+                    TERRAIN_MAP_CHUNK_HEIGHT / 2 + (int32_t)roundf(plane_location.y),
+                };
+            }
+        }
     }
 
     auto path = &state->cowboy_path;
     do_path_stuff(state, path, cowboy_location2, target_tile);
+    do_path_stuff(state, &state->dog_path, dog_location2, target_tile2);
 
-    static char log[100][100] = {};
-    static uint32_t log_pos = 0;
-
-    if (path->data.found_path)
-    {
-        v2 previous_location = {
-            (float)cowboy_location2.x - TERRAIN_MAP_CHUNK_WIDTH/2,
-            (float)cowboy_location2.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
-        };
-
-        auto *path_next_tile = path->data.path + path->data.path_length - 1;
-        v2 next_location = {};
-        bool have_next_location = false;
-        while (path_next_tile >= path->data.path)
-        {
-            next_location = {
-                (float)path_next_tile->x - TERRAIN_MAP_CHUNK_WIDTH/2,
-                (float)path_next_tile->y - TERRAIN_MAP_CHUNK_HEIGHT/2,
-            };
-            if (v2equal(previous_location, next_location))
-            {
-                --path->data.path_length;
-                --path_next_tile;
-                continue;
-            }
-            have_next_location = true;
-            break;
-        }
-
-        if (have_next_location)
-        {
-            v2 direction = v2sub(
-                next_location,
-                {cowboy_location.x, cowboy_location.z});
-
-            Motion motion = direction_to_motion(direction, state->cowboy_rotation, input->delta_t * 3);
-            cowboy_location = v3add(
-                cowboy_location,
-                {
-                    motion.movement.x,
-                    0,
-                    motion.movement.y
-                });
-            state->cowboy_rotation += motion.rotation;
-            cowboy_speed = v2length(motion.movement);
-        }
-    }
-    if (!path->data.found_path)
-    {
-        target_tile = cowboy_location2;
-    }
-    if (v2iequal(cowboy_location2, target_tile))
-    {
-        v2 direction = v2sub(
-            v2{
-                (float)target_tile.x - TERRAIN_MAP_CHUNK_WIDTH/2,
-                (float)target_tile.y - TERRAIN_MAP_CHUNK_HEIGHT/2,
-            },
-            v2{cowboy_location.x, cowboy_location.z}
+    apply_path(
+        state,
+        path,
+        &cowboy_location2,
+        &cowboy_location,
+        &state->cowboy_rotation,
+        &target_tile,
+        state->asset_ids.blocky_advanced_mesh,
+        ArmatureIds::test1,
+        input->delta_t
         );
-        if (v2length(direction) > 0.1)
-        {
-            Motion motion = direction_to_motion(direction, state->cowboy_rotation, input->delta_t * 2);
-            cowboy_location = v3add(
-                cowboy_location,
-                {
-                    motion.movement.x,
-                    0,
-                    motion.movement.y
-                });
-            state->cowboy_rotation += motion.rotation;
-            cowboy_speed = v2length(motion.movement);
-        }
-    }
 
-    for (uint32_t i = log_pos; (i + 1) % harray_count(log) != log_pos; ++i)
-    {
-        const char *log_message = log[i % harray_count(log)];
-        if (strlen(log_message))
-        {
-           ImGui::Text(log_message);
-        }
-    }
+    apply_path(
+        state,
+        &state->dog_path,
+        &dog_location2,
+        &dog_location,
+        &state->dog_rotation,
+        &target_tile2,
+        state->asset_ids.dog2_mesh,
+        ArmatureIds::test2,
+        input->delta_t
+        );
 
-
-    if (cowboy_speed)
-    {
-        advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh, state->armatures + (uint32_t)ArmatureIds::test1, cowboy_speed);
-    }
-    //advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t * 3);
+    //advance_armature(state, state->assets.descriptors + state->asset_ids.blocky_advanced_mesh2, state->armatures + (uint32_t)ArmatureIds::test2, input->delta_t * 3, dog_speed, dog_time_to_idle);
 
 
     {
@@ -2784,12 +3010,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->debug.perlin.control_point_0,
                 state->debug.perlin.control_point_1,
                 noise2p.get(noise_location)).y * state->debug.perlin.height_multiplier) / 4.0f + 0.1f;
+        model = m4mul(
+            m4translate({dog_location.x,height,dog_location.z}),
+            m4rotation({0,1,0}, state->dog_rotation)
+        );
         add_mesh_to_render_lists(
             state,
-            m4translate({2,height,2}),
+            model,
             state->asset_ids.dog2_mesh,
             state->asset_ids.dog2_texture,
-            -1);
+            (int32_t)ArmatureIds::test2);
 
         /*
         model = m4translate({2,height + 0.5f,2});
@@ -2876,6 +3106,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_main].asset_descriptor
     );
 
+#if 0
     {
         int32_t descriptors_to_show[] =
         {
@@ -2898,6 +3129,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             start_x += gap + width;
         }
     }
+#endif
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};

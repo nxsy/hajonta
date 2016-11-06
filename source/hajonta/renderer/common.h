@@ -132,6 +132,10 @@ ArmatureDescriptor
     m4 *bones;
     float tick;
     bool halt_time;
+    uint32_t stance;
+    uint32_t previous_stance;
+    float previous_stance_tick;
+    float previous_stance_weight;
 };
 
 struct
@@ -210,6 +214,43 @@ AnimationType
 };
 
 struct
+AnimationTypeOffset
+{
+    uint32_t animation_type;
+    uint32_t animation_offset;
+};
+
+struct
+V3Animation
+{
+    uint32_t num_ticks;
+    AnimTick *animation_ticks;
+};
+
+struct
+V3Name
+{
+    char *name;
+};
+
+struct
+V3Bones
+{
+    MemoryArena arena;
+    uint32_t num_animations;
+    uint32_t num_bones;
+    V3Name *animation_names;
+    V3Animation *animations;
+    V3Name *bone_names;
+    int32_t *bone_parents;
+    m4 *bone_offsets;
+    m4 *default_bones;
+    MeshBoneDescriptor *default_transforms;
+    uint32_t idle_animation;
+    uint32_t walk_animation;
+};
+
+struct
 Mesh
 {
     uint32_t num_triangles;
@@ -221,22 +262,6 @@ Mesh
     MeshFormat mesh_format;
     union
     {
-        struct
-        {
-            buffer uvs;
-            buffer normals;
-            buffer bone_ids;
-            buffer bone_weights;
-            char bone_names[100][100];
-            int32_t bone_parents[100];
-            m4 bone_offsets[100];
-            MeshBoneDescriptor default_transforms[100];
-            uint32_t num_ticks;
-            AnimTick animation_ticks[100][100];
-            m4 default_bones[100];
-            uint32_t vbo;
-            uint32_t ibo;
-        } legacy;
         struct
         {
             uint32_t vertex_buffer;
@@ -252,6 +277,9 @@ Mesh
             uint32_t vertex_count;
             uint32_t index_buffer;
             uint32_t index_offset;
+            V3Bones *v3bones;
+
+            /*
             char bone_names[100][100];
             int32_t bone_parents[100];
             m4 bone_offsets[100];
@@ -259,6 +287,7 @@ Mesh
             uint32_t num_ticks;
             AnimTick animation_ticks[100][100];
             m4 default_bones[100];
+            */
         } v3_bones;
     };
 
@@ -397,20 +426,7 @@ asset_descriptor
     int32_t load_state;
     union
     {
-        struct
-        {
-            uint32_t num_bones;
-            uint32_t num_ticks;
-            m4 *bone_offsets;
-            int32_t *bone_parents;
-            MeshBoneDescriptor *default_transforms;
-            AnimTick *animation_ticks;
-            uint32_t num_animtick_ticks;
-            uint32_t num_animtick_bones;
-            char *bone_names;
-            uint32_t num_bonename_bones;
-            uint32_t num_bonename_chars;
-        } mesh_data;
+        V3Bones *v3bones;
     };
     union
     {

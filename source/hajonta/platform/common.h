@@ -7,8 +7,12 @@
 
 #include <atomic>
 
+#define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D
+#define UniqueFileCounterString_(A, B, C, D) UniqueFileCounterString__(A, B, C, D)
+#define DEBUG_NAME(Name) UniqueFileCounterString_(__FILE__, __LINE__, __COUNTER__, Name)
+
 #ifdef HAJONTA_DEBUG
-#define hassert(expression) if(!(expression)) {*(volatile int *)0 = 0;}
+#define hassert(expression) if(!(expression)) { _platform->debug_message(DEBUG_NAME(__FUNCTION__)); *(volatile int *)0 = 0; }
 #else
 #define hassert(expression)
 #endif
@@ -457,10 +461,6 @@ uint32_t _h_event_index_count = (uint32_t)std::atomic_fetch_add(&GlobalDebugTabl
         _h_event->thread_id = _platform->get_thread_id(); \
         _h_event->guid = _guid;
 
-#define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D
-#define UniqueFileCounterString_(A, B, C, D) UniqueFileCounterString__(A, B, C, D)
-#define DEBUG_NAME(Name) UniqueFileCounterString_(__FILE__, __LINE__, __COUNTER__, Name)
-
 #define FRAME_MARKER(seconds_elapsed) \
 {RecordDebugEvent(DebugType::FrameMarker, DEBUG_NAME("Frame Marker")); \
     _h_event->framemarker.seconds = seconds_elapsed;}
@@ -559,6 +559,7 @@ _PushSize(MemoryArena *arena, uint64_t size, MemoryBlockDebugData *debug_data = 
 {
     void *result = {};
 
+    hassert(size > 0);
     hassert((arena->block->used + size) <= arena->block->size);
 
     uint64_t alignment = get_alignment_offset(arena, params.alignment);
@@ -640,5 +641,58 @@ bootstrap_memory_arena_(
     arena->debug_list = &arena->debug_list_builtin;
 #endif
     return base;
+}
+
+#define create_sub_arena_(_guid, Comment, ParentArena, Size, BaseSize, OffsetToArena, ...) _create_sub_arena(_guid, Comment, ParentArena, Size, BaseSize, OffsetToArena, ## __VA_ARGS__)
+#define create_sub_arena(Comment, ParentArena, Size, typename, member, ...) (typename *)create_sub_arena_(DEBUG_NAME(__FUNCTION__), Comment, ParentArena, Size, sizeof(typename), offsetof(typename, member), ## __VA_ARGS__)
+void *
+_create_sub_arena(
+    const char *guid,
+    const char *comment,
+    MemoryArena *parent_arena,
+    uint32_t size,
+    uint32_t base_size,
+    uint32_t offset_to_arena)
+{
+    uint32_t header_size = sizeof(MemoryBlock);
+    header_size += (64 - header_size) % 64;
+
+    uint32_t size_with_headers = header_size + size;
+    MemoryBlock *block = (MemoryBlock *)PushSize_(guid, comment, parent_arena, size_with_headers);
+    block->base = (uint8_t *)block + header_size;
+    block->size = size;
+    block->used = base_size;
+
+    MemoryArena *arena = (MemoryArena *)(block->base + offset_to_arena);
+    arena->block = block;
+    arena->debug_list = &arena->debug_list_builtin;
+
+    return arena;
+}
+
+#define PushString(Comment, Arena, Source, ...) _PushString(DEBUG_NAME(__FUNCTION__), Comment, Arena, Source)
+#define PushStringWithLength(Comment, Arena, Length, Source, ...) _PushString(DEBUG_NAME(__FUNCTION__), Comment, Arena, Length, Source)
+char *
+_PushString(
+    const char *guid,
+    const char *comment,
+    MemoryArena *parent_arena,
+    uint32_t length,
+    char *source)
+{
+    char *result = (char *)PushSize_(guid, comment, parent_arena, length + 1); // noclear
+    memcpy(result, source, length);
+    result[length] = 0;
+    return result;
+}
+
+char *
+_PushString(
+    const char *guid,
+    const char *comment,
+    MemoryArena *parent_arena,
+    char *source)
+{
+    return _PushString(guid, comment, parent_arena, (uint32_t)strlen(source), source);
 }
 
