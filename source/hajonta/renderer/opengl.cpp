@@ -306,7 +306,7 @@ TimerQueryData
 inline void
 EndTimerQuery()
 {
-#if 0
+#ifdef HAJONTA_QUERY_TIMER
     hglEndQuery(GL_TIME_ELAPSED);
 #endif
 }
@@ -314,7 +314,7 @@ EndTimerQuery()
 inline void
 RecordTimerQuery(TimerQueryData *timer_query_data, const char *guid)
 {
-#if 0
+#ifdef HAJONTA_QUERY_TIMER
     auto &buffer = timer_query_data->buffer;
     auto &query_count = timer_query_data->query_count[buffer];
     auto &query_id = timer_query_data->query_ids[buffer][query_count];
@@ -327,7 +327,7 @@ RecordTimerQuery(TimerQueryData *timer_query_data, const char *guid)
 inline void
 CollectAndSwapTimers(TimerQueryData *timer_query_data)
 {
-#if 0
+#ifdef HAJONTA_QUERY_TIMER
     auto &buffer = timer_query_data->buffer;
     buffer = (uint32_t)!buffer;
 
