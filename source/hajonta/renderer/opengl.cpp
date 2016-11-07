@@ -409,6 +409,25 @@ TexArray1ShaderConfig
 };
 
 struct
+SkyShaderConfig
+{
+    v3 v3InvWavelength;
+    float kr;
+    float km;
+    float sun_brightness;
+    float fKrESun;
+    float fKmESun;
+    float pi;
+    float fKr4PI;
+    float fKm4PI;
+    float fInnerRadius;
+    float fOuterRadius;
+    float fScale;
+    float fScaleDepth;
+    float fScaleOverScaleDepth;
+};
+
+struct
 TexArray1WaterShaderConfig
 {
     v3 camera_position;
@@ -433,6 +452,7 @@ ShaderConfig
 {
     TexArray1ShaderConfig texarray_1_shaderconfig;
     TexArray1WaterShaderConfig texarray_1_water_shaderconfig;
+    SkyShaderConfig sky_shaderconfig;
 };
 
 struct
@@ -578,6 +598,8 @@ struct renderer_state
     int32_t filter_gaussian_7x1_texcontainer;
 
     sky_program_struct sky_program;
+    uint32_t sky_shaderconfig;
+
     uint32_t vbo;
     uint32_t ibo;
     uint32_t QUADS_ibo;
@@ -590,6 +612,10 @@ struct renderer_state
     int32_t tex_id;
     uint32_t font_texture;
     uint32_t white_texture;
+
+    uint32_t rdl_vbo;
+    uint32_t rdl_ibo;
+    uint32_t rdl_vao;
 
     //char bitmap_scratch[4096 * 4096 * 4];
     //uint8_t asset_scratch[4096 * 4096 * 4];
@@ -1491,6 +1517,12 @@ program_init(renderer_state *state)
         sky_program_struct *program = &state->sky_program;
         loaded &= sky_program(program);
         populate_skybox(state, &state->skybox);
+
+        state->sky_shaderconfig = hglGetUniformBlockIndex(program->program, "SHADERCONFIG");
+        hglUniformBlockBinding(
+            state->sky_program.program,
+            state->sky_shaderconfig,
+            9);
     }
 
     auto &command_state = *state->command_state;
@@ -1796,13 +1828,13 @@ extern "C" RENDERER_SETUP(renderer_setup)
         {
             state->multisample_disabled = false;
             state->framebuffer_scale = 1.0f;
-            memory->shadowmap_size = 4096;
+            memory->shadowmap_size = 2048;
         }
         bool loaded = program_init(state);
         hassert(loaded);
         state->initialized = true;
         state->generation_id = 1;
-        //state->crash_on_gl_errors = 1;
+        state->crash_on_gl_errors = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
@@ -2057,15 +2089,38 @@ extern "C" RENDERER_SETUP(renderer_setup)
 void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 {
     TIMED_FUNCTION();
-    // Setup render state: alpha-blending enabled, no face culling, no depth testing, scissor enabled
+
     hglEnable(GL_BLEND);
     hglBlendEquation(GL_FUNC_ADD);
     hglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     hglDisable(GL_CULL_FACE);
     hglDisable(GL_DEPTH_TEST);
     hglEnable(GL_SCISSOR_TEST);
-    hglUseProgram(state->imgui_program.program);
 
+    hglUseProgram(state->imgui_program.program);
+    if (!state->rdl_vbo)
+    {
+        hglGenBuffers(1, &state->rdl_vbo);
+        hglGenBuffers(1, &state->rdl_ibo);
+        hglGenVertexArrays(1, &state->rdl_vao);
+
+        hglBindVertexArray(state->rdl_vao);
+        auto &program = state->imgui_program;
+        hglEnableVertexAttribArray((GLuint)program.a_position_id);
+        hglEnableVertexAttribArray((GLuint)program.a_uv_id);
+        hglEnableVertexAttribArray((GLuint)program.a_color_id);
+        hglBindBuffer(GL_ARRAY_BUFFER, state->rdl_vbo);
+        hglBufferData(GL_ARRAY_BUFFER, 100000 * sizeof(ImDrawVert), (GLvoid*)0, GL_STREAM_DRAW);
+        hglVertexAttribPointer((GLuint)program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
+        hglVertexAttribPointer((GLuint)program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
+        hglVertexAttribPointer((GLuint)program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
+        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->rdl_ibo);
+        hglBufferData(GL_ELEMENT_ARRAY_BUFFER, 100000 * sizeof(ImDrawIdx), (GLvoid*)0, GL_STREAM_DRAW);
+    }
+
+    hglBindVertexArray(state->rdl_vao);
+
+    // Setup render state: alpha-blending enabled, no face culling, no depth testing, scissor enabled
     auto &command_state = *state->command_state;
     hglBindBufferBase(
         GL_UNIFORM_BUFFER,
@@ -2127,12 +2182,9 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
     hglUniformMatrix4fv(state->imgui_program.u_view_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     hglUniformMatrix4fv(state->imgui_program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
     hglUniform1f(state->imgui_program.u_use_color_id, 1.0f);
-    hglBindVertexArray(state->vao);
 
-    hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    hglVertexAttribPointer((GLuint)state->imgui_program.a_position_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, pos));
-    hglVertexAttribPointer((GLuint)state->imgui_program.a_uv_id, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, uv));
-    hglVertexAttribPointer((GLuint)state->imgui_program.a_color_id, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (void *)offsetof(ImDrawVert, col));
+    hglBindBuffer(GL_ARRAY_BUFFER, state->rdl_vbo);
+    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->rdl_ibo);
 
     hglUniform1i(state->imgui_program.u_texaddress_index_id, -1);
 
@@ -2141,11 +2193,16 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
         const ImDrawList* cmd_list = draw_data->CmdLists[n];
         const ImDrawIdx* idx_buffer_offset = 0;
 
-        hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-        hglBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(cmd_list->VtxBuffer.size() * sizeof(ImDrawVert)), (GLvoid*)&cmd_list->VtxBuffer.front(), GL_STREAM_DRAW);
+        hglBufferSubData(GL_ARRAY_BUFFER,
+            0,
+            (GLsizeiptr)(cmd_list->VtxBuffer.size() * sizeof(ImDrawVert)),
+            (GLvoid*)&cmd_list->VtxBuffer.front());
 
-        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
-        hglBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(cmd_list->IdxBuffer.size() * sizeof(ImDrawIdx)), (GLvoid*)&cmd_list->IdxBuffer.front(), GL_STREAM_DRAW);
+        hglBufferSubData(
+            GL_ELEMENT_ARRAY_BUFFER,
+            0,
+            (GLsizeiptr)(cmd_list->IdxBuffer.size() * sizeof(ImDrawIdx)),
+            (GLvoid*)&cmd_list->IdxBuffer.front());
 
         for (const ImDrawCmd* pcmd = cmd_list->CmdBuffer.begin(); pcmd != cmd_list->CmdBuffer.end(); pcmd++)
         {
@@ -3553,6 +3610,55 @@ draw_sky(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, ren
     hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&model_matrix);
     hglUniformMatrix4fv(program.u_view_matrix_id, 1, GL_FALSE, (float *)&view_matrix);
     hglUniformMatrix4fv(program.u_projection_matrix_id, 1, GL_FALSE, (float *)&projection_matrix);
+
+    v3 v3InvWavelength = {
+        1 / pow(0.650f, 4),
+        1 / pow(0.570f, 4),
+        1 / pow(0.475f, 4),
+    };
+
+    float kr = 0.0025f;
+    float km = 0.0015f;
+    float sun_brightness = 15.0f;
+    float fKrESun = sun_brightness * kr;
+    float fKmESun = sun_brightness * km;
+    float pi = 3.14159265358979f;
+    float fKr4PI = kr * 4 * pi;
+    float fKm4PI = km * 4 * pi;
+    float fInnerRadius = 6356752.0f;
+    float fOuterRadius = fInnerRadius * 1.025f;
+    float fScale = 1 / (fOuterRadius - fInnerRadius);
+    float fScaleDepth = 0.25f;
+    float fScaleOverScaleDepth = fScale / fScaleDepth;
+
+    SkyShaderConfig shaderconfig = {
+        v3InvWavelength,
+        kr,
+        km,
+        sun_brightness,
+        fKrESun,
+        fKmESun,
+        pi,
+        fKr4PI,
+        fKm4PI,
+        fInnerRadius,
+        fOuterRadius,
+        fScale,
+        fScaleDepth,
+        fScaleOverScaleDepth,
+    };
+
+    auto &command_state = *state->command_state;
+    hglBindBufferBase(
+        GL_UNIFORM_BUFFER,
+        9,
+        command_state.shaderconfig_buffer.ubo);
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.shaderconfig_buffer.ubo);
+    hglBufferSubData(
+        GL_UNIFORM_BUFFER,
+        0,
+        sizeof(ShaderConfig),
+        &shaderconfig);
 
     hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(state->skybox.faces) * 3, GL_UNSIGNED_INT, (void *)0);
 
