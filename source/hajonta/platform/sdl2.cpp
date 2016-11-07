@@ -193,40 +193,44 @@ sdl_init(sdl2_state *state)
     state->window_height = 0;
 
     uint32_t flags = SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
-#ifdef HAJONTA_WINDOWED
-    window_x = 32;
-    window_y = 32;
-    state->window_width = 960;
-    state->window_height = 540;
-#else
-    for (int32_t i = 0; i < num_displays; ++i)
+    char *windowed = getenv("HAJONTA_WINDOWED");
+    if (windowed)
     {
-        SDL_Rect i_bounds;
-        if (SDL_GetDisplayBounds(i, &i_bounds) < 0)
-        {
-            SDL_Log("SDL_GetDisplayBounds of display index %d failed: %s", i, SDL_GetError());
-            continue;
-        }
-        if (i_bounds.w * i_bounds.h > state->window_width * state->window_height)
-        {
-            window_x = i_bounds.x;
-            window_y = i_bounds.y;
-            state->window_width = i_bounds.w;
-            state->window_height = i_bounds.h;
-        }
-    }
-
-    SDL_Log("SDL_CreateWindow at %d,%d of size %d,%d", window_x, window_y, state->window_width, state->window_height);
-
-    if (state->no_borderless_fullscreen)
-    {
-        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        window_x = 32;
+        window_y = 32;
+        state->window_width = 1920;
+        state->window_height = 1080;
     }
     else
     {
-        flags |= SDL_WINDOW_BORDERLESS;
+        for (int32_t i = 0; i < num_displays; ++i)
+        {
+            SDL_Rect i_bounds;
+            if (SDL_GetDisplayBounds(i, &i_bounds) < 0)
+            {
+                SDL_Log("SDL_GetDisplayBounds of display index %d failed: %s", i, SDL_GetError());
+                continue;
+            }
+            if (i_bounds.w * i_bounds.h > state->window_width * state->window_height)
+            {
+                window_x = i_bounds.x;
+                window_y = i_bounds.y;
+                state->window_width = i_bounds.w;
+                state->window_height = i_bounds.h;
+            }
+        }
+
+        SDL_Log("SDL_CreateWindow at %d,%d of size %d,%d", window_x, window_y, state->window_width, state->window_height);
+
+        if (state->no_borderless_fullscreen)
+        {
+            flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        }
+        else
+        {
+            flags |= SDL_WINDOW_BORDERLESS;
+        }
     }
-#endif
     state->window = SDL_CreateWindow("Hajonta",
             window_x, window_y,
             state->window_width, state->window_height,
