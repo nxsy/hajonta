@@ -11,6 +11,10 @@
 #endif
 #include "hajonta/platform/common.h"
 
+#ifndef HAJONTA_VSYNC
+#define HAJONTA_VSYNC 1
+#endif
+
 #include <chrono>
 
 static DebugTable _global_debug_table;
@@ -278,7 +282,11 @@ sdl_init(sdl2_state *state)
         sdl_cleanup(state);
         return _fail("SDL_GL_CreateContext failed");
     }
+#if HAJONTA_VSYNC
     SDL_GL_SetSwapInterval(-1);
+#else
+    SDL_GL_SetSwapInterval(0);
+#endif
 
     SDL_AudioSpec wanted = {};
     wanted.freq = 48000;
@@ -646,9 +654,10 @@ main(int argc, char *argv[])
     }
 
     std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
+    float delta_t = 1.0f / 60.0f;
     while (!state.stopping)
     {
-        state.new_input->delta_t = 1.0f / 60.0f;
+        state.new_input->delta_t = delta_t;
 
         game_controller_state *old_keyboard_controller = get_controller(state.old_input, 0);
         game_controller_state *new_keyboard_controller = get_controller(state.new_input, 0);
@@ -732,8 +741,8 @@ main(int argc, char *argv[])
         auto frame_end_time = std::chrono::steady_clock::now();
         auto diff = frame_end_time - last_frame_start_time;
         int64_t duration_us = std::chrono::duration_cast<std::chrono::microseconds>(diff).count();
-        float delta_time = (float)duration_us / 1000 / 1000;
-        FRAME_MARKER(delta_time);
+        delta_t = (float)duration_us / 1000 / 1000;
+        FRAME_MARKER(delta_t);
         last_frame_start_time = frame_end_time;
     }
 

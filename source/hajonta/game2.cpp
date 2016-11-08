@@ -1394,11 +1394,29 @@ blend_transforms(uint32_t num_transforms, MeshBoneDescriptor *transforms, float 
     MeshBoneDescriptor result = transforms[0];
     MeshBoneDescriptor rest = blend_transforms(num_transforms - 1, transforms + 1, weights + 1);
 
-    result.scale = lerp(result.scale, rest.scale, my_weight);
-    result.translate = lerp(result.translate, rest.translate, my_weight);
-    result.q = quatmix(result.q, rest.q, my_weight);
+    result.scale = lerp(rest.scale, result.scale, my_weight);
+    result.translate = lerp(rest.translate, result.translate, my_weight);
+    result.q = quatmix(rest.q, result.q, my_weight);
 
     return result;
+}
+
+MeshBoneDescriptor
+transform_for_tick(V3Animation *animation, float tick, uint32_t num_bones, int32_t bone)
+{
+    float t0 = floorf(tick);
+    float t1 = ceilf(tick);
+    uint32_t t0i = (uint32_t)t0 % animation->num_ticks;
+    uint32_t t1i = (uint32_t)t1 % animation->num_ticks;
+    MeshBoneDescriptor ds[] = {
+        animation->animation_ticks[t0i * num_bones + bone].transform,
+        animation->animation_ticks[t1i * num_bones + bone].transform,
+    };
+    float weights[] = {
+        t1 - tick,
+        tick - t0,
+    };
+    return blend_transforms(2, &ds[0], &weights[0]);
 }
 
 void
@@ -1601,21 +1619,20 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
 
         if (!armature->halt_time)
         {
+            d = transform_for_tick(&animation, armature->tick, v3bones.num_bones, bone);
             if (interpolate)
             {
-                MeshBoneDescriptor ds[] = {
-                    animation.animation_ticks[((uint32_t)armature->tick % animation.num_ticks) * v3bones.num_bones + bone].transform,
-                    interp_animation->animation_ticks[((uint32_t)armature->previous_stance_tick % interp_animation->num_ticks) * v3bones.num_bones + bone].transform,
+                MeshBoneDescriptor ds[] =
+                {
+                    d,
+                    transform_for_tick(interp_animation, armature->previous_stance_tick, v3bones.num_bones, bone),
                 };
-                float weights[] = {
-                    armature->previous_stance_weight,
+                float weights[] =
+                {
                     1 - armature->previous_stance_weight,
+                    armature->previous_stance_weight,
                 };
                 d = blend_transforms(2, &ds[0], &weights[0]);
-            }
-            else
-            {
-                d = animation.animation_ticks[((uint32_t)armature->tick % animation.num_ticks) * v3bones.num_bones + bone].transform;
             }
         }
         if (d.scale.x == 0)

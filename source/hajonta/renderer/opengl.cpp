@@ -30,6 +30,14 @@
 #include "hajonta/image.cpp"
 #include "hajonta/math.cpp"
 
+#ifndef HAJONTA_QUERY_TIMER
+#define HAJONTA_QUERY_TIMER 0
+#endif
+
+#ifndef HAJONTA_ERROR_ASSERT
+#define HAJONTA_ERROR_ASSERT 0
+#endif
+
 static platform_memory *_platform_memory;
 
 static float h_pi = 3.14159265358979f;
@@ -172,9 +180,7 @@ CommandLists
 inline void
 hglErrorAssert(bool skip = false)
 {
-#if 0
-    return;
-#else
+#if HAJONTA_ERROR_ASSERT
     GLenum error = hglGetError();
     if (skip)
     {
@@ -223,6 +229,8 @@ hglErrorAssert(bool skip = false)
             hassert(!"Unknown error");
         } break;
     }
+#else
+    return;
 #endif
 }
 
@@ -306,7 +314,7 @@ TimerQueryData
 inline void
 EndTimerQuery()
 {
-#ifdef HAJONTA_QUERY_TIMER
+#if HAJONTA_QUERY_TIMER
     hglEndQuery(GL_TIME_ELAPSED);
 #endif
 }
@@ -314,7 +322,7 @@ EndTimerQuery()
 inline void
 RecordTimerQuery(TimerQueryData *timer_query_data, const char *guid)
 {
-#ifdef HAJONTA_QUERY_TIMER
+#if HAJONTA_QUERY_TIMER
     auto &buffer = timer_query_data->buffer;
     auto &query_count = timer_query_data->query_count[buffer];
     auto &query_id = timer_query_data->query_ids[buffer][query_count];
@@ -327,7 +335,7 @@ RecordTimerQuery(TimerQueryData *timer_query_data, const char *guid)
 inline void
 CollectAndSwapTimers(TimerQueryData *timer_query_data)
 {
-#ifdef HAJONTA_QUERY_TIMER
+#if HAJONTA_QUERY_TIMER
     auto &buffer = timer_query_data->buffer;
     buffer = (uint32_t)!buffer;
 
@@ -1834,7 +1842,8 @@ extern "C" RENDERER_SETUP(renderer_setup)
         hassert(loaded);
         state->initialized = true;
         state->generation_id = 1;
-        state->crash_on_gl_errors = 1;
+        //state->crash_on_gl_errors = 1;
+        //state->flush_for_profiling = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
@@ -2636,7 +2645,7 @@ get_mesh_from_asset_descriptor(
             } break;
         }
 
-        if (result)
+        if (result && descriptor->load_state != 2)
         {
             descriptor->load_state = 2;
             switch (mesh->mesh_format)
@@ -4071,30 +4080,21 @@ draw_indirect(
             hglBindVertexArray(command_list.vao);
         }
 
-        ImGui::Text(
-            "Command list %d, size %d, bones %d, shader_type %s, vertexformat %d, vertex_buffer %d, index_buffer %d",
-            i,
-            command_list.num_commands,
-            command_list.num_bones,
-            shader_type_configs[(uint32_t)command_key.shader_type].name,
-            command_key.vertexformat,
-            command_key.vertex_buffer,
-            command_key.index_buffer
-            );
-
+        if (state->show_debug)
+        {
+            ImGui::Text(
+                "Command list %d, size %d, bones %d, shader_type %s, vertexformat %d, vertex_buffer %d, index_buffer %d",
+                i,
+                command_list.num_commands,
+                command_list.num_bones,
+                shader_type_configs[(uint32_t)command_key.shader_type].name,
+                command_key.vertexformat,
+                command_key.vertex_buffer,
+                command_key.index_buffer
+                );
+        }
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[command_key.index_buffer].ibo);
-
-        if (command_key.shader_type == ShaderType::water)
-        {
-            auto &dd = command_list.draw_data_list.data[0];
-            v3 &camera_position = dd.camera_position;
-            //camera_position.y *= -1.0f;
-            ImGui::Text("Water camera position: %f %f %f",
-                camera_position.x, camera_position.y, camera_position.z);
-
-            ImGui::Text("light_index: %d", dd.light_index);
-        }
 
         hglBindBufferBase(
             GL_UNIFORM_BUFFER,
@@ -4462,12 +4462,28 @@ extern "C" RENDERER_RENDER(renderer_render)
     hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     EndTimerQuery();
 
+    if (state->show_debug)
+    {
+        ImGui::Begin("Renderer debug", &state->show_debug);
+        ImGui::End();
+    }
+
+    if (state->show_debug)
+    {
+        ImGui::Begin("Renderer debug");
+        ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::Text("This frame: %.3f ms", 1000.0f * io.DeltaTime);
+    }
+
     uint32_t quads_drawn = 0;
     uint32_t meshes_drawn[1000] = {};
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
         render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
-        ImGui::Text("Render list: %s", strrchr(render_list->name, '|') + 1);
+        if (state->show_debug)
+        {
+            ImGui::Text("Render list: %s", strrchr(render_list->name, '|') + 1);
+        }
         {
             RecordDebugEvent(DebugType::BeginBlock, render_list->name);
         }
@@ -4643,12 +4659,28 @@ extern "C" RENDERER_RENDER(renderer_render)
     }
 
     if (state->show_debug) {
-        ImGui::Begin("Renderer debug", &state->show_debug);
+
+        auto &command_state = *state->command_state;
+        for (uint32_t i = 0; i < harray_count(command_state.texture_configs); ++i)
+        {
+            TextureConfig ts = command_state.texture_configs[i];
+            TextureLayerInfo &tli = command_state.texture_layer_info[i];
+            if (ts.width)
+            {
+                ImGui::Text(
+                    "Texture container %d, size %dx%d, format %s, %d/%d used",
+                    i,
+                    ts.width,
+                    ts.height,
+                    texture_format_configs[(uint32_t)ts.format].name,
+                    tli.num_layers_used,
+                    tli.max_layers
+                    );
+            }
+        }
+
         ImGui::Text("Quads drawn: %d", quads_drawn);
         ImGui::Text("Generations updated: %d", generations_updated_this_frame);
-        ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-        ImGui::Text("This frame: %.3f ms", 1000.0f * io.DeltaTime);
-
         const char *shadow_modes[] =
         {
             "none",
@@ -4739,25 +4771,6 @@ extern "C" RENDERER_RENDER(renderer_render)
         ImGui::End();
     }
 
-    auto &command_state = *state->command_state;
-    for (uint32_t i = 0; i < harray_count(command_state.texture_configs); ++i)
-    {
-        TextureConfig ts = command_state.texture_configs[i];
-        TextureLayerInfo &tli = command_state.texture_layer_info[i];
-        if (ts.width)
-        {
-            ImGui::Text(
-                "Texture container %d, size %dx%d, format %s, %d/%d used",
-                i,
-                ts.width,
-                ts.height,
-                texture_format_configs[(uint32_t)ts.format].name,
-                tli.num_layers_used,
-                tli.max_layers
-                );
-        }
-    }
-
     if (state->show_arena) {
         arena_debug(state, &state->show_arena);
     }
@@ -4811,7 +4824,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     (void)meshes_drawn;
 
     hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    //hglErrorAssert();
+    hglErrorAssert();
     return true;
 #endif
 };
