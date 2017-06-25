@@ -45,24 +45,6 @@ static float h_halfpi = h_pi / 2.0f;
 
 DebugTable *GlobalDebugTable;
 
-struct
-vertexformat_1
-{
-    v3 position;
-    v3 normal;
-    v2 texcoords;
-};
-
-struct
-vertexformat_2
-{
-    v3 position;
-    v3 normal;
-    v2 texcoords;
-    v4i bone_ids;
-    v4 bone_weights;
-};
-
 typedef struct {
     GLuint count;
     GLuint primCount;
@@ -99,6 +81,18 @@ CommandKey
     }
 };
 
+struct
+BufferKey
+{
+    uint32_t vertexformat;
+
+    bool operator==(const BufferKey &other) const
+    {
+        return
+            (vertexformat == other.vertexformat);
+    }
+};
+
 struct DrawData
 {
     m4 projection;
@@ -117,6 +111,11 @@ struct DrawData
     v3 camera_position;
     int32_t bone_offset;
     // 4 * 3 + 4 = 16
+    //
+    int32_t normal_texaddress_index;
+    int32_t specular_texaddress_index;
+    int32_t object_identifier;
+    int32_t pad[1];
 };
 
 struct DrawDataList
@@ -275,7 +274,36 @@ AssetType
     mesh,
 };
 
-struct asset
+#define TEXTURE_FORMATS \
+    X(rgba8, GL_RGBA8, GL_RGBA) \
+    X(srgba, GL_SRGB8_ALPHA8, GL_RGBA) \
+    X(rg32f, GL_RG32F, GL_RG) \
+    X(rgba16f, GL_RGBA16F, GL_RGBA) \
+    X(depth24stencil8, GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL) \
+
+
+enum struct
+TextureFormat
+{
+#define X(a, ...) a,
+TEXTURE_FORMATS
+#undef X
+};
+
+struct
+TextureFormatConfig
+{
+    const char *name;
+    uint32_t internal_format;
+} texture_format_configs[] =
+{
+#define X(name, internal_format, ...) { #name, internal_format },
+TEXTURE_FORMATS
+#undef X
+};
+
+struct
+asset
 {
     AssetType type;
     uint32_t asset_id;
@@ -283,6 +311,7 @@ struct asset
     int32_t asset_file_id;
     v2 st0;
     v2 st1;
+    TextureFormat format;
 };
 
 struct GLSetupCountersHistory
@@ -410,10 +439,23 @@ IndirectBuffer
 };
 
 struct
+TexArray1ShaderConfigFlags
+{
+    unsigned int normal_map_disabled:1;
+    unsigned int show_normals:1;
+    unsigned int show_normalmap:1;
+    unsigned int specular_map_disabled:1;
+    unsigned int show_specular:1;
+    unsigned int show_specularmap:1;
+    unsigned int show_tangent:1;
+    unsigned int show_object_identifier:1;
+};
+
+struct
 TexArray1ShaderConfig
 {
     Plane clipping_plane;
-    int32_t use_clipping_plane;
+    TexArray1ShaderConfigFlags flags;
 };
 
 struct
@@ -477,34 +519,6 @@ LightsBuffer
     uint32_t ubo;
 };
 
-#define TEXTURE_FORMATS \
-    X(rgba8, GL_RGBA8, GL_RGBA) \
-    X(srgba, GL_SRGB8_ALPHA8, GL_RGBA) \
-    X(rg32f, GL_RG32F, GL_RG) \
-    X(rgba16f, GL_RGBA16F, GL_RGBA) \
-    X(depth24stencil8, GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL) \
-
-
-enum struct
-TextureFormat
-{
-#define X(a, ...) a,
-TEXTURE_FORMATS
-#undef X
-};
-
-struct
-TextureFormatConfig
-{
-    const char *name;
-    uint32_t internal_format;
-} texture_format_configs[] =
-{
-#define X(name, internal_format, ...) { #name, internal_format },
-TEXTURE_FORMATS
-#undef X
-};
-
 struct
 TextureConfig
 {
@@ -542,8 +556,10 @@ TextureLayerInfo
 struct
 CommandState
 {
+    uint32_t buffers_used;
     VertexBuffer vertex_buffers[10];
     IndexBuffer index_buffers[10];
+    BufferKey buffer_keys[10];
 
     TextureAddressBuffer texture_address_buffers[10];
     // new, draining?
@@ -647,7 +663,7 @@ struct renderer_state
     asset_file_to_mesh mesh_lookup[16];
     uint32_t mesh_lookup_count;
 
-    asset_file asset_files[128];
+    asset_file asset_files[256];
     uint32_t asset_file_count;
     asset assets[256];
     uint32_t asset_count;
@@ -923,6 +939,7 @@ load_texture_array_asset(
     const char *filename,
     uint8_t *image_buffer,
     uint32_t image_size,
+    TextureFormat format,
     int32_t *x,
     int32_t *y,
     uint32_t *texaddress_index
@@ -937,7 +954,6 @@ load_texture_array_asset(
             x, y, &actual_size);
 
     auto &command_state = *state->command_state;
-    TextureFormat format = TextureFormat::srgba;
     uint32_t container_index = container_index_for_size(&command_state, *x, *y, format);
     auto &tex = command_state.textures[container_index];
     GLuint lod = 0;
@@ -1076,7 +1092,7 @@ load_mesh_asset(
         format.num_triangles = v3_format->num_triangles;
         mesh->mesh_format = MeshFormat::v3_boneless;
         mesh->vertexformat = v3_format->vertexformat;
-        mesh->v3_boneless.vertex_count = v3_format->num_vertices;
+        mesh->v3.vertex_count = v3_format->num_vertices;
         mesh_buffer += v3_format->header_size;
         vertexformat_1 *vf = (vertexformat_1 *)mesh_buffer;
         vertexformat_1 vf0 = vf[0];
@@ -1127,7 +1143,7 @@ load_mesh_asset(
         format.num_triangles = v3_format->num_triangles;
         mesh->mesh_format = MeshFormat::v3_bones;
         mesh->vertexformat = v3_format->vertexformat;
-        mesh->v3_bones.vertex_count = v3_format->num_vertices;
+        mesh->v3.vertex_count = v3_format->num_vertices;
 
         format.num_bones = v3_format->num_bones;
         format.bone_names_offset = v3_format->bone_names_offset;
@@ -1167,13 +1183,13 @@ load_mesh_asset(
         offset += format.indices_size;
 
         uint32_t v3bones_size = 1024 * 1024; // TODO: calculate this
-        mesh->v3_bones.v3bones = build_base_v3bones(
+        mesh->v3.v3bones = build_base_v3bones(
             &state->arena,
             v3bones_size,
             v3_format->num_bones,
             v3_format->num_animations
         );
-        auto &v3bones = *mesh->v3_bones.v3bones;
+        auto &v3bones = *mesh->v3.v3bones;
 
         int32_t *bone_parents = (int32_t *)(base_offset + format.bone_parent_offset);
         m4 *bone_offsets = (m4 *)(base_offset + format.bone_offsets_offset);
@@ -1535,10 +1551,6 @@ program_init(renderer_state *state)
 
     auto &command_state = *state->command_state;
     hglGenVertexArrays(1, &command_state.vao);
-    hglGenBuffers(1, &command_state.vertex_buffers[0].vbo);
-    hglGenBuffers(1, &command_state.index_buffers[0].ibo);
-    hglGenBuffers(1, &command_state.vertex_buffers[1].vbo);
-    hglGenBuffers(1, &command_state.index_buffers[1].ibo);
     hglGenBuffers(1, &command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglGenBuffers(1, &command_state.draw_data_buffer.ubo);
     hglGenBuffers(1, &command_state.bone_data_buffer.ubo);
@@ -1626,7 +1638,7 @@ add_asset_file_texture(renderer_state *state, int32_t asset_file_id)
 }
 
 int32_t
-add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id)
+add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id, TextureFormat format)
 {
     int32_t result = lookup_asset_file_to_texaddress_index(state, asset_file_id);
     if (result < 0)
@@ -1640,6 +1652,7 @@ add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id)
             asset_file0->asset_file_path,
             state->asset_scratch,
             state->asset_scratch_size,
+            format,
             &x,
             &y,
             &texaddress_index);
@@ -1690,6 +1703,7 @@ _add_asset(renderer_state *state, AssetType type, const char *asset_name, int32_
     asset0->asset_id = 0;
     strcpy(asset0->asset_name, asset_name);
     asset0->asset_file_id = asset_file_id;
+    asset0->format = TextureFormat::srgba;
     result = (int32_t)state->asset_count;
     ++state->asset_count;
     return result;
@@ -1714,6 +1728,24 @@ add_asset(renderer_state *state, const char *asset_name, const char *asset_file_
     if (asset_file_id >= 0)
     {
         result = add_asset(state, asset_name, asset_file_id, st0, st1);
+    }
+    return result;
+}
+
+int32_t
+add_rgba8_asset(renderer_state *state, const char *asset_name, const char *asset_file_name, v2 st0, v2 st1)
+{
+    int32_t result = -1;
+
+    int32_t asset_file_id = add_asset_file(state, asset_file_name);
+    if (asset_file_id >= 0)
+    {
+        result = add_asset(state, asset_name, asset_file_id, st0, st1);
+        if (result >= 0)
+        {
+            asset *asset0 = state->assets + result;
+            asset0->format = TextureFormat::rgba8;
+        }
     }
     return result;
 }
@@ -1780,7 +1812,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
     }
 #endif
     */
-    memory->render_lists_count = 0;
+    _platform->render_lists_count = 0;
     renderer_state *state = (renderer_state *)memory->renderer_block->base;
     _state = state;
 
@@ -1836,7 +1868,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         {
             state->multisample_disabled = false;
             state->framebuffer_scale = 1.0f;
-            memory->shadowmap_size = 2048;
+            memory->shadowmap_size = 512;
         }
         bool loaded = program_init(state);
         hassert(loaded);
@@ -1973,9 +2005,30 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "dog2_mesh", "testing/dog2/dog3.hjm");
         add_asset(state, "dog2_texture", "testing/dog2/dog3C.png", {0.0f, 1.0f}, {1.0f, 0.0f});
 
-        add_asset(state, "water_normal", "testing/water_normal.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_asset(state, "water_dudv", "testing/water_dudv.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "water_normal", "testing/water_normal.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "water_dudv", "testing/water_dudv.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "square_texture", "testing/square.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+
+        add_asset(state, "pattern_46_diffuse", "testing/nobiax/textures/pack08/pattern_46/diffus.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "pattern_46_normal", "testing/nobiax/textures/pack08/pattern_46/normal.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "pattern_46_specular", "testing/nobiax/textures/pack08/pattern_46/specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+
+        add_mesh_asset(state, "barrel_mesh", "testing/nobiax/wood_barrels/big_wood_barrel.hjm");
+        add_asset(state, "barrel_diffuse", "testing/nobiax/wood_barrels/big_diffus.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "barrel_normal", "testing/nobiax/wood_barrels/big_normal.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "barrel_specular", "testing/nobiax/wood_barrels/big_specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+
+        add_mesh_asset(state, "metal_barrel_mesh", "testing/nobiax/metal_barrel/metal_barrel.hjm");
+        add_asset(state, "metal_barrel_diffuse", "testing/nobiax/metal_barrel/diffus_blue.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "metal_barrel_normal", "testing/nobiax/metal_barrel/normal_hard_bumps.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "metal_barrel_specular", "testing/nobiax/metal_barrel/specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+
+        add_mesh_asset(state, "modular_building_brick_door_mesh", "testing/nobiax/modular_building/brick_door.hjm");
+        add_mesh_asset(state, "modular_building_brick_wall_mesh", "testing/nobiax/modular_building/wall_brick_1.hjm");
+        add_mesh_asset(state, "modular_building_brick_small_window_mesh", "testing/nobiax/modular_building/brick_small_window_1.hjm");
+        add_asset(state, "modular_building_diffuse", "testing/nobiax/modular_building/diffuse.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "modular_building_normal", "testing/nobiax/modular_building/normal.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_rgba8_asset(state, "modular_building_specular", "testing/nobiax/modular_building/specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -2455,7 +2508,7 @@ get_texaddress_index_from_asset_descriptor(
                     int32_t idx = lookup_asset_file_to_texaddress_index(state, asset_file_id);
                     if (idx < 0)
                     {
-                        idx = add_asset_file_texaddress_index(state, asset_file_id);
+                        idx = add_asset_file_texaddress_index(state, asset_file_id, descriptor_asset->format);
                     }
                     if (idx >= 0)
                     {
@@ -2652,8 +2705,8 @@ get_mesh_from_asset_descriptor(
             {
                 case MeshFormat::v3_bones:
                 {
-                    auto &v3bones = *mesh->v3_bones.v3bones;
-                    descriptor->v3bones = mesh->v3_bones.v3bones;
+                    auto &v3bones = *mesh->v3.v3bones;
+                    descriptor->v3bones = mesh->v3.v3bones;
 
                     int32_t first_bone = 0;
                     for (uint32_t i = 0; i < mesh->num_bones; ++i)
@@ -2900,9 +2953,152 @@ calculate_camera_position(m4 view)
             v3mul(n1n2, d3)
         )
     );
-    float denom = 1.0f / v3dot(n1, n2n3);
+    float denom = -1.0f / v3dot(n1, n2n3);
 
     return v3mul(top, denom);
+}
+
+int32_t
+choose_buffer_for_mesh(renderer_state *state, Mesh *mesh)
+{
+    auto &command_state = *state->command_state;
+    BufferKey k = {mesh->vertexformat};
+    int32_t buffer = -1;
+    for (uint32_t i = 0; i < command_state.buffers_used; ++i)
+    {
+        if (command_state.buffer_keys[i] == k)
+        {
+            buffer = (int32_t)i;
+        }
+    }
+    if (buffer < 0)
+    {
+        if (command_state.buffers_used < harray_count(command_state.buffer_keys))
+        {
+            buffer = (int32_t)command_state.buffers_used++;
+            command_state.buffer_keys[buffer] = k;
+        }
+    }
+    return buffer;
+}
+
+bool
+load_mesh_to_buffers(
+    renderer_state *state,
+    Mesh *mesh)
+{
+    auto &command_state = *state->command_state;
+    if (!mesh->loaded)
+    {
+        int32_t buffer_id = choose_buffer_for_mesh(state, mesh);
+        if (buffer_id < 0)
+        {
+            return false;
+        }
+        auto &vertex_buffer = command_state.vertex_buffers[buffer_id];
+        auto &index_buffer = command_state.index_buffers[buffer_id];
+
+        mesh->v3.vertex_buffer = (uint32_t)buffer_id;
+        mesh->v3.vertex_base = vertex_buffer.vertex_count;
+        mesh->v3.index_buffer = (uint32_t)buffer_id;
+        mesh->v3.index_offset = index_buffer.index_count;
+
+        if (!vertex_buffer.max_vertices)
+        {
+            hglGenBuffers(1, &vertex_buffer.vbo);
+            hglGenBuffers(1, &index_buffer.ibo);
+            switch (mesh->vertexformat)
+            {
+                case 1:
+                {
+                    vertex_buffer.vertex_size = sizeof(vertexformat_1);
+                } break;
+                case 2:
+                {
+                    vertex_buffer.vertex_size = sizeof(vertexformat_2);
+                } break;
+                case 3:
+                {
+                    vertex_buffer.vertex_size = sizeof(vertexformat_3);
+                } break;
+                default:
+                {
+                    hassert(!"Unhandled");
+                } break;
+            }
+            vertex_buffer.max_vertices = 10000000;
+            hglBindBuffer(GL_ARRAY_BUFFER,
+                vertex_buffer.vbo);
+            hglBufferData(GL_ARRAY_BUFFER,
+                vertex_buffer.vertex_size * vertex_buffer.max_vertices,
+                (void *)0,
+                GL_DYNAMIC_DRAW);
+        }
+
+        if (!index_buffer.max_indices)
+        {
+            hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+                index_buffer.ibo);
+            index_buffer.max_indices = 10000000;
+            hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                3 * 4 * index_buffer.max_indices,
+                (void *)0,
+                GL_DYNAMIC_DRAW);
+        }
+        vertex_buffer.vertex_count += mesh->v3.vertex_count;
+        index_buffer.index_count += mesh->num_triangles * 3;
+
+        mesh->loaded = true;
+        mesh->reload = true;
+    }
+
+    if (mesh->reload)
+    {
+        uint32_t vertex_buffer_id = mesh->v3.vertex_buffer;
+        uint32_t vertex_base = mesh->v3.vertex_base;
+        uint32_t index_buffer_id = mesh->v3.index_buffer;
+        uint32_t index_offset = mesh->v3.index_offset;
+
+        auto &vertex_buffer = command_state.vertex_buffers[vertex_buffer_id];
+        auto &index_buffer = command_state.index_buffers[index_buffer_id];
+
+        hglBindBuffer(GL_ARRAY_BUFFER,
+            vertex_buffer.vbo);
+        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+            index_buffer.ibo);
+
+        if (!mesh->dynamic_max_vertices)
+        {
+            hassert(vertex_buffer.vertex_size * mesh->v3.vertex_count == mesh->vertices.size);
+        }
+        else
+        {
+            hassert(vertex_buffer.vertex_size * mesh->dynamic_max_vertices == mesh->vertices.size);
+        }
+
+        hglBufferSubData(GL_ARRAY_BUFFER,
+            vertex_buffer.vertex_size * vertex_base,
+            vertex_buffer.vertex_size * mesh->v3.vertex_count,
+            mesh->vertices.data);
+
+        if (!mesh->dynamic_max_triangles)
+        {
+            hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
+        }
+        else
+        {
+            hassert(4 * mesh->dynamic_max_triangles * 3 == mesh->indices.size);
+        }
+
+        hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
+            4 * index_offset,
+            4 * mesh->num_triangles * 3,
+            mesh->indices.data);
+        mesh->reload = false;
+    }
+
+
+    return true;
 }
 
 void
@@ -2912,13 +3108,13 @@ draw_mesh_from_asset_v3_bones(
     asset_descriptor *descriptors,
     LightDescriptor *light_descriptors,
     ArmatureDescriptor *armature_descriptors,
+    Material *materials,
     render_entry_type_mesh_from_asset *mesh_from_asset,
     Mesh *mesh
 )
 {
     TIMED_FUNCTION();
     if (state->crash_on_gl_errors) hglErrorAssert();
-    auto &command_state = *state->command_state;
 
     bool debug = false;
     if (mesh_from_asset->mesh_asset_descriptor_id == 997)
@@ -2926,59 +3122,13 @@ draw_mesh_from_asset_v3_bones(
         debug = true;
     }
 
-    if (!mesh->loaded)
-    {
-        uint32_t vertex_buffer_id = 1;
-        uint32_t index_buffer_id = 1;
-        auto &vertex_buffer = command_state.vertex_buffers[vertex_buffer_id];
-        auto &index_buffer = command_state.index_buffers[index_buffer_id];
-        uint32_t vertex_base = vertex_buffer.vertex_count;
-        uint32_t index_offset = index_buffer.index_count;
-        mesh->v3_bones.vertex_buffer = vertex_buffer_id;
-        mesh->v3_bones.vertex_base = vertex_base;
-        mesh->v3_bones.index_buffer = index_buffer_id;
-        mesh->v3_bones.index_offset = index_offset;
-        hglBindBuffer(GL_ARRAY_BUFFER,
-            vertex_buffer.vbo);
-        if (!vertex_buffer.max_vertices)
-        {
-            vertex_buffer.vertex_size = sizeof(vertexformat_2);
-            vertex_buffer.max_vertices = 100000;
-            hglBufferData(GL_ARRAY_BUFFER,
-                vertex_buffer.vertex_size * vertex_buffer.max_vertices,
-                (void *)0,
-                GL_DYNAMIC_DRAW);
-        }
-        hassert(vertex_buffer.vertex_size * mesh->v3_bones.vertex_count == mesh->vertices.size);
-        hglBufferSubData(GL_ARRAY_BUFFER,
-            vertex_buffer.vertex_size * vertex_buffer.vertex_count,
-            vertex_buffer.vertex_size * mesh->v3_bones.vertex_count,
-            mesh->vertices.data);
-        vertex_buffer.vertex_count += mesh->v3_bones.vertex_count;
-        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-            index_buffer.ibo);
-        if (!index_buffer.max_indices)
-        {
-            index_buffer.max_indices = 100000;
-            hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                3 * 4 * index_buffer.max_indices,
-                (void *)0,
-                GL_DYNAMIC_DRAW);
-        }
-        hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
-        hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
-            4 * index_buffer.index_count,
-            4 * mesh->num_triangles * 3,
-            mesh->indices.data);
-        index_buffer.index_count += mesh->num_triangles * 3;
-        mesh->loaded = true;
-    }
+    load_mesh_to_buffers(state, mesh);
 
     CommandKey key = {};
     key.shader_type = mesh_from_asset->shader_type;
     key.vertexformat = mesh->vertexformat;
-    key.vertex_buffer = mesh->v3_bones.vertex_buffer;
-    key.index_buffer = mesh->v3_bones.index_buffer;
+    key.vertex_buffer = mesh->v3.vertex_buffer;
+    key.index_buffer = mesh->v3.index_buffer;
     key.count = 0;
 
     enum struct
@@ -3024,25 +3174,57 @@ draw_mesh_from_asset_v3_bones(
     auto &cmd = command_list.commands[command_list.num_commands];
     cmd.count = 3 * mesh->num_triangles; // number of triangles * 3
     cmd.primCount = 1; // number of instances
-    cmd.firstIndex = mesh->v3_bones.index_offset;
-    cmd.baseVertex = (int32_t)mesh->v3_bones.vertex_base;
+    cmd.firstIndex = mesh->v3.index_offset;
+    cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
     cmd.baseInstance = 0;
 
     //key.shadowmap_color_asset_descriptor_id = light.shadowmap_color_asset_descriptor_id;
     v2 st0 = {};
     v2 st1 = {};
     int32_t texture_texaddress_index = -1;
+    int32_t normal_texaddress_index = -1;
+    int32_t specular_texaddress_index = -1;
     if (debug)
     {
         hassert(debug);
     }
-    get_texaddress_index_from_asset_descriptor(
-        state,
-        descriptors,
-        mesh_from_asset->texture_asset_descriptor_id,
-        &texture_texaddress_index,
-        &st0,
-        &st1);
+    switch (mesh_from_asset->flags.use_materials)
+    {
+        case 0:
+        {
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                mesh_from_asset->texture_asset_descriptor_id,
+                &texture_texaddress_index,
+                &st0,
+                &st1);
+        } break;
+        case 1:
+        {
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                materials[mesh_from_asset->texture_asset_descriptor_id].diffuse_id,
+                &texture_texaddress_index,
+                &st0,
+                &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                materials[mesh_from_asset->texture_asset_descriptor_id].normal_id,
+                &normal_texaddress_index,
+                &st0,
+                &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                materials[mesh_from_asset->texture_asset_descriptor_id].specular_id,
+                &specular_texaddress_index,
+                &st0,
+                &st1);
+        } break;
+    }
     int32_t shadowmap_texaddress_index = -1;
     int32_t shadowmap_color_texaddress_index = -1;
     int32_t light_index = 0;
@@ -3092,7 +3274,7 @@ draw_mesh_from_asset_v3_bones(
     {
         armature = armature_descriptors + mesh_from_asset->armature_descriptor_id;
     }
-    m4 *bones = mesh->v3_bones.v3bones->default_bones;
+    m4 *bones = mesh->v3.v3bones->default_bones;
     if (armature)
     {
         bones = armature->bones;
@@ -3108,6 +3290,8 @@ draw_mesh_from_asset_v3_bones(
 
     auto &draw_data = command_list.draw_data_list.data[command_list.num_commands];
     draw_data.texture_texaddress_index = texture_texaddress_index;
+    draw_data.normal_texaddress_index = normal_texaddress_index;
+    draw_data.specular_texaddress_index = specular_texaddress_index;
     draw_data.shadowmap_texaddress_index = shadowmap_texaddress_index;
     draw_data.shadowmap_color_texaddress_index = shadowmap_color_texaddress_index;
     draw_data.projection = projection;
@@ -3117,6 +3301,7 @@ draw_mesh_from_asset_v3_bones(
     v3 camera_position = calculate_camera_position(view);
     draw_data.camera_position = camera_position;
     draw_data.bone_offset = (int32_t)bone_offset;
+    draw_data.object_identifier = mesh_from_asset->object_identifier;
 
     ++command_list.num_commands;
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -3130,12 +3315,12 @@ draw_mesh_from_asset_v3_boneless(
     asset_descriptor *descriptors,
     LightDescriptor *light_descriptors,
     ArmatureDescriptor *armature_descriptors,
+    Material *materials,
     render_entry_type_mesh_from_asset *mesh_from_asset,
     Mesh *mesh
 )
 {
     TIMED_FUNCTION();
-    auto &command_state = *state->command_state;
 
     bool debug = false;
     if (mesh_from_asset->mesh_asset_descriptor_id == 97)
@@ -3143,119 +3328,17 @@ draw_mesh_from_asset_v3_boneless(
         debug = true;
     }
 
-    if (!mesh->loaded)
+    bool loaded = load_mesh_to_buffers(state, mesh);
+    if (!loaded)
     {
-        uint32_t vertex_buffer_id = 0;
-        uint32_t index_buffer_id = 0;
-        auto &vertex_buffer = command_state.vertex_buffers[vertex_buffer_id];
-        auto &index_buffer = command_state.index_buffers[index_buffer_id];
-        uint32_t vertex_base = vertex_buffer.vertex_count;
-        uint32_t index_offset = index_buffer.index_count;
-
-        mesh->v3_boneless.vertex_buffer = vertex_buffer_id;
-        mesh->v3_boneless.vertex_base = vertex_base;
-        mesh->v3_boneless.index_buffer = index_buffer_id;
-        mesh->v3_boneless.index_offset = index_offset;
-        hglBindBuffer(GL_ARRAY_BUFFER,
-            vertex_buffer.vbo);
-        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-            index_buffer.ibo);
-
-        if (!vertex_buffer.max_vertices)
-        {
-            vertex_buffer.vertex_size = sizeof(vertexformat_1);
-            vertex_buffer.max_vertices = 10000000;
-            hglBufferData(GL_ARRAY_BUFFER,
-                vertex_buffer.vertex_size * vertex_buffer.max_vertices,
-                (void *)0,
-                GL_DYNAMIC_DRAW);
-        }
-
-        if (!index_buffer.max_indices)
-        {
-            index_buffer.max_indices = 10000000;
-            hglBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                3 * 4 * index_buffer.max_indices,
-                (void *)0,
-                GL_DYNAMIC_DRAW);
-        }
-        mesh->loaded = true;
-        mesh->reload = true;
-
-        if (!mesh->dynamic_max_vertices)
-        {
-            vertex_buffer.vertex_count += mesh->v3_boneless.vertex_count;
-        }
-        else
-        {
-            vertex_buffer.vertex_count += mesh->dynamic_max_vertices;
-        }
-        if (!mesh->dynamic_max_triangles)
-        {
-            index_buffer.index_count += mesh->num_triangles * 3;
-        }
-        else
-        {
-            index_buffer.index_count += mesh->dynamic_max_triangles * 3;
-        }
+        return;
     }
-
-    if (mesh->reload)
-    {
-        if (mesh->dynamic)
-        {
-            bool f = mesh->dynamic;
-            (void)f;
-        }
-        uint32_t vertex_buffer_id = mesh->v3_boneless.vertex_buffer;
-        uint32_t vertex_base = mesh->v3_boneless.vertex_base;
-        uint32_t index_buffer_id = mesh->v3_boneless.index_buffer;
-        uint32_t index_offset = mesh->v3_boneless.index_offset;
-
-        auto &vertex_buffer = command_state.vertex_buffers[vertex_buffer_id];
-        auto &index_buffer = command_state.index_buffers[index_buffer_id];
-
-        hglBindBuffer(GL_ARRAY_BUFFER,
-            vertex_buffer.vbo);
-        hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-            index_buffer.ibo);
-
-        if (!mesh->dynamic_max_vertices)
-        {
-            hassert(vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count == mesh->vertices.size);
-        }
-        else
-        {
-            hassert(vertex_buffer.vertex_size * mesh->dynamic_max_vertices == mesh->vertices.size);
-        }
-
-        hglBufferSubData(GL_ARRAY_BUFFER,
-            vertex_buffer.vertex_size * vertex_base,
-            vertex_buffer.vertex_size * mesh->v3_boneless.vertex_count,
-            mesh->vertices.data);
-
-        if (!mesh->dynamic_max_triangles)
-        {
-            hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
-        }
-        else
-        {
-            hassert(4 * mesh->dynamic_max_triangles * 3 == mesh->indices.size);
-        }
-
-        hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
-            4 * index_offset,
-            4 * mesh->num_triangles * 3,
-            mesh->indices.data);
-        mesh->reload = false;
-    }
-
 
     CommandKey key = {};
     key.shader_type = mesh_from_asset->shader_type;
     key.vertexformat = mesh->vertexformat;
-    key.vertex_buffer = mesh->v3_boneless.vertex_buffer;
-    key.index_buffer = mesh->v3_boneless.index_buffer;
+    key.vertex_buffer = mesh->v3.vertex_buffer;
+    key.index_buffer = mesh->v3.index_buffer;
     key.count = 0;
 
     enum struct
@@ -3301,25 +3384,58 @@ draw_mesh_from_asset_v3_boneless(
     auto &cmd = command_list.commands[command_list.num_commands];
     cmd.count = 3 * mesh->num_triangles; // number of triangles * 3
     cmd.primCount = 1; // number of instances
-    cmd.firstIndex = mesh->v3_boneless.index_offset;
-    cmd.baseVertex = (int32_t)mesh->v3_boneless.vertex_base;
+    cmd.firstIndex = mesh->v3.index_offset;
+    cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
     cmd.baseInstance = 0;
 
     //key.shadowmap_color_asset_descriptor_id = light.shadowmap_color_asset_descriptor_id;
     v2 st0 = {};
     v2 st1 = {};
     int32_t texture_texaddress_index = -1;
+    int32_t normal_texaddress_index = -1;
+    int32_t specular_texaddress_index = -1;
     if (debug)
     {
         hassert(debug);
     }
-    get_texaddress_index_from_asset_descriptor(
-        state,
-        descriptors,
-        mesh_from_asset->texture_asset_descriptor_id,
-        &texture_texaddress_index,
-        &st0,
-        &st1);
+    switch (mesh_from_asset->flags.use_materials)
+    {
+        case 0:
+        {
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                mesh_from_asset->texture_asset_descriptor_id,
+                &texture_texaddress_index,
+                &st0,
+                &st1);
+        } break;
+        case 1:
+        {
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                materials[mesh_from_asset->texture_asset_descriptor_id].diffuse_id,
+                &texture_texaddress_index,
+                &st0,
+                &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                materials[mesh_from_asset->texture_asset_descriptor_id].normal_id,
+                &normal_texaddress_index,
+                &st0,
+                &st1);
+            get_texaddress_index_from_asset_descriptor(
+                state,
+                descriptors,
+                materials[mesh_from_asset->texture_asset_descriptor_id].specular_id,
+                &specular_texaddress_index,
+                &st0,
+                &st1);
+
+        } break;
+    }
     int32_t shadowmap_texaddress_index = -1;
     int32_t shadowmap_color_texaddress_index = -1;
     int32_t light_index = 0;
@@ -3366,6 +3482,8 @@ draw_mesh_from_asset_v3_boneless(
 
     auto &draw_data = command_list.draw_data_list.data[command_list.num_commands];
     draw_data.texture_texaddress_index = texture_texaddress_index;
+    draw_data.normal_texaddress_index = normal_texaddress_index;
+    draw_data.specular_texaddress_index = specular_texaddress_index;
     draw_data.shadowmap_texaddress_index = shadowmap_texaddress_index;
     draw_data.shadowmap_color_texaddress_index = shadowmap_color_texaddress_index;
     draw_data.projection = projection;
@@ -3375,6 +3493,7 @@ draw_mesh_from_asset_v3_boneless(
     v3 camera_position = calculate_camera_position(view);
     draw_data.camera_position = camera_position;
     draw_data.bone_offset = -1;
+    draw_data.object_identifier = mesh_from_asset->object_identifier;
 
     ++command_list.num_commands;
 
@@ -3388,6 +3507,7 @@ draw_mesh_from_asset(
     asset_descriptor *descriptors,
     LightDescriptor *light_descriptors,
     ArmatureDescriptor *armature_descriptors,
+    Material *materials,
     render_entry_type_mesh_from_asset *mesh_from_asset
 )
 {
@@ -3402,6 +3522,7 @@ draw_mesh_from_asset(
                 descriptors,
                 light_descriptors,
                 armature_descriptors,
+                materials,
                 mesh_from_asset,
                 mesh);
         } break;
@@ -3413,6 +3534,7 @@ draw_mesh_from_asset(
                 descriptors,
                 light_descriptors,
                 armature_descriptors,
+                materials,
                 mesh_from_asset,
                 mesh);
         } break;
@@ -3709,7 +3831,7 @@ draw_indirect(
     auto &command_lists = command_state.lists;
 
     //hglDisable(GL_BLEND);
-    if (!list->flags.depth_disabled)
+    if (!list->config.depth_disabled)
     {
         hglEnable(GL_DEPTH_TEST);
         hglDepthFunc(GL_LESS);
@@ -3719,10 +3841,10 @@ draw_indirect(
         hglDisable(GL_DEPTH_TEST);
     }
 
-    if (!list->flags.cull_disabled)
+    if (!list->config.cull_disabled)
     {
         hglEnable(GL_CULL_FACE);
-        if (!list->flags.cull_front)
+        if (!list->config.cull_front)
         {
             hglCullFace(GL_BACK);
         }
@@ -3765,6 +3887,7 @@ draw_indirect(
         int32_t a_normal_id;
         int32_t a_bone_ids_id;
         int32_t a_bone_weights_id;
+        int32_t a_tangent_id;
     } program_data[] =
     {
         {
@@ -3775,6 +3898,7 @@ draw_indirect(
             state->texarray_1_program.a_normal_id,
             state->texarray_1_program.a_bone_ids_id,
             state->texarray_1_program.a_bone_weights_id,
+            state->texarray_1_program.a_tangent_id,
         },
         {
             state->texarray_1_vsm_texcontainer,
@@ -3784,12 +3908,14 @@ draw_indirect(
             -1,
             state->texarray_1_vsm_program.a_bone_ids_id,
             state->texarray_1_vsm_program.a_bone_weights_id,
+            -1,
         },
         {
             state->texarray_1_water_texcontainer,
             state->texarray_1_water_program.u_draw_data_index_id,
             state->texarray_1_water_program.a_position_id,
             -1
+            -1,
             -1,
             -1,
             -1,
@@ -3809,9 +3935,18 @@ draw_indirect(
             hglUniform1f(program.u_minimum_variance_id, state->vsm_minimum_variance);
             hglUniform1f(program.u_lightbleed_compensation_id, state->vsm_lightbleed_compensation);
             shaderconfig.texarray_1_shaderconfig = {
-                list->clipping_plane,
-                (int32_t)list->flags.use_clipping_plane,
+                list->config.clipping_plane,
+                {}
             };
+            shaderconfig.texarray_1_shaderconfig.flags.normal_map_disabled = list->config.normal_map_disabled;
+            shaderconfig.texarray_1_shaderconfig.flags.show_normals = list->config.show_normals;
+            shaderconfig.texarray_1_shaderconfig.flags.show_tangent = list->config.show_tangent;
+            shaderconfig.texarray_1_shaderconfig.flags.show_normalmap = list->config.show_normalmap;
+
+            shaderconfig.texarray_1_shaderconfig.flags.specular_map_disabled = list->config.specular_map_disabled;
+            shaderconfig.texarray_1_shaderconfig.flags.show_specular = list->config.show_specular;
+            shaderconfig.texarray_1_shaderconfig.flags.show_specularmap = list->config.show_specularmap;
+            shaderconfig.texarray_1_shaderconfig.flags.show_object_identifier = list->config.show_object_identifier;
         } break;
         case ShaderType::variance_shadow_map:
         {
@@ -3838,28 +3973,28 @@ draw_indirect(
             v2 st0, st1;
             get_texaddress_index_from_asset_descriptor(
                 state, descriptors,
-                list->reflection_asset_descriptor,
+                list->config.reflection_asset_descriptor,
                 &reflection_texaddress_index, &st0, &st1);
             get_texaddress_index_from_asset_descriptor(
                 state, descriptors,
-                list->refraction_asset_descriptor,
+                list->config.refraction_asset_descriptor,
                 &refraction_texaddress_index, &st0, &st1);
             get_texaddress_index_from_asset_descriptor(
                 state, descriptors,
-                list->refraction_depth_asset_descriptor,
+                list->config.refraction_depth_asset_descriptor,
                 &refraction_depth_texaddress_index, &st0, &st1);
             get_texaddress_index_from_asset_descriptor(
                 state, descriptors,
-                list->dudv_map_asset_descriptor,
+                list->config.dudv_map_asset_descriptor,
                 &dudv_map_texaddress_index, &st0, &st1);
             get_texaddress_index_from_asset_descriptor(
                 state, descriptors,
-                list->normal_map_asset_descriptor,
+                list->config.normal_map_asset_descriptor,
                 &normal_map_texaddress_index, &st0, &st1);
             static float move_factor = 0.0f;
             move_factor += 0.0004f;
             shaderconfig.texarray_1_water_shaderconfig = {
-                list->camera_position,
+                list->config.camera_position,
                 reflection_texaddress_index,
                 refraction_texaddress_index,
                 refraction_depth_texaddress_index,
@@ -3871,8 +4006,8 @@ draw_indirect(
                 state->vsm_minimum_variance,
                 state->shadowmap_bias,
                 state->vsm_lightbleed_compensation,
-                list->near_,
-                list->far_,
+                list->config.near_,
+                list->config.far_,
             };
         } break;
     }
@@ -3943,7 +4078,7 @@ draw_indirect(
         sizeof(LightList),
         command_state.light_list.lights);
 
-    if (list->flags.use_clipping_plane)
+    if (list->config.use_clipping_plane)
     {
         hglEnable(GL_CLIP_DISTANCE0);
     }
@@ -4004,7 +4139,7 @@ draw_indirect(
             continue;
         }
 
-        if (command_key.vertexformat > 2)
+        if (command_key.vertexformat > 3)
         {
             command_list.num_commands = 0;
             command_list.num_bones = 0;
@@ -4071,7 +4206,26 @@ draw_indirect(
                         hglEnableVertexAttribArray((GLuint)pd.a_bone_weights_id);
                     }
                 } break;
-
+                case 3:
+                {
+                    hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_3), (void *)offsetof(vertexformat_3, position));
+                    hglEnableVertexAttribArray((GLuint)pd.a_position_id);
+                    if (pd.a_texcoord_id >= 0)
+                    {
+                        hglVertexAttribPointer((GLuint)pd.a_texcoord_id, 2, GL_FLOAT, GL_FALSE, sizeof(vertexformat_3), (void *)offsetof(vertexformat_3, texcoords));
+                        hglEnableVertexAttribArray((GLuint)pd.a_texcoord_id);
+                    }
+                    if (pd.a_normal_id >= 0)
+                    {
+                        hglVertexAttribPointer((GLuint)pd.a_normal_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_3), (void *)offsetof(vertexformat_3, normal));
+                        hglEnableVertexAttribArray((GLuint)pd.a_normal_id);
+                    }
+                    if (pd.a_tangent_id >= 0)
+                    {
+                        hglVertexAttribPointer((GLuint)pd.a_tangent_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_3), (void *)offsetof(vertexformat_3, tangent));
+                        hglEnableVertexAttribArray((GLuint)pd.a_tangent_id);
+                    }
+                } break;
             }
             command_list._vao_initialized = true;
         }
@@ -4414,7 +4568,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     ImGuiIO& io = ImGui::GetIO();
     generations_updated_this_frame = 0;
 
-    hassert(memory->render_lists_count > 0);
+    hassert(_platform->render_lists_count > 0);
 
     window_data *window = &state->input->window;
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -4424,11 +4578,11 @@ extern "C" RENDERER_RENDER(renderer_render)
 
     {
         TIMED_BLOCK("Render list sorting");
-        while(render_lists_to_process_count < memory->render_lists_count)
+        while(render_lists_to_process_count < _platform->render_lists_count)
         {
-            for (uint32_t i = 0; i < memory->render_lists_count; ++i)
+            for (uint32_t i = 0; i < _platform->render_lists_count; ++i)
             {
-                render_entry_list *render_list = memory->render_lists[i];
+                render_entry_list *render_list = _platform->render_lists[i];
                 if (!render_list->depends_on_slots)
                 {
                     bool handled = false;
@@ -4447,10 +4601,10 @@ extern "C" RENDERER_RENDER(renderer_render)
                     }
                     hassert(render_lists_to_process_count < harray_count(render_lists_to_process));
                     render_lists_to_process[render_lists_to_process_count++] = i;
-                    for (uint32_t j = 0; j < memory->render_lists_count; ++j)
+                    for (uint32_t j = 0; j < _platform->render_lists_count; ++j)
                     {
                         uint32_t inverse = (uint32_t)~(1 << i);
-                        render_entry_list *render_list_to_undepend = memory->render_lists[j];
+                        render_entry_list *render_list_to_undepend = _platform->render_lists[j];
                         render_list_to_undepend->depends_on_slots &= inverse;
                     }
                 }
@@ -4479,7 +4633,7 @@ extern "C" RENDERER_RENDER(renderer_render)
     uint32_t meshes_drawn[1000] = {};
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
-        render_entry_list *render_list = memory->render_lists[render_lists_to_process[ii]];
+        render_entry_list *render_list = _platform->render_lists[render_lists_to_process[ii]];
         if (state->show_debug)
         {
             ImGui::Text("Render list: %s", strrchr(render_list->name, '|') + 1);
@@ -4511,6 +4665,7 @@ extern "C" RENDERER_RENDER(renderer_render)
         asset_descriptor *asset_descriptors = {};
         LightDescriptors lights = {};
         ArmatureDescriptors armatures = {};
+        MaterialDescriptors materials = {};
 
         uint32_t matrix_count = 0;
         uint32_t asset_descriptor_count = 0;
@@ -4583,6 +4738,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                     ExtractRenderElementWithSize(descriptors, item, header, element_size);
                     lights = item->lights;
                     armatures = item->armatures;
+                    materials = item->materials;
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::QUADS:
@@ -4600,7 +4756,7 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
                     ++meshes_drawn[item->mesh_asset_descriptor_id];
-                    draw_mesh_from_asset(state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, item);
+                    draw_mesh_from_asset(state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, materials.materials, item);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::apply_filter:

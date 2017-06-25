@@ -137,6 +137,15 @@ vertexformat_2
 };
 
 struct
+vertexformat_3
+{
+    v3 position;
+    v3 normal;
+    v3 tangent;
+    v2 texcoords;
+};
+
+struct
 MeshBoneDescriptor
 {
     v3 scale;
@@ -234,14 +243,14 @@ handle_boneless_model(const aiScene *scene, const char *outputfile)
     binary_format_v3_boneless format = {};
     format.header_size = sizeof(binary_format_v3_boneless);
 
-    format.vertexformat = 1;
+    format.vertexformat = 3;
     format.num_vertices = 0;
 
     for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
     {
         aiMesh *mesh = scene->mMeshes[i];
 
-        format.vertices_size += sizeof(vertexformat_1) * mesh->mNumVertices;
+        format.vertices_size += sizeof(vertexformat_3) * mesh->mNumVertices;
         format.indices_size += sizeof(uint32_t) * 3 * mesh->mNumFaces;
         format.num_vertices += mesh->mNumVertices;
         format.num_triangles += mesh->mNumFaces;
@@ -251,7 +260,7 @@ handle_boneless_model(const aiScene *scene, const char *outputfile)
     format.indices_offset = offset;
     offset += format.indices_size;
 
-    std::vector<vertexformat_1> vertices;
+    std::vector<vertexformat_3> vertices;
     vertices.reserve(format.num_vertices);
 
     for (uint32_t h = 0; h < scene->mNumMeshes; ++h)
@@ -259,7 +268,7 @@ handle_boneless_model(const aiScene *scene, const char *outputfile)
         aiMesh *mesh = scene->mMeshes[h];
         for (uint32_t i = 0; i < mesh->mNumVertices; ++i)
         {
-            vertexformat_1 vf0;
+            vertexformat_3 vf0;
             {
                 aiVector3D *v = mesh->mVertices + i;
                 vf0.position = { v->x, v->y, v->z};
@@ -271,6 +280,10 @@ handle_boneless_model(const aiScene *scene, const char *outputfile)
             {
                 aiVector3D *v = mesh->mTextureCoords[0] + i;
                 vf0.texcoords = { v->x, v->y };
+            }
+            {
+                aiVector3D *v = mesh->mTangents + i;
+                vf0.tangent = { v->x, v->y, v->z};
             }
             vertices.push_back(vf0);
         }
@@ -285,7 +298,7 @@ handle_boneless_model(const aiScene *scene, const char *outputfile)
 
     size_t written = 0;
     size_t total_written = 0;
-    total_written += written = full_fwrite(&vertices[0], sizeof(vertexformat_1), vertices.size(), of);
+    total_written += written = full_fwrite(&vertices[0], sizeof(vertexformat_3), vertices.size(), of);
     assert(written == format.vertices_size);
 
     std::vector<uint32_t> indices;

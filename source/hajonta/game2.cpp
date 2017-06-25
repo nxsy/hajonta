@@ -47,8 +47,9 @@ DEMO(demo_b)
 
 }
 
+template<uint32_t SIZE>
 int32_t
-add_asset(AssetDescriptors *asset_descriptors, const char *name, asset_descriptor_type type, bool debug)
+add_asset(AssetDescriptors<SIZE> *asset_descriptors, const char *name, asset_descriptor_type type, bool debug)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
@@ -61,14 +62,16 @@ add_asset(AssetDescriptors *asset_descriptors, const char *name, asset_descripto
     return result;
 }
 
+template<uint32_t SIZE>
 int32_t
-add_asset(AssetDescriptors *asset_descriptors, const char *name, bool debug = false)
+add_asset(AssetDescriptors<SIZE> *asset_descriptors, const char *name, bool debug = false)
 {
     return add_asset(asset_descriptors, name, asset_descriptor_type::name, debug);
 }
 
+template<uint32_t SIZE>
 int32_t
-add_dynamic_mesh_asset(AssetDescriptors *asset_descriptors, Mesh *ptr, bool debug = false)
+add_dynamic_mesh_asset(AssetDescriptors<SIZE> *asset_descriptors, Mesh *ptr, bool debug = false)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
@@ -82,8 +85,9 @@ add_dynamic_mesh_asset(AssetDescriptors *asset_descriptors, Mesh *ptr, bool debu
     return result;
 }
 
+template<uint32_t SIZE>
 int32_t
-add_dynamic_texture_asset(AssetDescriptors *asset_descriptors, DynamicTextureDescriptor *ptr, bool debug = false)
+add_dynamic_texture_asset(AssetDescriptors<SIZE> *asset_descriptors, DynamicTextureDescriptor *ptr, bool debug = false)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
@@ -96,8 +100,9 @@ add_dynamic_texture_asset(AssetDescriptors *asset_descriptors, DynamicTextureDes
     return result;
 }
 
+template<uint32_t SIZE>
 int32_t
-add_framebuffer_asset(AssetDescriptors *asset_descriptors, FramebufferDescriptor *framebuffer, bool debug = false)
+add_framebuffer_asset(AssetDescriptors<SIZE> *asset_descriptors, FramebufferDescriptor *framebuffer, bool debug = false)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
@@ -110,8 +115,9 @@ add_framebuffer_asset(AssetDescriptors *asset_descriptors, FramebufferDescriptor
     return result;
 }
 
+template<uint32_t SIZE>
 int32_t
-add_framebuffer_depth_asset(AssetDescriptors *asset_descriptors, FramebufferDescriptor *framebuffer, bool debug = false)
+add_framebuffer_depth_asset(AssetDescriptors<SIZE> *asset_descriptors, FramebufferDescriptor *framebuffer, bool debug = false)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
@@ -301,7 +307,7 @@ initialize(platform_memory *memory, game_state *state)
 {
     state->shadowmap_size = memory->shadowmap_size;
     CreatePipeline(state);
-    AssetDescriptors *asset_descriptors = &state->assets;
+    auto *asset_descriptors = &state->assets;
     state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
     state->asset_ids.sea_0 = add_asset(asset_descriptors, "sea_0");
     state->asset_ids.ground_0 = add_asset(asset_descriptors, "ground_0");
@@ -420,7 +426,7 @@ initialize(platform_memory *memory, game_state *state)
 
     state->camera.distance = 3.0f;
     state->camera.near_ = 0.1f;
-    state->camera.far_ = 1000.0f * 1.1f;
+    state->camera.far_ = 2000.0f * 1.1f;
     state->camera.fov = 60;
     state->camera.target = {2, 1.0, 0};
     state->camera.rotation = {-0.1f, -0.8f, 0};
@@ -599,8 +605,8 @@ initialize(platform_memory *memory, game_state *state)
         auto &mesh = state->test_meshes[i];
         mesh.dynamic = true;
         mesh.vertexformat = 1;
-        mesh.dynamic_max_vertices = 60000;
-        mesh.dynamic_max_triangles = 60000;
+        mesh.dynamic_max_vertices = 120000;
+        mesh.dynamic_max_triangles = 120000;
         mesh.mesh_format = MeshFormat::v3_boneless;
         mesh.vertices.size = sizeof(_vertexformat_1) * mesh.dynamic_max_vertices;
         mesh.vertices.data = malloc(mesh.vertices.size);
@@ -1019,15 +1025,16 @@ append_block_mesh(
 float
 perturb_raw(float raw)
 {
-    return fmod(raw, 0.001f) * 100.0f;
+    return raw;
+    //return fmod(raw, 0.001f) * 100.0f;
 }
 
 void
 generate_heightmap(array2p<float> map, array2p<float> heights, float height_multiplier, v2 cp0, v2 cp1)
 {
-    for (int32_t y = 0; y < map.height - 1; ++y)
+    for (int32_t y = 0; y < map.height; ++y)
     {
-        for (int32_t x = 0; x < map.width - 1; ++x)
+        for (int32_t x = 0; x < map.width; ++x)
         {
             v2 uv_base = {x + 0.5f, y + 0.5f};
             float raw_base_height = cubic_bezier(
@@ -1043,7 +1050,7 @@ generate_heightmap(array2p<float> map, array2p<float> heights, float height_mult
 
 
 void
-generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, v2 cp0, v2 cp1)
+generate_terrain_mesh3(array2p<float> map, Mesh *mesh)
 {
     v2 top_left = {
         -(map.width - 1.0f),
@@ -1064,12 +1071,7 @@ generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, 
         for (int32_t x = 0; x < map.width - 1; ++x)
         {
             v2 uv_base = {x + 0.5f, y + 0.5f};
-            float raw_base_height = cubic_bezier(
-                cp0,
-                cp1,
-                map.get({x,y})).y;
-            float base_height = roundf(raw_base_height * height_multiplier) / 4 +
-                perturb_raw(raw_base_height);
+            float base_height = map.get({x,y});
 
             CornerHeights ch = {};
 
@@ -1091,13 +1093,7 @@ generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, 
                 uv_size);
 
             {
-                float raw_base_height_x1 = cubic_bezier(
-                    cp0,
-                    cp1,
-                    map.get({x+1,y})).y;
-                float base_height_x1 = roundf(raw_base_height_x1 * height_multiplier) / 4 +
-                    perturb_raw(raw_base_height_x1);
-
+                float base_height_x1 = map.get({x+1,y});
                 float min_height = min(base_height, base_height_x1);
 
                 ch = {
@@ -1124,14 +1120,7 @@ generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, 
             }
 
             {
-                float raw_base_height_y1 = cubic_bezier(
-                    cp0,
-                    cp1,
-                    map.get({x,y+1})).y;
-
-                float base_height_y1 = roundf(raw_base_height_y1 * height_multiplier) / 4 +
-                    perturb_raw(raw_base_height_y1);
-
+                float base_height_y1 = map.get({x,y+1});
                 float min_height = min(base_height, base_height_y1);
 
                 ch = {
@@ -1160,29 +1149,11 @@ generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, 
 
             {
                 ch = {
-                    cubic_bezier(
-                        cp0,
-                        cp1,
-                        map.get({x,y})).y,
-                    cubic_bezier(
-                        cp0,
-                        cp1,
-                        map.get({x+1,y})).y,
-                    cubic_bezier(
-                        cp0,
-                        cp1,
-                        map.get({x,y+1})).y,
-                    cubic_bezier(
-                        cp0,
-                        cp1,
-                        map.get({x+1,y+1})).y,
+                    map.get({x,y}),
+                    map.get({x+1,y}),
+                    map.get({x,y+1}),
+                    map.get({x+1,y+1}),
                 };
-
-                for (uint32_t i = 0; i < 4; ++i)
-                {
-                    ch.E[i] = roundf(ch.E[i] * height_multiplier) / 4 +
-                        perturb_raw(ch.E[i]);
-                }
 
                 float min_height = min(
                     min(ch.E[0], ch.E[1]),
@@ -1214,7 +1185,7 @@ generate_terrain_mesh3(array2p<float> map, Mesh *mesh, float height_multiplier, 
         }
     }
 
-    mesh->v3_boneless.vertex_count = (uint32_t)vertex_index;
+    mesh->v3.vertex_count = (uint32_t)vertex_index;
     mesh->num_triangles = num_triangles;
     mesh->reload = true;
 }
@@ -1250,6 +1221,14 @@ generate_noise_map(
         };
     }
 
+    float max_height = 0;
+    float max_amplitude = 1.0f;
+    for (uint32_t i = 0; i < octaves; ++i)
+    {
+        max_height += max_amplitude;
+        max_amplitude *= persistence;
+    }
+
     float half_width = map.width / 2.0f;
     float half_height = map.height / 2.0f;
 
@@ -1272,6 +1251,7 @@ generate_noise_map(
                 amplitude *= persistence;
                 frequency *= lacunarity;
             }
+            height /= max_height;
             if (height > *max_noise_height)
             {
                 *max_noise_height = height;
@@ -1420,7 +1400,7 @@ transform_for_tick(V3Animation *animation, float tick, uint32_t num_bones, int32
 }
 
 void
-advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t, float speed, float time_to_idle)
+advance_armature(asset_descriptor *asset, ArmatureDescriptor *armature, float delta_t, float speed, float time_to_idle, bool *debug = 0)
 {
     if (asset->load_state != 2)
     {
@@ -1491,12 +1471,12 @@ advance_armature(game_state *state, asset_descriptor *asset, ArmatureDescriptor 
     }
     ImGui::End();
 
-    bool opened_debug = state->debug.armature.show;
+    bool opened_debug = debug ? *debug : false;
     if (opened_debug)
     {
         char label[100];
         sprintf(label, "Armature Animation##%p", armature);
-        ImGui::Begin(label);
+        ImGui::Begin(label, debug);
 
         ImGui::Checkbox("Animation proceed", &armature->halt_time);
         if (ImGui::Button("Reset to start"))
@@ -2097,7 +2077,7 @@ do_path_stuff(game_state *state, Pathfinding *path, v2i cowboy_location2, v2i ta
     MeshProxy meshp = {
         (_vertexformat_1 *)mesh.vertices.data,
         (v3i *)mesh.indices.data,
-        &mesh.v3_boneless.vertex_count,
+        &mesh.v3.vertex_count,
         &mesh.num_triangles,
     };
     m4 model = m4identity();
@@ -2340,9 +2320,563 @@ apply_path(
         }
     }
 
-    advance_armature(state, state->assets.descriptors + mesh_id, state->armatures + (uint32_t)armature_id, delta_t * playback_speed, cowboy_speed, time_to_idle);
+    advance_armature(state->assets.descriptors + mesh_id, state->armatures + (uint32_t)armature_id, delta_t * playback_speed, cowboy_speed, time_to_idle);
 }
 
+struct
+demo_a_state
+{
+    MemoryArena arena;
+    bool initialized;
+
+    FrameState frame_state;
+
+    AssetDescriptors<64> assets;
+
+    RenderPipeline render_pipeline;
+
+    RenderPipelineRendererId r_m;
+    _render_list<2 * 1024 * 1024> rl_m;
+
+    RenderPipelineRendererId r_mousepicking;
+    _render_list<2 * 1024 * 1024> rl_mousepicking;
+
+    RenderPipelineFramebufferId fb_mousepicking;
+
+    bool show_camera;
+    CameraState camera;
+    m4 matrices[2];
+
+    bool show_lights;
+    LightDescriptor lights[1];
+    v2i middle_base_location;
+    v2i right_base_location;
+    v2 sun_rotation;
+
+    int32_t ground_plane;
+    int32_t diffuse46;
+    int32_t normal46;
+    int32_t specular46;
+
+    int32_t barrel_mesh;
+    int32_t barrel_diffuse;
+    int32_t barrel_normal;
+    int32_t barrel_specular;
+
+    int32_t metal_barrel_mesh;
+    int32_t metal_barrel_diffuse;
+    int32_t metal_barrel_normal;
+    int32_t metal_barrel_specular;
+
+    int32_t modular_building_brick_door_mesh;
+    int32_t modular_building_brick_wall_mesh;
+    int32_t modular_building_brick_small_window_mesh;
+    int32_t modular_building_diffuse;
+    int32_t modular_building_normal;
+    int32_t modular_building_specular;
+
+    int32_t mouse_cursor;
+
+    Material materials[4];
+};
+
+DEMO(demo_a)
+{
+    game_state *gs = (game_state *)memory->game_block->base;
+    if (!gs->demo_a_block)
+    {
+        gs->demo_a_block = _platform->allocate_memory("demo_a", 256 * 1024 * 1024);
+        bootstrap_memory_arena(gs->demo_a_block, demo_a_state, arena);
+    }
+    demo_a_state *state = (demo_a_state *)gs->demo_a_block->base;
+    auto &light = state->lights[0];
+    if (!state->initialized)
+    {
+        state->initialized = 1;
+        state->r_m = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *m = state->render_pipeline.entries + state->r_m;
+        *m = {
+            &state->rl_m.list,
+            state->rl_m.buffer,
+            sizeof(state->rl_m.buffer),
+            -1,
+            -1,
+        };
+        state->rl_m.list.name = DEBUG_NAME("m");
+        state->fb_mousepicking = RenderPipelineAddFramebuffer(&state->render_pipeline);
+
+        state->r_mousepicking = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *mousepicking = state->render_pipeline.entries + state->r_mousepicking;
+        *mousepicking = {
+            &state->rl_mousepicking.list,
+            state->rl_mousepicking.buffer,
+            sizeof(state->rl_mousepicking.buffer),
+            state->fb_mousepicking,
+            -1,
+        };
+        state->rl_mousepicking.list.name = DEBUG_NAME("mousepicking");
+        state->rl_mousepicking.list.config.show_object_identifier = 1;
+
+        //RenderPipelineFramebuffer *fb_mousepicking = state->render_pipeline.frambuffers + state->fb_mousepicking;
+        PipelineInit(&state->render_pipeline, &state->assets);
+        state->ground_plane = add_asset(&state->assets, "ground_plane_mesh");
+        state->diffuse46 = add_asset(&state->assets, "pattern_46_diffuse");
+        state->normal46 = add_asset(&state->assets, "pattern_46_normal");
+        state->specular46 = add_asset(&state->assets, "pattern_46_specular");
+        state->mouse_cursor = add_asset(&state->assets, "mouse_cursor");
+
+        state->barrel_diffuse = add_asset(&state->assets, "barrel_diffuse");
+        state->barrel_normal = add_asset(&state->assets, "barrel_normal");
+        state->barrel_specular = add_asset(&state->assets, "barrel_specular");
+        state->barrel_mesh = add_asset(&state->assets, "barrel_mesh");
+
+        state->metal_barrel_diffuse = add_asset(&state->assets, "metal_barrel_diffuse");
+        state->metal_barrel_normal = add_asset(&state->assets, "metal_barrel_normal");
+        state->metal_barrel_specular = add_asset(&state->assets, "metal_barrel_specular");
+        state->metal_barrel_mesh = add_asset(&state->assets, "metal_barrel_mesh");
+
+        state->modular_building_diffuse = add_asset(&state->assets, "modular_building_diffuse");
+        state->modular_building_normal = add_asset(&state->assets, "modular_building_normal");
+        state->modular_building_specular = add_asset(&state->assets, "modular_building_specular");
+        state->modular_building_brick_door_mesh = add_asset(&state->assets, "modular_building_brick_door_mesh");
+        state->modular_building_brick_wall_mesh = add_asset(&state->assets, "modular_building_brick_wall_mesh");
+        state->modular_building_brick_small_window_mesh = add_asset(&state->assets, "modular_building_brick_small_window_mesh");
+
+        state->materials[0] = {
+            state->diffuse46,
+            state->normal46,
+            state->specular46,
+        };
+
+        state->materials[1] = {
+            state->barrel_diffuse,
+            state->barrel_normal,
+            state->barrel_specular,
+        };
+
+        state->materials[2] = {
+            state->metal_barrel_diffuse,
+            state->metal_barrel_normal,
+            state->metal_barrel_specular,
+        };
+
+        state->materials[3] = {
+            state->modular_building_diffuse,
+            state->modular_building_normal,
+            state->modular_building_specular,
+        };
+
+        state->sun_rotation = {0,0};
+        light.type = LightType::directional;
+        light.direction = {1.0f, -0.66f, -0.288f};
+        light.color = {1.0f, 1.0f, 1.0f};
+        light.ambient_intensity = 0.298f;
+        light.diffuse_intensity = 1.0f;
+        light.attenuation_constant = 1.0f;
+
+        state->camera.distance = 3.0f;
+        state->camera.near_ = 0.1f;
+        state->camera.far_ = 2000.0f * 1.1f;
+        state->camera.fov = 60;
+        state->camera.target = {2, 1.0, 0};
+        state->camera.rotation = {-0.1f, -0.8f, 0};
+        float ratio = (float)input->window.width / (float)input->window.height;
+        update_camera(&state->camera, ratio);
+    }
+
+    state->frame_state.delta_t = input->delta_t;
+    state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
+    state->frame_state.input = input;
+    state->frame_state.memory = memory;
+
+    {
+        MouseInput *mouse = &input->mouse;
+        if (mouse->vertical_wheel_delta)
+        {
+            state->camera.distance -= mouse->vertical_wheel_delta * 0.1f;
+        }
+
+        if (BUTTON_WENT_DOWN(mouse->buttons.middle))
+        {
+            state->middle_base_location = {mouse->x, mouse->y};
+        }
+
+        if (BUTTON_STAYED_DOWN(mouse->buttons.middle))
+        {
+            v2i diff = v2sub(state->middle_base_location, {mouse->x, mouse->y});
+            if (abs(diff.x) > 1 || abs(diff.y) > 1)
+            {
+                if (abs(diff.x) > abs(diff.y))
+                {
+                    state->camera.rotation.y += (diff.x / 25.0f);
+                }
+                else
+                {
+                    state->camera.rotation.x -= (diff.y / 40.0f);
+                }
+                state->middle_base_location = {mouse->x, mouse->y};
+            }
+        }
+
+        if (BUTTON_WENT_DOWN(mouse->buttons.right))
+        {
+            state->right_base_location = {mouse->x, mouse->y};
+        }
+
+        if (BUTTON_STAYED_DOWN(mouse->buttons.right))
+        {
+            v2i diff = v2sub(state->right_base_location, {mouse->x, mouse->y});
+            if (abs(diff.x) > 1 || abs(diff.y) > 1)
+            {
+                if (abs(diff.x) > abs(diff.y))
+                {
+                    state->sun_rotation.y += (diff.x / 25.0f);
+                }
+                else
+                {
+                    state->sun_rotation.x -= (diff.y / 40.0f);
+                }
+                state->right_base_location = {mouse->x, mouse->y};
+            }
+        }
+    }
+
+
+    if (state->show_camera) {
+        ImGui::Begin("Camera", &state->show_camera);
+        ImGui::DragFloat3("Rotation", &state->camera.rotation.x, 0.1f);
+        ImGui::DragFloat3("Target", &state->camera.target.x);
+        ImGui::DragFloat("Distance", &state->camera.distance, 0.1f, 0.1f, 100.0f);
+        ImGui::DragFloat("Near", &state->camera.near_, 0.1f, 0.1f, 5.0f);
+        ImGui::DragFloat("Far", &state->camera.far_, 0.1f, 5.0f, 2000.0f);
+        ImGui::DragFloat("Field of View", &state->camera.fov, 1, 30, 150);
+        bool orthographic = state->camera.orthographic;
+        bool frustum = state->camera.frustum;
+        ImGui::Checkbox("Orthographic", &orthographic);
+        ImGui::Checkbox("Frustum", &frustum);
+        state->camera.orthographic = (uint32_t)orthographic;
+        state->camera.frustum = (uint32_t)frustum;
+
+        if (ImGui::Button("Top"))
+        {
+            state->camera.rotation.x = h_halfpi;
+            state->camera.rotation.y = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Front"))
+        {
+            state->camera.rotation.x = 0;
+            state->camera.rotation.y = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Right"))
+        {
+            state->camera.rotation.x = 0;
+            state->camera.rotation.y = h_halfpi;
+        }
+
+        ImGui::Text("Camera location: %.2f, %.2f, %.2f", state->camera.location.x, state->camera.location.y, state->camera.location.z);
+        ImGui::End();
+    }
+    state->camera.target = {0.0f, 1.0f, 0.0f};
+    float ratio = (float)input->window.width / (float)input->window.height;
+    update_camera(&state->camera, ratio);
+    state->matrices[0] = state->camera.projection;
+    state->matrices[1] = state->camera.view;
+
+    float theta = state->sun_rotation.y;
+    float phi = state->sun_rotation.x;
+    light.direction = {
+        sinf(theta) * cosf(phi),
+        sinf(phi),
+        cosf(theta) * cosf(phi),
+    };
+
+    if (state->show_lights) {
+        ImGui::Begin("Lights", &state->show_lights);
+        ImGui::DragFloat3("Direction", &light.direction.x, 0.001f, -1.0f, 1.0f);
+        static bool animate_sun = false;
+        if (ImGui::Button("Normalize"))
+        {
+            light.direction = v3normalize(light.direction);
+        }
+        ImGui::Checkbox("Animate Sun", &animate_sun);
+        if (animate_sun)
+        {
+            static float animation_speed_per_second = 0.05f;
+            ImGui::DragFloat("  Animation Speed", &animation_speed_per_second, 0.001f, 0.0f, 1.0f);
+            if (light.direction.y < -0.5)
+            {
+                light.direction.y = 0.5;
+            }
+            light.direction.y -= input->delta_t * animation_speed_per_second;
+        }
+        ImGui::ColorEdit3("Colour", &light.color.x);
+        ImGui::DragFloat("Ambient Intensity", &light.ambient_intensity, 0.001f, -1.0f, 1.0f);
+        ImGui::DragFloat("Diffuse Intensity", &light.diffuse_intensity, 0.001f, -1.0f, 1.0f);
+        ImGui::DragFloat3("Attenuation", &light.attenuation_constant, 0.001f, 0.0f, 10.0f);
+        ImGui::End();
+    }
+
+    LightDescriptors lights = {harray_count(state->lights), state->lights};
+
+    ArmatureDescriptors armatures = {
+        0,
+        0,
+    };
+
+    PipelineResetData prd = {
+        { input->window.width, input->window.height },
+        harray_count(state->matrices), state->matrices,
+        harray_count(state->assets.descriptors), (asset_descriptor *)&state->assets.descriptors,
+        lights,
+        armatures,
+        MaterialDescriptors{harray_count(state->materials), state->materials},
+    };
+
+    PipelineReset(
+        &state->render_pipeline,
+        &prd
+    );
+
+    {
+        bool foo = state->rl_m.list.config.normal_map_disabled;
+        ImGui::Checkbox("Disable normal map", &foo);
+        state->rl_m.list.config.normal_map_disabled = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_normals;
+        ImGui::Checkbox("Show normals", &foo);
+        state->rl_m.list.config.show_normals = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_normalmap;
+        ImGui::Checkbox("Show normal map", &foo);
+        state->rl_m.list.config.show_normalmap = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.specular_map_disabled;
+        ImGui::Checkbox("Disable specular map", &foo);
+        state->rl_m.list.config.specular_map_disabled = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_specular;
+        ImGui::Checkbox("Show specular", &foo);
+        state->rl_m.list.config.show_specular = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_specularmap;
+        ImGui::Checkbox("Show specular map", &foo);
+        state->rl_m.list.config.show_specularmap = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_tangent;
+        ImGui::Checkbox("Show tangent", &foo);
+        state->rl_m.list.config.show_tangent = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_object_identifier;
+        ImGui::Checkbox("Show object_identifier", &foo);
+        state->rl_m.list.config.show_object_identifier = (uint32_t)foo;
+    }
+
+    state->rl_m.list.config.camera_position = state->camera.location;
+    PushClear(&state->rl_m.list, {0,0,0,1});
+
+    static int32_t selected = 1;
+
+    enum struct
+    DrawMode
+    {
+        non_selected,
+        selected,
+        selected_scaled,
+
+    };
+    struct
+    {
+        render_entry_list *list;
+        bool highlighted;
+        bool highlighting;
+    } _lists;
+
+    render_entry_list *lists[] =
+    {
+        &state->rl_m.list,
+        &state->rl_mousepicking.list,
+        0,
+    };
+
+    for (render_entry_list **li = lists; *li; ++li)
+    {
+        render_entry_list *l = *li;
+        {
+            m4 model = m4scale(5);
+            MeshFromAssetFlags flags = {};
+            flags.depth_disabled = 1;
+            flags.use_materials = 1;
+            PushMeshFromAsset(
+                l,
+                0, // projection matrix - matrices[0]
+                1, // view materix - matrices[1]
+                model,
+                state->ground_plane,
+                0, // material 0
+                0, // light 0
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                1 // object_id
+            );
+        }
+
+        {
+            m4 model = m4scale(0.01f);
+            MeshFromAssetFlags flags = {};
+            flags.use_materials = 1;
+            PushMeshFromAsset(
+                l,
+                0, // projection matrix - matrices[0]
+                1, // view matrix - matrices[1]
+                model,
+                state->barrel_mesh,
+                1, // material 0
+                0, // light 0
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                2 // object_id
+            );
+        }
+
+        {
+            m4 model = m4mul(
+                m4translate({1,0,0}),
+                m4scale(0.01f));
+            MeshFromAssetFlags flags = {};
+            flags.use_materials = 1;
+            PushMeshFromAsset(
+                l,
+                0, // projection matrix - matrices[0]
+                1, // view matrix - matrices[1]
+                model,
+                state->metal_barrel_mesh,
+                2,
+                0, // light 0
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                3 // object_id
+            );
+        }
+
+        {
+            m4 model = m4mul(
+                m4rotation({0,1,0}, h_pi),
+                m4mul(
+                    m4translate({0,0,5}),
+                    m4scale(0.01f)));
+            MeshFromAssetFlags flags = {};
+            flags.use_materials = 1;
+            PushMeshFromAsset(
+                l,
+                0, // projection matrix - matrices[0]
+                1, // view matrix - matrices[1]
+                model,
+                state->modular_building_brick_door_mesh,
+                3,
+                0, // light 0
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                4
+            );
+        }
+
+        {
+            m4 model = m4mul(
+                m4rotation({0,1,0}, h_pi),
+                m4mul(
+                    m4translate({2.5,0,5}),
+                    m4scale(0.01f)));
+            MeshFromAssetFlags flags = {};
+            flags.use_materials = 1;
+            PushMeshFromAsset(
+                l,
+                0, // projection matrix - matrices[0]
+                1, // view matrix - matrices[1]
+                model,
+                state->modular_building_brick_wall_mesh,
+                3,
+                0, // light 0
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                5
+            );
+        }
+
+        {
+            m4 model = m4mul(
+                m4rotation({0,1,0}, h_pi),
+                m4mul(
+                    m4translate({-2.5,0,5}),
+                    m4scale(0.01f)));
+            MeshFromAssetFlags flags = {};
+            flags.use_materials = 1;
+            PushMeshFromAsset(
+                l,
+                0, // projection matrix - matrices[0]
+                1, // view matrix - matrices[1]
+                model,
+                state->modular_building_brick_small_window_mesh,
+                3,
+                0, // light 0
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                6
+            );
+        }
+
+    }
+
+    {
+        PushSky(&state->rl_m.list,
+            0,
+            1,
+            v3normalize(light.direction));
+    }
+
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("Debug"))
+        {
+            ImGui::MenuItem("Show lights", "", &state->show_lights);
+            ImGui::MenuItem("Show camera", "", &state->show_camera);
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
+    v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
+    v3 mouse_size = {16.0f, -16.0f, 0.0f};
+    PushQuad(&state->rl_m.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->mouse_cursor);
+
+    auto &rfb = state->render_pipeline.framebuffers[state->fb_mousepicking];
+    ImGui::Image(
+        (void *)(intptr_t)rfb.framebuffer._texture,
+        {256, 256.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
+        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+    );
+}
 
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
@@ -2369,9 +2903,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     state->frame_state.input = input;
     state->frame_state.memory = memory;
 
-    if (!memory->initialized)
+    if (!state->initialized)
     {
-        memory->initialized = 1;
+        state->initialized = 1;
         initialize(memory, state);
         for (int32_t y = -MESH_SURROUND; y < MESH_SURROUND+1; ++y)
         {
@@ -2384,15 +2918,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.seed = 95;
         perlin.offset = {-3.0f, -23.0f};
         //perlin.scale = 27.6f;
-        perlin.scale = 22.320f;
+        //perlin.scale = 22.320f;
+        perlin.scale = 54.830f;
         perlin.show = false;
         perlin.octaves = 4;
-        perlin.persistence = 0.5f;
-        perlin.lacunarity = 2.0f;
-        perlin.height_multiplier = 113.0f;
+        perlin.persistence = 0.3f;
+        perlin.lacunarity = 3.33f;
+        perlin.height_multiplier = 253.0f;
         perlin.min_noise_height = FLT_MAX;
         perlin.max_noise_height = FLT_MIN;
         //auto &path = state->cowboy_path;
+        state->active_demo = 1;
     }
 
     for (uint32_t i = 0;
@@ -2476,6 +3012,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         */
     }
     //ImGui::Text("Hello");
+
+    demo_data demoes[] = {
+        {
+            "none",
+            0,
+        },
+        {
+            "a",
+            &demo_a,
+        },
+        {
+            "b",
+            &demo_b,
+        },
+    };
+
+    int32_t previous_demo = state->active_demo;
+    for (int32_t i = 0; i < harray_count(demoes); ++i)
+    {
+        ImGui::RadioButton(demoes[i].name, &state->active_demo, i);
+    }
+
+    if (state->active_demo)
+    {
+        demo_context demo_ctx = {};
+        demo_ctx.switched = previous_demo != state->active_demo;
+        demoes[state->active_demo].func(memory, input, sound_output, &demo_ctx);
+        return;
+    }
 
     show_debug_main_menu(state);
     show_pq_debug(&state->debug.priority_queue);
@@ -2611,11 +3176,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 state->landmass.terrains);
 
             generate_terrain_mesh3(
-                noisemap,
-                test_mesh,
-                perlin.height_multiplier,
-                perlin.control_point_0,
-                perlin.control_point_1);
+                heightmap,
+                test_mesh);
         }
 
         if (perlin.show)
@@ -2783,35 +3345,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     };
 
     PipelineReset(
-        state,
         &state->render_pipeline,
         &prd
     );
-
-    demo_data demoes[] = {
-        {
-            "none",
-            0,
-        },
-        {
-            "b",
-            &demo_b,
-        },
-    };
-
-    int32_t previous_demo = state->active_demo;
-    for (int32_t i = 0; i < harray_count(demoes); ++i)
-    {
-        ImGui::RadioButton(demoes[i].name, &state->active_demo, i);
-    }
-
-    if (state->active_demo)
-    {
-        demo_context demo_ctx = {};
-        demo_ctx.switched = previous_demo != state->active_demo;
-        demoes[state->active_demo].func(memory, input, sound_output, &demo_ctx);
-    }
-
+    state->pipeline_elements.rl_three_dee.list.config.camera_position = state->camera.location;
     m4 shadowmap_projection_matrix;
 
     m4 shadowmap_view_matrix;
@@ -3073,20 +3610,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         add_mesh_to_render_lists(state, model, state->test_mesh_descriptors[noisemap_id], state->test_texture_descriptors[noisemap_id], -1);
     }
     {
-        state->pipeline_elements.rl_three_dee_water.list.reflection_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor;
-        state->pipeline_elements.rl_three_dee_water.list.refraction_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor;
-        state->pipeline_elements.rl_three_dee_water.list.refraction_depth_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].depth_asset_descriptor;
-        state->pipeline_elements.rl_three_dee_water.list.dudv_map_asset_descriptor = state->asset_ids.water_dudv;
-        state->pipeline_elements.rl_three_dee_water.list.normal_map_asset_descriptor = state->asset_ids.water_normal;
-        state->pipeline_elements.rl_three_dee_water.list.camera_position = state->camera.location;
-        state->pipeline_elements.rl_three_dee_water.list.near_ = state->camera.near_;
-        state->pipeline_elements.rl_three_dee_water.list.far_ = state->camera.far_;
+        state->pipeline_elements.rl_three_dee_water.list.config.reflection_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_reflection].asset_descriptor;
+        state->pipeline_elements.rl_three_dee_water.list.config.refraction_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].asset_descriptor;
+        state->pipeline_elements.rl_three_dee_water.list.config.refraction_depth_asset_descriptor = state->render_pipeline.framebuffers[(uint32_t)state->pipeline_elements.fb_refraction].depth_asset_descriptor;
+        state->pipeline_elements.rl_three_dee_water.list.config.dudv_map_asset_descriptor = state->asset_ids.water_dudv;
+        state->pipeline_elements.rl_three_dee_water.list.config.normal_map_asset_descriptor = state->asset_ids.water_normal;
+        state->pipeline_elements.rl_three_dee_water.list.config.camera_position = state->camera.location;
+        state->pipeline_elements.rl_three_dee_water.list.config.near_ = state->camera.near_;
+        state->pipeline_elements.rl_three_dee_water.list.config.far_ = state->camera.far_;
         m4 model = m4mul(
             m4scale({500,0.1f,500}),
             m4translate({-0,-1.1f,-1})
         );
 
-        MeshFromAssetFlags mesh_flags;
+        MeshFromAssetFlags mesh_flags = {};
         mesh_flags.attach_shadowmap = 1;
         mesh_flags.attach_shadowmap_color = 1;
         PushMeshFromAsset(

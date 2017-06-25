@@ -11,12 +11,14 @@ layout(std140, column_major) uniform;
 in vec3 a_position;
 in vec2 a_texcoord;
 in vec3 a_normal;
+in vec3 a_tangent;
 in ivec4 a_bone_ids;
 in vec4 a_bone_weights;
 
 out vec3 v_w_position;
 out vec2 v_texcoord;
 out vec3 v_w_normal;
+out vec3 v_w_tangent;
 out vec4 v_l_position;
 flat out uint v_draw_id;
 
@@ -35,7 +37,7 @@ struct
 ShaderConfig
 {
     Plane clipping_plane;
-    int use_clipping_plane;
+    int flags;
 };
 
 layout(std140) uniform SHADERCONFIG
@@ -65,6 +67,9 @@ struct DrawData
     int light_index;
     vec3 camera_position;
     int bone_offset;
+    int normal_texaddress_index;
+    int specular_texaddress_index;
+    int object_identifier;
 };
 
 layout(std140) uniform CB1
@@ -113,6 +118,7 @@ void main()
     mat4 projection_matrix = dd.projection;
 
     vec4 normal = vec4(a_normal, 1.0);
+    vec4 tangent = vec4(a_tangent, 1.0);
     vec4 position = vec4(a_position, 1.0);
 
     if (dd.bone_offset >= 0)
@@ -123,11 +129,14 @@ void main()
         bone_transform += bones[dd.bone_offset + a_bone_ids[2]] * a_bone_weights[2];
         bone_transform += bones[dd.bone_offset + a_bone_ids[3]] * a_bone_weights[3];
         normal = bone_transform * normal;
+        tangent = bone_transform * tangent;
         position = bone_transform * position;
     }
 
     v_texcoord = a_texcoord;
-    v_w_normal = mat3(transpose(inverse(model_matrix))) * (normal.xyz / normal.w);
+    mat3 inv_transpose_model = mat3(transpose(inverse(model_matrix)));
+    v_w_normal = inv_transpose_model * (normal.xyz / normal.w);
+    v_w_tangent = inv_transpose_model * (tangent.xyz / tangent.w);
     vec4 w_position = model_matrix * position;
     v_w_position = w_position.xyz / w_position.w;
     gl_Position = projection_matrix * view_matrix * w_position;

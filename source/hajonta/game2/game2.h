@@ -527,11 +527,12 @@ ArmatureIds
     MAX = test2,
 };
 
+template<uint32_t SIZE>
 struct
 AssetDescriptors
 {
     uint32_t count;
-    asset_descriptor descriptors[512];
+    asset_descriptor descriptors[SIZE];
 };
 
 struct
@@ -621,11 +622,11 @@ Pathfinding
     bool single_step;
 };
 
-#define MESH_SURROUND 2
+#define MESH_SURROUND 3
 #define MESH_WIDTH (1+2*MESH_SURROUND)
 #define MESH_SQUARE (MESH_WIDTH*MESH_WIDTH)
-#define TERRAIN_MAP_CHUNK_WIDTH 64
-#define TERRAIN_MAP_CHUNK_HEIGHT 64
+#define TERRAIN_MAP_CHUNK_WIDTH 96
+#define TERRAIN_MAP_CHUNK_HEIGHT 96
 #define NOISE_WIDTH (TERRAIN_MAP_CHUNK_WIDTH / 2 + 1)
 #define NOISE_HEIGHT (TERRAIN_MAP_CHUNK_HEIGHT / 2 + 1)
 
@@ -636,6 +637,8 @@ struct game_state
 {
     MemoryArena arena;
     bool initialized;
+
+    MemoryBlock *demo_a_block;
 
     uint32_t shadowmap_size;
 
@@ -663,8 +666,7 @@ struct game_state
     m4 bone_matrices2[100];
 
     _asset_ids asset_ids;
-    AssetDescriptors assets;
-
+    AssetDescriptors<512> assets;
 
     int32_t active_demo;
 

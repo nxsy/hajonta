@@ -53,6 +53,8 @@ struct DrawData
     int light_index;
     vec3 camera_position;
     int bone_offset;
+    int normal_texaddress_index;
+    int specular_texaddress_index;
 };
 
 layout(std140) uniform CB1

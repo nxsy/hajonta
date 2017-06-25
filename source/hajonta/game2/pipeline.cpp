@@ -1,7 +1,8 @@
 #pragma once
 
+template <uint32_t SIZE>
 void
-PipelineInit(RenderPipeline *pipeline, AssetDescriptors *asset_descriptors)
+PipelineInit(RenderPipeline *pipeline, AssetDescriptors<SIZE> *asset_descriptors)
 {
     for (uint32_t i = 0; i < pipeline->entry_count; ++i)
     {
@@ -29,7 +30,7 @@ PipelineInit(RenderPipeline *pipeline, AssetDescriptors *asset_descriptors)
 }
 
 void
-PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *data)
+PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
 {
     v2i window_size = data->window_size;
     for (uint32_t i = 0; i < pipeline->framebuffer_count; ++i)
@@ -58,10 +59,10 @@ PipelineReset(game_state *state, RenderPipeline *pipeline, PipelineResetData *da
     {
         auto entry = pipeline->entries + i;
         RenderListReset(entry->list);
-        RegisterRenderList(state->frame_state.memory, entry->list);
+        RegisterRenderList(entry->list);
         PushMatrices(entry->list, data->matrix_count, data->matrices);
         PushAssetDescriptors(entry->list, data->asset_count, data->assets);
-        PushDescriptors(entry->list, data->l, data->armatures);
+        PushDescriptors(entry->list, data->l, data->armatures, data->materials);
 
         if (entry->source_framebuffer_id >= 0)
         {
@@ -121,7 +122,7 @@ CreatePipeline(game_state *state)
     pipeline_elements.fb_shadowmap = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
     //fb_shadowmap.use_depth_texture = 1;
-    fb_shadowmap.use_rg32f_buffer = 1;
+    //fb_shadowmap.use_rg32f_buffer = 1;
     fb_shadowmap.size = {
         (int32_t)state->shadowmap_size,
         (int32_t)state->shadowmap_size
@@ -131,14 +132,14 @@ CreatePipeline(game_state *state)
 
     pipeline_elements.fb_sm_blur_x = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_x = pipeline->framebuffers[pipeline_elements.fb_sm_blur_x];
-    fb_sm_blur_x.use_rg32f_buffer = 1;
+    //fb_sm_blur_x.use_rg32f_buffer = 1;
     fb_sm_blur_x.size = v2div(fb_shadowmap.size, 2);
     fb_sm_blur_x.fixed_size = 1;
     fb_sm_blur_x.no_clear_each_frame = 1;
 
     pipeline_elements.fb_sm_blur_xy = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_xy = pipeline->framebuffers[pipeline_elements.fb_sm_blur_xy];
-    fb_sm_blur_xy.use_rg32f_buffer = 1;
+    //fb_sm_blur_xy.use_rg32f_buffer = 1;
     fb_sm_blur_xy.size = v2div(fb_shadowmap.size, 2);
     fb_sm_blur_xy.fixed_size = 1;
     fb_sm_blur_xy.no_clear_each_frame = 1;
@@ -162,8 +163,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_sky = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *sky = pipeline->entries + pipeline_elements.r_sky;
     state->pipeline_elements.rl_sky.list.name = DEBUG_NAME("sky");
-    pipeline_elements.rl_sky.list.flags.use_clipping_plane = 1;
-    pipeline_elements.rl_sky.list.clipping_plane = {{0,1,0}, 0};
+    pipeline_elements.rl_sky.list.config.use_clipping_plane = 1;
+    pipeline_elements.rl_sky.list.config.clipping_plane = {{0,1,0}, 0};
     *sky = {
         &state->pipeline_elements.rl_sky.list,
         state->pipeline_elements.rl_sky.buffer,
@@ -186,8 +187,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_three_dee = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *three_dee = pipeline->entries + pipeline_elements.r_three_dee;
     state->pipeline_elements.rl_three_dee.list.name = DEBUG_NAME("three_dee");
-    //pipeline_elements.rl_three_dee.list.flags.use_clipping_plane = 1;
-    //pipeline_elements.rl_three_dee.list.clipping_plane = {{0,1,0}, -5};
+    //pipeline_elements.rl_three_dee.list.config.use_clipping_plane = 1;
+    //pipeline_elements.rl_three_dee.list.config.clipping_plane = {{0,1,0}, -5};
     *three_dee = {
         &state->pipeline_elements.rl_three_dee.list,
         state->pipeline_elements.rl_three_dee.buffer,
@@ -210,8 +211,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_three_dee_debug = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *three_dee_debug = pipeline->entries + pipeline_elements.r_three_dee_debug;
     state->pipeline_elements.rl_three_dee_debug.list.name = DEBUG_NAME("three_dee_debug");
-    state->pipeline_elements.rl_three_dee_debug.list.flags.depth_disabled = 1;
-    state->pipeline_elements.rl_three_dee_debug.list.flags.cull_disabled = 1;
+    state->pipeline_elements.rl_three_dee_debug.list.config.depth_disabled = 1;
+    state->pipeline_elements.rl_three_dee_debug.list.config.cull_disabled = 1;
     *three_dee_debug = {
         &state->pipeline_elements.rl_three_dee_debug.list,
         state->pipeline_elements.rl_three_dee_debug.buffer,
@@ -272,8 +273,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_reflection = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *reflection = pipeline->entries + pipeline_elements.r_reflection;
     pipeline_elements.rl_reflection.list.name = DEBUG_NAME("reflection");
-    pipeline_elements.rl_reflection.list.flags.use_clipping_plane = 1;
-    pipeline_elements.rl_reflection.list.clipping_plane = {{0,1,0}, 0};
+    pipeline_elements.rl_reflection.list.config.use_clipping_plane = 1;
+    pipeline_elements.rl_reflection.list.config.clipping_plane = {{0,1,0}, 0};
     *reflection = {
         &pipeline_elements.rl_reflection.list,
         pipeline_elements.rl_reflection.buffer,
@@ -289,8 +290,8 @@ CreatePipeline(game_state *state)
     pipeline_elements.r_refraction = RenderPipelineAddRenderer(pipeline);
     RenderPipelineEntry *refraction = pipeline->entries + pipeline_elements.r_refraction;
     pipeline_elements.rl_refraction.list.name = DEBUG_NAME("refraction");
-    pipeline_elements.rl_refraction.list.flags.use_clipping_plane = 1;
-    pipeline_elements.rl_refraction.list.clipping_plane = {{0,-1,0}, 0.1f};
+    pipeline_elements.rl_refraction.list.config.use_clipping_plane = 1;
+    pipeline_elements.rl_refraction.list.config.clipping_plane = {{0,-1,0}, 0.1f};
     *refraction = {
         &pipeline_elements.rl_refraction.list,
         pipeline_elements.rl_refraction.buffer,

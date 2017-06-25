@@ -99,6 +99,7 @@ typedef PLATFORM_GET_THREAD_ID(platform_get_thread_id_func);
 #define PLATFORM_ALLOCATE_MEMORY(func_name) MemoryBlock *func_name(const char *comment, uint64_t size)
 typedef PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory_func);
 
+struct render_entry_list;
 struct
 PlatformApi
 {
@@ -114,6 +115,9 @@ PlatformApi
     bool stopping;
     char *stop_reason;
     bool quit;
+
+    render_entry_list *render_lists[20];
+    uint32_t render_lists_count;
 };
 
 // Normal means the OS is keeping track of the mouse cursor location.
@@ -152,9 +156,6 @@ struct platform_memory
 
     void *imgui_state;
     DebugTable *debug_table;
-
-    render_entry_list *render_lists[20];
-    uint32_t render_lists_count;
 
     platform_cursor_settings cursor_settings;
     PlatformApi *platform_api;

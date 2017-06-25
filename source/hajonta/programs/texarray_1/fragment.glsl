@@ -15,11 +15,20 @@ Plane
     float distance;
 };
 
+const int normal_map_disabled_flag = 1 << 0;
+const int show_normals_flag = 1 << 1;
+const int show_normalmap_flag = 1 << 2;
+const int specular_map_disabled_flag = 1 << 3;
+const int show_specular_flag = 1 << 4;
+const int show_specularmap_flag = 1 << 5;
+const int show_tangent_flag = 1 << 6;
+const int show_object_identifier_flag = 1 << 7;
+
 struct
 ShaderConfig
 {
     Plane clipping_plane;
-    int use_clipping_plane;
+    int flags;
 };
 
 layout(std140) uniform SHADERCONFIG
@@ -51,6 +60,9 @@ struct DrawData
     int light_index;
     vec3 camera_position;
     int bone_offset;
+    int normal_texaddress_index;
+    int specular_texaddress_index;
+    int object_identifier;
 };
 
 layout(std140) uniform CB1
@@ -88,6 +100,7 @@ uniform float u_bias;
 in vec3 v_w_position;
 in vec2 v_texcoord;
 in vec3 v_w_normal;
+in vec3 v_w_tangent;
 in vec4 v_l_position;
 flat in uint v_draw_id;
 
@@ -128,6 +141,36 @@ float shadow_visibility_vsm(vec4 lightspace_position, vec3 normal, vec3 light_di
     }
 }
 
+vec3
+calculate_normal(DrawData dd)
+{
+    vec3 w_normal = normalize(v_w_normal);
+    if ((shader_config.flags & normal_map_disabled_flag) == normal_map_disabled_flag)
+    {
+        return w_normal;
+    }
+    if (dd.normal_texaddress_index < 0)
+    {
+        return w_normal;
+    }
+
+    Tex2DAddress addr = texAddress[dd.normal_texaddress_index];
+    vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
+
+    vec3 tex_normal = texture(TexContainer[addr.Container], texCoord).xyz;
+    tex_normal = 2 * tex_normal - 1;
+
+    vec3 n = w_normal;
+    vec3 t = normalize(v_w_tangent);
+
+    t = normalize(t - dot(t, n) * n);
+    vec3 b = cross(t, n);
+
+    mat3 tbn = mat3(t, b, n);
+    w_normal = normalize(tbn * tex_normal);
+    return w_normal;
+}
+
 void main()
 {
     DrawData dd = draw_data[v_draw_id];
@@ -136,9 +179,14 @@ void main()
         Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
         vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
         vec4 diffuse_color = texture(TexContainer[addr.Container], texCoord);
-        vec3 w_normal = normalize(v_w_normal);
+        vec3 w_normal = calculate_normal(dd);
+
         Light light = lights[dd.light_index];
+        vec3 from_light = normalize(light.position_or_direction.xyz);
         vec3 w_surface_to_light_direction = -light.position_or_direction.xyz;
+
+        vec3 to_camera = normalize(dd.camera_position - v_w_position);
+
         //float direction_similarity = max(dot(w_normal, w_surface_to_light_direction), 0.0);
         float direction_similarity = max(
             min(
@@ -147,9 +195,7 @@ void main()
             ),
             0.0);
 
-        float horizon_similarity = pow(max(dot(vec3(0,1,0), w_surface_to_light_direction), 0.0), 0.5);
-
-        float ambient = light.ambient_intensity * clamp(horizon_similarity, 0.1, 0.5) * 2.0;
+        float ambient = light.ambient_intensity;
 
         float diffuse = light.diffuse_intensity * direction_similarity;
         vec3 w_surface_to_eye = normalize(dd.camera_position - v_w_position);
@@ -157,14 +203,26 @@ void main()
         float specular = 0;
         if (direction_similarity > 0)
         {
-            specular = pow(max(dot(w_surface_to_eye, w_reflection_direction), 0.0), 10.0f) / 10.0f;
+            vec3 reflected_light = reflect(from_light, w_normal);
+            specular = max(dot(reflected_light, to_camera), 0);
+            specular = pow(specular, 5);
+
+            if ((shader_config.flags & specular_map_disabled_flag) != specular_map_disabled_flag)
+            {
+                if (dd.specular_texaddress_index >= 0)
+                {
+                    addr = texAddress[dd.specular_texaddress_index];
+                    texCoord = vec3(v_texcoord.xy, addr.Page);
+                    specular *= texture(TexContainer[addr.Container], texCoord).r;
+                }
+            }
         }
         float attenuation = 1.0f;
         float visibility = 1.0f;
         o_color = vec4(diffuse_color.xyz, 1);
         visibility = shadow_visibility_vsm(v_l_position, w_normal, w_surface_to_light_direction);
         o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * diffuse_color.rgb * light.color, 1.0f);
-        if (!skip)
+        if (skip)
         {
             o_color = vec4((ambient + visibility * (diffuse + specular)) * attenuation * diffuse_color.rgb * light.color, 1.0f);
         }
@@ -186,13 +244,47 @@ void main()
         {
             discard;
         }
+        if (skip)
+        {
+            o_color = vec4(vec3(specular), 1.0f);
+        }
+        if ((shader_config.flags & show_normals_flag) == show_normals_flag)
+        {
+            o_color = vec4(w_normal, 1.0f);
+        }
+        if ((shader_config.flags & show_tangent_flag) == show_tangent_flag)
+        {
+            o_color = vec4(v_w_tangent, 1.0f);
+        }
+        if ((shader_config.flags & show_specular_flag) == show_specular_flag)
+        {
+            o_color = vec4(vec3(specular), 1.0f);
+        }
+        if ((shader_config.flags & show_object_identifier_flag) == show_object_identifier_flag)
+        {
+            o_color = vec4(
+                (dd.object_identifier & 1) == 1 ? 1.0f : 0.0f,
+                (dd.object_identifier & 2) == 2 ? 1.0f : 0.0f,
+                (dd.object_identifier & 4) == 4 ? 1.0f : 0.0f,
+                1.0f
+            );
+        }
     }
     else
     {
         o_color = vec4(1,0,1,1);
     }
-    if (skip)
+    if ((shader_config.flags & show_normalmap_flag) == show_normalmap_flag && dd.normal_texaddress_index >= 0)
     {
-        o_color = vec4(v_l_position);
+        Tex2DAddress addr = texAddress[dd.normal_texaddress_index];
+        vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
+        o_color = texture(TexContainer[addr.Container], texCoord);
+    }
+
+    if ((shader_config.flags & show_specularmap_flag) == show_specularmap_flag && dd.specular_texaddress_index >= 0)
+    {
+        Tex2DAddress addr = texAddress[dd.specular_texaddress_index];
+        vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
+        o_color = texture(TexContainer[addr.Container], texCoord);
     }
 }

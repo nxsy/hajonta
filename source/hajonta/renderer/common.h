@@ -3,6 +3,33 @@
 #include "hajonta/platform/neutral.h"
 #include "hajonta/math.h"
 
+struct
+vertexformat_1
+{
+    v3 position;
+    v3 normal;
+    v2 texcoords;
+};
+
+struct
+vertexformat_2
+{
+    v3 position;
+    v3 normal;
+    v2 texcoords;
+    v4i bone_ids;
+    v4 bone_weights;
+};
+
+struct
+vertexformat_3
+{
+    v3 position;
+    v3 normal;
+    v3 tangent;
+    v2 texcoords;
+};
+
 enum struct
 render_entry_type
 {
@@ -78,6 +105,21 @@ render_entry_type_matrices
     m4 *matrices;
 };
 
+struct
+Material
+{
+    int32_t diffuse_id;
+    int32_t normal_id;
+    int32_t specular_id;
+};
+
+struct
+MaterialDescriptors
+{
+    uint32_t count;
+    Material *materials;
+};
+
 enum struct
 LightType
 {
@@ -151,6 +193,7 @@ render_entry_type_descriptors
     render_entry_header header;
     LightDescriptors lights;
     ArmatureDescriptors armatures;
+    MaterialDescriptors materials;
 };
 
 #define SHADER_TYPES \
@@ -269,26 +312,8 @@ Mesh
             uint32_t vertex_count;
             uint32_t index_buffer;
             uint32_t index_offset;
-        } v3_boneless;
-        struct
-        {
-            uint32_t vertex_buffer;
-            uint32_t vertex_base;
-            uint32_t vertex_count;
-            uint32_t index_buffer;
-            uint32_t index_offset;
             V3Bones *v3bones;
-
-            /*
-            char bone_names[100][100];
-            int32_t bone_parents[100];
-            m4 bone_offsets[100];
-            MeshBoneDescriptor default_transforms[100];
-            uint32_t num_ticks;
-            AnimTick animation_ticks[100][100];
-            m4 default_bones[100];
-            */
-        } v3_bones;
+        } v3;
     };
 
     bool loaded;
@@ -305,6 +330,7 @@ struct MeshFromAssetFlags
     unsigned int attach_shadowmap_color:1;
     unsigned int debug:1;
     unsigned int depth_disabled:1;
+    unsigned int use_materials:1;
 };
 
 struct
@@ -320,6 +346,7 @@ render_entry_type_mesh_from_asset
     int32_t armature_descriptor_id;
     MeshFromAssetFlags flags;
     ShaderType shader_type;
+    int32_t object_identifier;
 };
 
 struct
@@ -465,22 +492,23 @@ render_entry_type_QUADS_lookup
 };
 
 struct
-RenderEntryListFlags
+RenderEntryListConfig
 {
-    unsigned int use_clipping_plane:1;
-    unsigned int depth_disabled:1;
-    unsigned int cull_disabled:1;
-    unsigned int cull_front:1;
-};
-
-struct
-render_entry_list
-{
-    const char *name;
-    int32_t slot;
-    uint32_t depends_on_slots;
-
-    RenderEntryListFlags flags;
+    struct
+    {
+        unsigned int use_clipping_plane:1;
+        unsigned int depth_disabled:1;
+        unsigned int cull_disabled:1;
+        unsigned int cull_front:1;
+        unsigned int normal_map_disabled:1;
+        unsigned int show_normals:1;
+        unsigned int show_normalmap:1;
+        unsigned int specular_map_disabled:1;
+        unsigned int show_specular:1;
+        unsigned int show_specularmap:1;
+        unsigned int show_tangent:1;
+        unsigned int show_object_identifier:1;
+    };
 
     int32_t reflection_asset_descriptor;
     int32_t refraction_asset_descriptor;
@@ -490,8 +518,17 @@ render_entry_list
     v3 camera_position;
     float near_;
     float far_;
-
     Plane clipping_plane;
+};
+
+struct
+render_entry_list
+{
+    const char *name;
+    int32_t slot;
+    uint32_t depends_on_slots;
+
+    RenderEntryListConfig config;
     uint32_t max_size;
     uint32_t current_size;
     uint8_t *base;
@@ -735,13 +772,18 @@ PushAssetDescriptors(render_entry_list *list, uint32_t count, asset_descriptor *
 }
 
 inline void
-PushDescriptors(render_entry_list *list, LightDescriptors lights, ArmatureDescriptors armatures)
+PushDescriptors(
+    render_entry_list *list,
+    LightDescriptors lights,
+    ArmatureDescriptors armatures,
+    MaterialDescriptors materials)
 {
      render_entry_type_descriptors *entry = PushRenderElement(list, descriptors);
      if (entry)
      {
         entry->lights = lights;
         entry->armatures = armatures;
+        entry->materials = materials;
      }
 }
 
@@ -769,7 +811,8 @@ PushMeshFromAsset(
     int32_t lights_mask,
     int32_t armature_descriptor_id,
     MeshFromAssetFlags flags,
-    ShaderType shader_type)
+    ShaderType shader_type,
+    int32_t object_identifier)
 {
      render_entry_type_mesh_from_asset *entry = PushRenderElement(list, mesh_from_asset);
      if (entry)
@@ -783,7 +826,35 @@ PushMeshFromAsset(
          entry->armature_descriptor_id = armature_descriptor_id;
          entry->flags = flags;
          entry->shader_type = shader_type;
+         entry->object_identifier = object_identifier;
      }
+}
+
+inline void
+PushMeshFromAsset(
+    render_entry_list *list,
+    int32_t projection_matrix_id,
+    int32_t view_matrix_id,
+    m4 model_matrix,
+    int32_t mesh_asset_descriptor_id,
+    int32_t texture_asset_descriptor_id,
+    int32_t lights_mask,
+    int32_t armature_descriptor_id,
+    MeshFromAssetFlags flags,
+    ShaderType shader_type)
+{
+     return PushMeshFromAsset(
+        list,
+        projection_matrix_id,
+        view_matrix_id,
+        model_matrix,
+        mesh_asset_descriptor_id,
+        texture_asset_descriptor_id,
+        lights_mask,
+        armature_descriptor_id,
+        flags,
+        shader_type,
+        0);
 }
 
 inline void
@@ -825,11 +896,11 @@ PushFramebufferBlit(render_entry_list *list, int32_t fbo_asset_descriptor_id)
 }
 
 inline int32_t
-RegisterRenderList(platform_memory *memory, render_entry_list *list)
+RegisterRenderList(render_entry_list *list)
 {
-    hassert(memory->render_lists_count < sizeof(memory->render_lists) - 1);
+    hassert(_platform->render_lists_count < sizeof(_platform->render_lists) - 1);
     hassert(list->slot == -1);
-    memory->render_lists[memory->render_lists_count] = list;
-    list->slot = (int32_t)(memory->render_lists_count++);
+    _platform->render_lists[_platform->render_lists_count] = list;
+    list->slot = (int32_t)(_platform->render_lists_count++);
     return list->slot;
 }

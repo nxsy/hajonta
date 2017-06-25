@@ -122,5 +122,6 @@ PipelineResetData
     asset_descriptor *assets;
     LightDescriptors l;
     ArmatureDescriptors armatures;
+    MaterialDescriptors materials;
 };
 
