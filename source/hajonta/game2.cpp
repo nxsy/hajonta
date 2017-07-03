@@ -2690,23 +2690,6 @@ DEMO(demo_a)
     state->rl_m.list.config.camera_position = state->camera.location;
     PushClear(&state->rl_m.list, {0,0,0,1});
 
-    static int32_t selected = 1;
-
-    enum struct
-    DrawMode
-    {
-        non_selected,
-        selected,
-        selected_scaled,
-
-    };
-    struct
-    {
-        render_entry_list *list;
-        bool highlighted;
-        bool highlighting;
-    } _lists;
-
     render_entry_list *lists[] =
     {
         &state->rl_m.list,
@@ -2917,9 +2900,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         auto &perlin = state->debug.perlin;
         perlin.seed = 95;
         perlin.offset = {-3.0f, -23.0f};
-        //perlin.scale = 27.6f;
+        perlin.scale = 27.6f;
         //perlin.scale = 22.320f;
-        perlin.scale = 54.830f;
+        //perlin.scale = 54.830f;
         perlin.show = false;
         perlin.octaves = 4;
         perlin.persistence = 0.3f;

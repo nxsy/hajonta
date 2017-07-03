@@ -152,6 +152,7 @@ struct LightList
     Light lights[32];
 };
 
+#define NUM_CONTAINER_TEXARRAY_TEXTURES 4
 struct
 CommandList
 {
@@ -165,6 +166,8 @@ CommandList
     };
     uint32_t num_bones;
     BoneDataList bone_data_list;
+    uint32_t num_texcontainer_indices;
+    uint32_t texcontainer_index[NUM_CONTAINER_TEXARRAY_TEXTURES];
 };
 
 struct
@@ -1874,6 +1877,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         hassert(loaded);
         state->initialized = true;
         state->generation_id = 1;
+        state->show_debug = 1;
         //state->crash_on_gl_errors = 1;
         //state->flush_for_profiling = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
@@ -3101,6 +3105,162 @@ load_mesh_to_buffers(
     return true;
 }
 
+int32_t
+command_list_for_key_draw_data(
+    CommandState *command_state,
+    CommandKey *key,
+    DrawElementsIndirectCommand *cmd,
+    DrawData *draw_data,
+    uint32_t num_bones,
+    m4 *bones
+)
+{
+    uint32_t num_containers = 0;
+    uint32_t containers[10];
+
+    int32_t indices[] = {
+        draw_data->texture_texaddress_index,
+        draw_data->shadowmap_texaddress_index,
+        draw_data->shadowmap_color_texaddress_index,
+        draw_data->normal_texaddress_index,
+        draw_data->specular_texaddress_index,
+    };
+
+    for (uint32_t i = 0; i < harray_count(indices); ++i)
+    {
+        int32_t &index = indices[i];
+        if (index < 0)
+        {
+            continue;
+        }
+        uint32_t &container_index = command_state->texture_addresses[index].container_index;
+        bool found_container = false;
+        for (uint32_t j = 0; j < num_containers; ++j)
+        {
+            if (container_index == containers[j])
+            {
+                found_container = true;
+                break;
+            }
+        }
+        if (!found_container)
+        {
+            containers[num_containers] = container_index;
+            ++num_containers;
+        }
+    }
+
+    enum struct
+    _SearchResult
+    {
+        exhausted,
+        found,
+        notfound,
+    };
+    _SearchResult search_result = _SearchResult::notfound;
+    int32_t key_index = -1;
+    auto &command_lists = command_state->lists;
+    for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
+    {
+        key_index = (int32_t)i;
+        if (command_lists.keys[i] == *key)
+        {
+            auto &command_list = command_lists.command_lists[i];
+            if (command_list.num_commands >= harray_count(command_list.commands))
+            {
+                continue;
+            }
+            uint32_t num_containers_needed = 0;
+            uint32_t containers_needed[10];
+            for (uint32_t j = 0; j < num_containers; ++j)
+            {
+                bool found = false;
+                uint32_t &container = containers[j];
+                for (uint32_t k = 0; k < command_list.num_texcontainer_indices; ++k)
+                {
+                    if (command_list.texcontainer_index[k] == container)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    containers_needed[num_containers_needed] = container;
+                    ++num_containers_needed;
+                }
+            }
+            if (num_containers_needed)
+            {
+                if (num_containers_needed + command_list.num_texcontainer_indices < harray_count(command_list.texcontainer_index))
+                {
+                    for (uint32_t j = 0; j < num_containers_needed; ++j)
+                    {
+                        command_list.texcontainer_index[command_list.num_texcontainer_indices] = containers_needed[j];
+                        ++command_list.num_texcontainer_indices;
+                    }
+                }
+                else
+                {
+                    continue;
+                }
+            }
+            search_result = _SearchResult::found;
+            break;
+        }
+    }
+    if (search_result != _SearchResult::found)
+    {
+        if (key_index < (int32_t)harray_count(command_lists.keys) - 1)
+        {
+            ++key_index;
+            auto &command_list = command_lists.command_lists[command_lists.num_command_lists];
+            ++command_lists.num_command_lists;
+            command_lists.keys[key_index] = *key;
+            search_result = _SearchResult::found;
+
+            for (uint32_t j = 0; j < num_containers; ++j)
+            {
+                command_list.texcontainer_index[command_list.num_texcontainer_indices] = containers[j];
+                ++command_list.num_texcontainer_indices;
+            }
+        }
+        else
+        {
+            search_result = _SearchResult::exhausted;
+            hassert(!"Not enough space for new command list");
+        }
+    }
+
+    if (key_index < 0)
+    {
+        return key_index;
+    }
+
+    auto &command_list = command_lists.command_lists[key_index];
+
+    if (num_bones)
+    {
+        draw_data->bone_offset = (int32_t)command_list.num_bones;
+
+        auto bone_data = command_list.bone_data_list.data + command_list.num_bones;
+        memcpy(
+            (void *)bone_data,
+            bones,
+            sizeof(m4) * num_bones);
+
+        command_list.num_bones += num_bones;
+    }
+
+    command_list.draw_data_list.data[command_list.num_commands] = *draw_data;
+    command_list.commands[command_list.num_commands] = *cmd;
+
+    ++command_list.num_commands;
+
+    return key_index;
+}
+
+
 void
 draw_mesh_from_asset_v3_bones(
     renderer_state *state,
@@ -3124,55 +3284,8 @@ draw_mesh_from_asset_v3_bones(
 
     load_mesh_to_buffers(state, mesh);
 
-    CommandKey key = {};
-    key.shader_type = mesh_from_asset->shader_type;
-    key.vertexformat = mesh->vertexformat;
-    key.vertex_buffer = mesh->v3.vertex_buffer;
-    key.index_buffer = mesh->v3.index_buffer;
-    key.count = 0;
-
-    enum struct
-    _SearchResult
-    {
-        exhausted,
-        found,
-        notfound,
-    };
-    _SearchResult search_result = _SearchResult::notfound;
-    int32_t key_index = -1;
-    auto &command_lists = state->command_state->lists;
-    for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
-    {
-        key_index = (int32_t)i;
-        if (command_lists.keys[i] == key)
-        {
-            auto &command_list = command_lists.command_lists[i];
-            if (command_list.num_commands < harray_count(command_list.commands))
-            {
-                search_result = _SearchResult::found;
-                break;
-            }
-        }
-    }
-    if (search_result != _SearchResult::found)
-    {
-        if (key_index < (int32_t)harray_count(command_lists.keys) - 1)
-        {
-            ++key_index;
-            ++command_lists.num_command_lists;
-            command_lists.keys[key_index] = key;
-            search_result = _SearchResult::found;
-        }
-        else
-        {
-            search_result = _SearchResult::exhausted;
-            hassert(!"Not enough space for new command list");
-        }
-    }
-    auto &command_list = command_lists.command_lists[key_index];
-
-    auto &cmd = command_list.commands[command_list.num_commands];
-    cmd.count = 3 * mesh->num_triangles; // number of triangles * 3
+    DrawElementsIndirectCommand cmd = {};
+    cmd.count = 3 * mesh->num_triangles;
     cmd.primCount = 1; // number of instances
     cmd.firstIndex = mesh->v3.index_offset;
     cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
@@ -3280,15 +3393,7 @@ draw_mesh_from_asset_v3_bones(
         bones = armature->bones;
     }
 
-    uint32_t bone_offset = command_list.num_bones;
-    command_list.num_bones += mesh->num_bones;
-    auto bone_data = command_list.bone_data_list.data + bone_offset;
-    memcpy(
-        (void *)bone_data,
-        bones,
-        sizeof(m4) * mesh->num_bones);
-
-    auto &draw_data = command_list.draw_data_list.data[command_list.num_commands];
+    DrawData draw_data = {};
     draw_data.texture_texaddress_index = texture_texaddress_index;
     draw_data.normal_texaddress_index = normal_texaddress_index;
     draw_data.specular_texaddress_index = specular_texaddress_index;
@@ -3300,14 +3405,27 @@ draw_mesh_from_asset_v3_bones(
     draw_data.light_index = light_index;
     v3 camera_position = calculate_camera_position(view);
     draw_data.camera_position = camera_position;
-    draw_data.bone_offset = (int32_t)bone_offset;
     draw_data.object_identifier = mesh_from_asset->object_identifier;
 
-    ++command_list.num_commands;
-    if (state->crash_on_gl_errors) hglErrorAssert();
+    CommandKey key = {};
+    key.shader_type = mesh_from_asset->shader_type;
+    key.vertexformat = mesh->vertexformat;
+    key.vertex_buffer = mesh->v3.vertex_buffer;
+    key.index_buffer = mesh->v3.index_buffer;
+    key.count = 0;
 
+    command_list_for_key_draw_data(
+        state->command_state,
+        &key,
+        &cmd,
+        &draw_data,
+        mesh->num_bones,
+        bones
+    );
+    if (state->crash_on_gl_errors) hglErrorAssert();
     return;
 }
+
 void
 draw_mesh_from_asset_v3_boneless(
     renderer_state *state,
@@ -3334,55 +3452,8 @@ draw_mesh_from_asset_v3_boneless(
         return;
     }
 
-    CommandKey key = {};
-    key.shader_type = mesh_from_asset->shader_type;
-    key.vertexformat = mesh->vertexformat;
-    key.vertex_buffer = mesh->v3.vertex_buffer;
-    key.index_buffer = mesh->v3.index_buffer;
-    key.count = 0;
-
-    enum struct
-    _SearchResult
-    {
-        exhausted,
-        found,
-        notfound,
-    };
-    _SearchResult search_result = _SearchResult::notfound;
-    int32_t key_index = -1;
-    auto &command_lists = state->command_state->lists;
-    for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
-    {
-        key_index = (int32_t)i;
-        if (command_lists.keys[i] == key)
-        {
-            auto &command_list = command_lists.command_lists[i];
-            if (command_list.num_commands < harray_count(command_list.commands))
-            {
-                search_result = _SearchResult::found;
-                break;
-            }
-        }
-    }
-    if (search_result != _SearchResult::found)
-    {
-        if (key_index < (int32_t)harray_count(command_lists.keys) - 1)
-        {
-            ++key_index;
-            ++command_lists.num_command_lists;
-            command_lists.keys[key_index] = key;
-            search_result = _SearchResult::found;
-        }
-        else
-        {
-            search_result = _SearchResult::exhausted;
-            hassert(!"Not enough space for new command list");
-        }
-    }
-    auto &command_list = command_lists.command_lists[key_index];
-
-    auto &cmd = command_list.commands[command_list.num_commands];
-    cmd.count = 3 * mesh->num_triangles; // number of triangles * 3
+    DrawElementsIndirectCommand cmd = {};
+    cmd.count = 3 * mesh->num_triangles;
     cmd.primCount = 1; // number of instances
     cmd.firstIndex = mesh->v3.index_offset;
     cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
@@ -3480,7 +3551,7 @@ draw_mesh_from_asset_v3_boneless(
     }
     m4 &model = mesh_from_asset->model_matrix;
 
-    auto &draw_data = command_list.draw_data_list.data[command_list.num_commands];
+    DrawData draw_data = {};
     draw_data.texture_texaddress_index = texture_texaddress_index;
     draw_data.normal_texaddress_index = normal_texaddress_index;
     draw_data.specular_texaddress_index = specular_texaddress_index;
@@ -3495,8 +3566,22 @@ draw_mesh_from_asset_v3_boneless(
     draw_data.bone_offset = -1;
     draw_data.object_identifier = mesh_from_asset->object_identifier;
 
-    ++command_list.num_commands;
 
+    CommandKey key = {};
+    key.shader_type = mesh_from_asset->shader_type;
+    key.vertexformat = mesh->vertexformat;
+    key.vertex_buffer = mesh->v3.vertex_buffer;
+    key.index_buffer = mesh->v3.index_buffer;
+    key.count = 0;
+
+    command_list_for_key_draw_data(
+        state->command_state,
+        &key,
+        &cmd,
+        &draw_data,
+        0,
+        0
+    );
     return;
 }
 
@@ -4143,6 +4228,7 @@ draw_indirect(
         {
             command_list.num_commands = 0;
             command_list.num_bones = 0;
+            command_list.num_texcontainer_indices = 0;
             continue;
         }
 
@@ -4246,6 +4332,18 @@ draw_indirect(
                 command_key.vertex_buffer,
                 command_key.index_buffer
                 );
+            char texture_list[1024] = {};
+            uint32_t texture_list_len = 0;
+            for (uint32_t j = 0; j < command_list.num_texcontainer_indices; ++j)
+            {
+                char comma[] = {',', ' ', 0};
+                if (j == 0)
+                {
+                    comma[0] = ' ';
+                }
+                texture_list_len += sprintf(texture_list + texture_list_len, "%s%d", comma, command_list.texcontainer_index[j]);
+            }
+            ImGui::Text("Textures: %s", texture_list);
         }
         hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
             command_state.index_buffers[command_key.index_buffer].ibo);
@@ -4326,6 +4424,7 @@ draw_indirect(
         }
 
         command_list.num_commands = 0;
+        command_list.num_texcontainer_indices = 0;
         command_list.num_bones = 0;
     }
     if (state->crash_on_gl_errors) hglErrorAssert();
