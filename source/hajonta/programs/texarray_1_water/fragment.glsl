@@ -80,6 +80,24 @@ layout(std140) uniform CB2
     Light lights[32];
 };
 
+struct TexContainerSamplerMapping
+{
+    uint generation;
+    uint texcontainer_index;
+};
+
+struct TexContainerIndexItem
+{
+    uint container_index;
+    // 3 bytes wasted due to alignment!
+};
+
+layout(std140) uniform CB4
+{
+    TexContainerIndexItem texcontainer_index[8];
+    TexContainerSamplerMapping texcontainer_sampler_mapping[16];
+};
+
 uniform sampler2DArray TexContainer[14];
 
 uniform bool do_not_skip = true;
@@ -93,15 +111,24 @@ flat in uint v_draw_id;
 
 out vec4 o_color;
 
+vec4 texcontainer_fetch(int texaddress_index, vec2 texcoord2)
+{
+    Tex2DAddress addr = texAddress[texaddress_index];
+    vec3 texCoord = vec3(texcoord2, addr.Page);
+    TexContainerSamplerMapping tcsm = texcontainer_sampler_mapping[addr.Container];
+    //uint newContainer = texcontainer_index[tcsm.texcontainer_index].container_index;
+    uint newContainer = tcsm.texcontainer_index;
+    return texture(TexContainer[newContainer], texCoord);
+}
+
 vec2
 distortion1()
 {
-    Tex2DAddress addr = texAddress[shader_config.dudv_map_texaddress_index];
-    vec3 texCoord = vec3(v_texcoord.x + shader_config.move_factor, v_texcoord.y, addr.Page);
-    vec2 distortion1 = texture(TexContainer[addr.Container], texCoord).rg;
+    vec2 texCoord = vec2(v_texcoord.x + shader_config.move_factor, v_texcoord.y);
+    vec2 distortion1 = texcontainer_fetch(shader_config.dudv_map_texaddress_index, texCoord).rg;
 
-    texCoord = vec3(-v_texcoord.x + shader_config.move_factor, v_texcoord.y + shader_config.move_factor, addr.Page);
-    vec2 distortion2 = texture(TexContainer[addr.Container], texCoord).rg;
+    texCoord = vec2(-v_texcoord.x + shader_config.move_factor, v_texcoord.y + shader_config.move_factor);
+    vec2 distortion2 = texcontainer_fetch(shader_config.dudv_map_texaddress_index, texCoord).rg;
 
     return distortion1 + distortion2;
 }
@@ -120,17 +147,13 @@ distortion2()
     Tex2DAddress addr = texAddress[shader_config.dudv_map_texaddress_index];
 
     vec2 texcoord2 = vec2(v_texcoord.x + shader_config.move_factor, v_texcoord.y);
-    vec3 texCoord = vec3(texcoord2, addr.Page);
 
-    vec2 distorted_texcoord = texture(TexContainer[addr.Container], texCoord).rg * 0.1f;
+    vec2 distorted_texcoord = texcontainer_fetch(shader_config.dudv_map_texaddress_index, texcoord2).rg * 0.1f;
     distorted_texcoord = v_texcoord + vec2(distorted_texcoord.x, distorted_texcoord.y+shader_config.move_factor);
 
-    texCoord = vec3(distorted_texcoord, addr.Page);
-    d.distortion = texture(TexContainer[addr.Container], texCoord).rg * 2 - 1;
+    d.distortion = texcontainer_fetch(shader_config.dudv_map_texaddress_index, distorted_texcoord).rg * 2 - 1;
 
-    addr = texAddress[shader_config.normal_map_texaddress_index];
-    texCoord = vec3(distorted_texcoord, addr.Page);
-    d.normal = texture(TexContainer[addr.Container], texCoord).rgb;
+    d.normal = texcontainer_fetch(shader_config.normal_map_texaddress_index, distorted_texcoord).rgb;
     d.normal = vec3(
         d.normal.r * 2 - 1,
         d.normal.b * 2 - 1,
@@ -153,9 +176,7 @@ float shadow_visibility_vsm(vec4 lightspace_position, vec3 light_dir)
     lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
 
 
-    Tex2DAddress addr = texAddress[dd.shadowmap_color_texaddress_index];
-    vec3 texCoord = vec3(lightspace_coords.xy, addr.Page);
-    vec2 moments = texture(TexContainer[addr.Container], texCoord).xy;
+    vec2 moments = texcontainer_fetch(dd.shadowmap_color_texaddress_index, lightspace_coords.xy).xy;
 
     float moment1 = moments.r;
     float moment2 = moments.g;
@@ -189,18 +210,16 @@ void main()
         Tex2DAddress addr;
         vec3 texCoord;
 
-        addr = texAddress[shader_config.refraction_depth_texaddress_index];
-        texCoord = vec3(ndc, addr.Page);
-        float depth = 2 * texture(TexContainer[addr.Container], texCoord).r - 1;
+        float depth = 2 * texcontainer_fetch(shader_config.refraction_depth_texaddress_index, ndc).r - 1;
         float near = shader_config.near;
         float far = shader_config.far;
 
-        float floor_distance = 
+        float floor_distance =
             (2.0 * near * far) /
             (far + near - depth * (far - near));
 
         float water_depth = 2 * gl_FragCoord.z - 1;
-        float water_distance = 
+        float water_distance =
             (2.0 * near * far) /
             (far + near - water_depth * (far - near));
 
@@ -221,13 +240,8 @@ void main()
         reflection.x = clamp(reflection.x, 0.001, 0.999);
         reflection.y = clamp(reflection.y, -0.999, -0.001);
 
-        addr = texAddress[shader_config.refraction_texaddress_index];
-        texCoord = vec3(refraction, addr.Page);
-        vec3 refraction_color = texture(TexContainer[addr.Container], texCoord).rgb;
-
-        addr = texAddress[shader_config.reflection_texaddress_index];
-        texCoord = vec3(reflection, addr.Page);
-        vec3 reflection_color = texture(TexContainer[addr.Container], texCoord).rgb;
+        vec3 refraction_color = texcontainer_fetch(shader_config.refraction_texaddress_index, refraction).rgb;
+        vec3 reflection_color = texcontainer_fetch(shader_config.reflection_texaddress_index, reflection).rgb;
 
         vec3 to_camera = normalize(shader_config.camera_position - v_w_position);
         float refractiveness = dot(to_camera, d.normal);

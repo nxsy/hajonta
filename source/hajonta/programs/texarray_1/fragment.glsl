@@ -23,6 +23,8 @@ const int show_specular_flag = 1 << 4;
 const int show_specularmap_flag = 1 << 5;
 const int show_tangent_flag = 1 << 6;
 const int show_object_identifier_flag = 1 << 7;
+const int show_texcontainer_index_flag = 1 << 8;
+const int show_newtexcontainer_index_flag = 1 << 9;
 
 struct
 ShaderConfig
@@ -88,6 +90,24 @@ layout(std140) uniform CB2
     Light lights[32];
 };
 
+struct TexContainerSamplerMapping
+{
+    uint generation;
+    uint texcontainer_index;
+};
+
+struct TexContainerIndexItem
+{
+    uint container_index;
+    // 3 bytes wasted due to alignment!
+};
+
+layout(std140) uniform CB4
+{
+    TexContainerIndexItem texcontainer_index[8];
+    TexContainerSamplerMapping texcontainer_sampler_mapping[16];
+};
+
 uniform sampler2DArray TexContainer[14];
 
 uniform bool do_not_skip = true;
@@ -106,6 +126,16 @@ flat in uint v_draw_id;
 
 out vec4 o_color;
 
+vec4 texcontainer_fetch(int texaddress_index, vec2 texcoord2)
+{
+    Tex2DAddress addr = texAddress[texaddress_index];
+    vec3 texCoord = vec3(texcoord2, addr.Page);
+    TexContainerSamplerMapping tcsm = texcontainer_sampler_mapping[addr.Container];
+    //uint newContainer = texcontainer_index[tcsm.texcontainer_index].container_index;
+    uint newContainer = tcsm.texcontainer_index;
+    return texture(TexContainer[newContainer], texCoord);
+}
+
 float linstep(float low, float high, float v)
 {
     return clamp((v-low)/(high-low), 0.0, 1.0);
@@ -118,9 +148,7 @@ float shadow_visibility_vsm(vec4 lightspace_position, vec3 normal, vec3 light_di
     lightspace_coords = (1.0f + lightspace_coords) * 0.5f;
 
 
-    Tex2DAddress addr = texAddress[dd.shadowmap_color_texaddress_index];
-    vec3 texCoord = vec3(lightspace_coords.xy, addr.Page);
-    vec2 moments = texture(TexContainer[addr.Container], texCoord).xy;
+    vec2 moments = texcontainer_fetch(dd.shadowmap_color_texaddress_index, lightspace_coords.xy).xy;
 
     float moment1 = moments.r;
     float moment2 = moments.g;
@@ -154,10 +182,8 @@ calculate_normal(DrawData dd)
         return w_normal;
     }
 
-    Tex2DAddress addr = texAddress[dd.normal_texaddress_index];
-    vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
+    vec3 tex_normal = texcontainer_fetch(dd.normal_texaddress_index, v_texcoord.xy).xyz;
 
-    vec3 tex_normal = texture(TexContainer[addr.Container], texCoord).xyz;
     tex_normal = 2 * tex_normal - 1;
 
     vec3 n = w_normal;
@@ -174,11 +200,44 @@ calculate_normal(DrawData dd)
 void main()
 {
     DrawData dd = draw_data[v_draw_id];
-    if (dd.texture_texaddress_index >= 0)
+    if ((shader_config.flags & show_texcontainer_index_flag) == show_texcontainer_index_flag)
     {
         Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
-        vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
-        vec4 diffuse_color = texture(TexContainer[addr.Container], texCoord);
+        o_color = vec4(
+            (addr.Container & 1) == 1 ? 0.25f : 0.0f +
+            (addr.Container & 8) == 8 ? 0.5f : 0.0f,
+            (addr.Container & 2) == 2 ? 0.25f : 0.0f +
+            (addr.Container & 16) == 16 ? 0.5f : 0.0f,
+            (addr.Container & 4) == 4 ? 0.25f : 0.0f +
+            (addr.Container & 32) == 32 ? 0.5f : 0.0f,
+            1.0f
+        );
+    } else
+    if ((shader_config.flags & show_newtexcontainer_index_flag) == show_newtexcontainer_index_flag)
+    {
+        Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
+        TexContainerSamplerMapping tcsm = texcontainer_sampler_mapping[addr.Container];
+        uint newContainer = texcontainer_index[tcsm.texcontainer_index].container_index;
+        //uint newContainer = tcsm.texcontainer_index;
+        o_color = vec4(
+            (newContainer & 1) == 1 ? 0.25f : 0.0f +
+            (newContainer & 8) == 8 ? 0.5f : 0.0f,
+            (newContainer & 2) == 2 ? 0.25f : 0.0f +
+            (newContainer & 16) == 16 ? 0.5f : 0.0f,
+            (newContainer & 4) == 4 ? 0.25f : 0.0f +
+            (newContainer & 32) == 32 ? 0.5f : 0.0f,
+            1.0f
+        );
+        if (skip)
+        {
+            o_color = vec4(0.25, 0.5, 0.75, 1.0);
+            o_color = texcontainer_fetch(dd.texture_texaddress_index, v_texcoord.xy);
+        }
+    } else
+    if (dd.texture_texaddress_index >= 0)
+    {
+        vec4 diffuse_color = texcontainer_fetch(dd.texture_texaddress_index, v_texcoord.xy);
+
         vec3 w_normal = calculate_normal(dd);
 
         Light light = lights[dd.light_index];
@@ -211,9 +270,8 @@ void main()
             {
                 if (dd.specular_texaddress_index >= 0)
                 {
-                    addr = texAddress[dd.specular_texaddress_index];
-                    texCoord = vec3(v_texcoord.xy, addr.Page);
-                    specular *= texture(TexContainer[addr.Container], texCoord).r;
+                    float specular_strength = texcontainer_fetch(dd.specular_texaddress_index, v_texcoord.xy).r;
+                    specular *= specular_strength;
                 }
             }
         }
@@ -276,15 +334,11 @@ void main()
     }
     if ((shader_config.flags & show_normalmap_flag) == show_normalmap_flag && dd.normal_texaddress_index >= 0)
     {
-        Tex2DAddress addr = texAddress[dd.normal_texaddress_index];
-        vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
-        o_color = texture(TexContainer[addr.Container], texCoord);
+        o_color = texcontainer_fetch(dd.normal_texaddress_index, v_texcoord.xy);
     }
 
     if ((shader_config.flags & show_specularmap_flag) == show_specularmap_flag && dd.specular_texaddress_index >= 0)
     {
-        Tex2DAddress addr = texAddress[dd.specular_texaddress_index];
-        vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
-        o_color = texture(TexContainer[addr.Container], texCoord);
+        o_color = texcontainer_fetch(dd.specular_texaddress_index, v_texcoord.xy);
     }
 }

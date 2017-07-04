@@ -508,6 +508,8 @@ RenderEntryListConfig
         unsigned int show_specularmap:1;
         unsigned int show_tangent:1;
         unsigned int show_object_identifier:1;
+        unsigned int show_texcontainer_index:1;
+        unsigned int show_newtexcontainer_index:1;
     };
 
     int32_t reflection_asset_descriptor;
@@ -515,6 +517,13 @@ RenderEntryListConfig
     int32_t refraction_depth_asset_descriptor;
     int32_t dudv_map_asset_descriptor;
     int32_t normal_map_asset_descriptor;
+
+    int32_t _reflection_texaddress_index;
+    int32_t _refraction_texaddress_index;
+    int32_t _refraction_depth_texaddress_index;
+    int32_t _dudv_map_texaddress_index;
+    int32_t _normal_map_texaddress_index;
+
     v3 camera_position;
     float near_;
     float far_;
@@ -569,6 +578,11 @@ RenderListReset(render_entry_list *list)
          list->element_types[i] = (render_entry_type)0;
     }
 #endif
+    list->config.reflection_asset_descriptor = -1;
+    list->config.refraction_asset_descriptor = -1;
+    list->config.refraction_depth_asset_descriptor = -1;
+    list->config.dudv_map_asset_descriptor = -1;
+    list->config.normal_map_asset_descriptor = -1;
 }
 
 void

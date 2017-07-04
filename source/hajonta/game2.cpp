@@ -2687,6 +2687,18 @@ DEMO(demo_a)
         state->rl_m.list.config.show_object_identifier = (uint32_t)foo;
     }
 
+    {
+        bool foo = state->rl_m.list.config.show_texcontainer_index;
+        ImGui::Checkbox("Show texcontainer_index", &foo);
+        state->rl_m.list.config.show_texcontainer_index = (uint32_t)foo;
+    }
+
+    {
+        bool foo = state->rl_m.list.config.show_newtexcontainer_index;
+        ImGui::Checkbox("Show new texcontainer_index", &foo);
+        state->rl_m.list.config.show_newtexcontainer_index = (uint32_t)foo;
+    }
+
     state->rl_m.list.config.camera_position = state->camera.location;
     PushClear(&state->rl_m.list, {0,0,0,1});
 
@@ -2911,7 +2923,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.min_noise_height = FLT_MAX;
         perlin.max_noise_height = FLT_MIN;
         //auto &path = state->cowboy_path;
-        state->active_demo = 1;
+        state->active_demo = 0;
     }
 
     for (uint32_t i = 0;

@@ -39,12 +39,39 @@ layout(std140) uniform CB1
     DrawData draw_data[100];
 };
 
+struct TexContainerSamplerMapping
+{
+    uint generation;
+    uint texcontainer_index;
+};
+
+struct TexContainerIndexItem
+{
+    uint container_index;
+    // 3 bytes wasted due to alignment!
+};
+
+layout(std140) uniform CB4
+{
+    TexContainerIndexItem texcontainer_index[8];
+    TexContainerSamplerMapping texcontainer_sampler_mapping[16];
+};
+
+vec4 texcontainer_fetch(int texaddress_index, vec2 texcoord2)
+{
+    Tex2DAddress addr = texAddress[texaddress_index];
+    vec3 texCoord = vec3(texcoord2, addr.Page);
+    TexContainerSamplerMapping tcsm = texcontainer_sampler_mapping[addr.Container];
+    //uint newContainer = texcontainer_index[tcsm.texcontainer_index].container_index;
+    uint newContainer = tcsm.texcontainer_index;
+    return texture(TexContainer[newContainer], texCoord);
+}
+
 void main()
 {
     DrawData dd = draw_data[v_draw_id];
-    Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
-    vec3 texCoord = vec3(v_texcoord.xy, addr.Page);
-    float transparency = texture(TexContainer[addr.Container], texCoord).a;
+
+    float transparency = texcontainer_fetch(dd.texture_texaddress_index, v_texcoord.xy).a;
     if (transparency < 0.001)
     {
         discard;

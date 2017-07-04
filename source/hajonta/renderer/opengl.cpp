@@ -152,10 +152,28 @@ struct LightList
     Light lights[32];
 };
 
-#define NUM_CONTAINER_TEXARRAY_TEXTURES 4
+struct TexContainerIndexItem
+{
+    uint32_t container_index;
+    // 3 bytes wasted due to std140 layout rules
+    uint32_t reserved[3];
+};
+
+struct
+TexContainerSamplerMapping
+{
+    uint32_t generation;
+    uint32_t texcontainer_index;
+    // 2 bytes wasted due to std140 layout rules
+    uint32_t reserved[2];
+};
+
+#define NUM_TEXARRAY_TEXTURES 14
+#define NUM_CONTAINER_TEXARRAY_TEXTURES 8
 struct
 CommandList
 {
+    uint32_t generation;
     uint32_t num_commands;
     DrawElementsIndirectCommand commands[100];
     bool _vao_initialized;
@@ -167,7 +185,8 @@ CommandList
     uint32_t num_bones;
     BoneDataList bone_data_list;
     uint32_t num_texcontainer_indices;
-    uint32_t texcontainer_index[NUM_CONTAINER_TEXARRAY_TEXTURES];
+    TexContainerIndexItem texcontainer_index[NUM_CONTAINER_TEXARRAY_TEXTURES];
+    TexContainerSamplerMapping texcontainer_sampler_mapping[NUM_TEXARRAY_TEXTURES];
 };
 
 struct
@@ -442,6 +461,14 @@ IndirectBuffer
 };
 
 struct
+TexContainerSamplerMappingBuffer
+{
+    uint32_t ubo;
+    uint32_t max_data;
+    uint32_t data_count;
+};
+
+struct
 TexArray1ShaderConfigFlags
 {
     unsigned int normal_map_disabled:1;
@@ -452,6 +479,8 @@ TexArray1ShaderConfigFlags
     unsigned int show_specularmap:1;
     unsigned int show_tangent:1;
     unsigned int show_object_identifier:1;
+    unsigned int show_texcontainer_index:1;
+    unsigned int show_newtexcontainer_index:1;
 };
 
 struct
@@ -555,7 +584,6 @@ TextureLayerInfo
     int32_t num_layers_used;
 };
 
-#define NUM_TEXARRAY_TEXTURES 14
 struct
 CommandState
 {
@@ -569,6 +597,7 @@ CommandState
 
     DrawDataBuffer draw_data_buffer;
     BoneDataBuffer bone_data_buffer;
+    TexContainerSamplerMappingBuffer texcontainer_sampler_mapping_buffer;
     IndirectBuffer indirect_buffer;
     ShaderConfigBuffer shaderconfig_buffer;
     LightList light_list;
@@ -602,6 +631,7 @@ struct renderer_state
     uint32_t texarray_1_cb1;
     uint32_t texarray_1_cb2;
     uint32_t texarray_1_cb3;
+    uint32_t texarray_1_cb4;
     uint32_t texarray_1_shaderconfig;
     int32_t texarray_1_texcontainer;
     int32_t texarray_1_shadowmap_tex_id;
@@ -611,12 +641,14 @@ struct renderer_state
     uint32_t texarray_1_vsm_cb0;
     uint32_t texarray_1_vsm_cb1;
     uint32_t texarray_1_vsm_cb3;
+    uint32_t texarray_1_vsm_cb4;
     int32_t texarray_1_vsm_texcontainer;
 
     texarray_1_water_program_struct texarray_1_water_program;
     uint32_t texarray_1_water_cb0;
     uint32_t texarray_1_water_cb1;
     uint32_t texarray_1_water_cb2;
+    uint32_t texarray_1_water_cb4;
     uint32_t texarray_1_water_shaderconfig;
     int32_t texarray_1_water_texcontainer;
 
@@ -1474,6 +1506,11 @@ program_init(renderer_state *state)
             state->texarray_1_program.program,
             state->texarray_1_cb3,
             3);
+        state->texarray_1_cb4 = hglGetUniformBlockIndex(program->program, "CB4");
+        hglUniformBlockBinding(
+            state->texarray_1_program.program,
+            state->texarray_1_cb4,
+            4);
         state->texarray_1_shaderconfig = hglGetUniformBlockIndex(program->program, "SHADERCONFIG");
         hglUniformBlockBinding(
             state->texarray_1_program.program,
@@ -1500,6 +1537,11 @@ program_init(renderer_state *state)
             state->texarray_1_vsm_program.program,
             state->texarray_1_vsm_cb3,
             3);
+        state->texarray_1_vsm_cb4 = hglGetUniformBlockIndex(program->program, "CB4");
+        hglUniformBlockBinding(
+            state->texarray_1_vsm_program.program,
+            state->texarray_1_vsm_cb4,
+            4);
         state->texarray_1_vsm_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
 
@@ -1521,6 +1563,11 @@ program_init(renderer_state *state)
             state->texarray_1_water_program.program,
             state->texarray_1_water_cb2,
             2);
+        state->texarray_1_water_cb4 = hglGetUniformBlockIndex(program->program, "CB4");
+        hglUniformBlockBinding(
+            state->texarray_1_water_program.program,
+            state->texarray_1_water_cb4,
+            4);
         state->texarray_1_water_shaderconfig = hglGetUniformBlockIndex(program->program, "SHADERCONFIG");
         hglUniformBlockBinding(
             program->program,
@@ -1557,6 +1604,7 @@ program_init(renderer_state *state)
     hglGenBuffers(1, &command_state.texture_address_buffers[0].uniform_buffer.ubo);
     hglGenBuffers(1, &command_state.draw_data_buffer.ubo);
     hglGenBuffers(1, &command_state.bone_data_buffer.ubo);
+    hglGenBuffers(1, &command_state.texcontainer_sampler_mapping_buffer.ubo);
     hglGenBuffers(1, &command_state.indirect_buffer.ubo);
     hglGenBuffers(1, &command_state.lights_buffer.ubo);
     hglGenBuffers(1, &command_state.shaderconfig_buffer.ubo);
@@ -1579,6 +1627,10 @@ program_init(renderer_state *state)
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.bone_data_buffer.ubo);
     hglBufferData(GL_UNIFORM_BUFFER, sizeof(BoneDataList), (void *)0, GL_DYNAMIC_DRAW);
+    hglBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    hglBindBuffer(GL_UNIFORM_BUFFER, command_state.texcontainer_sampler_mapping_buffer.ubo);
+    hglBufferData(GL_UNIFORM_BUFFER, 1024, (void *)0, GL_DYNAMIC_DRAW);
     hglBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     hglBindBuffer(GL_UNIFORM_BUFFER, command_state.indirect_buffer.ubo);
@@ -1800,6 +1852,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
         bootstrap_memory_arena(memory->renderer_block, renderer_state, arena);
         renderer_state *state = (renderer_state *)memory->renderer_block->base;
         state->command_state = PushStruct("command_state", &state->arena, CommandState);
+        for (uint32_t i = 0; i < harray_count(state->command_state->lists.command_lists); ++i)
+        {
+            state->command_state->lists.command_lists[i].generation = 1;
+        }
         state->bitmap_scratch_size = 4096 * 4096 * 4;
         state->bitmap_scratch = (char *)PushSize("bitmap_scratch", &state->arena, state->bitmap_scratch_size);
         state->asset_scratch_size = 4096 * 4096 * 4;
@@ -1878,7 +1934,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->initialized = true;
         state->generation_id = 1;
         state->show_debug = 1;
-        //state->crash_on_gl_errors = 1;
+        state->crash_on_gl_errors = 1;
         //state->flush_for_profiling = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
@@ -3110,6 +3166,7 @@ command_list_for_key_draw_data(
     CommandState *command_state,
     CommandKey *key,
     DrawElementsIndirectCommand *cmd,
+    RenderEntryListConfig *config,
     DrawData *draw_data,
     uint32_t num_bones,
     m4 *bones
@@ -3124,6 +3181,11 @@ command_list_for_key_draw_data(
         draw_data->shadowmap_color_texaddress_index,
         draw_data->normal_texaddress_index,
         draw_data->specular_texaddress_index,
+        config->_reflection_texaddress_index,
+        config->_refraction_texaddress_index,
+        config->_refraction_depth_texaddress_index,
+        config->_dudv_map_texaddress_index,
+        config->_normal_map_texaddress_index,
     };
 
     for (uint32_t i = 0; i < harray_count(indices); ++i)
@@ -3178,7 +3240,8 @@ command_list_for_key_draw_data(
                 uint32_t &container = containers[j];
                 for (uint32_t k = 0; k < command_list.num_texcontainer_indices; ++k)
                 {
-                    if (command_list.texcontainer_index[k] == container)
+                    TexContainerSamplerMapping &map = command_list.texcontainer_sampler_mapping[container];
+                    if (map.generation == command_list.generation)
                     {
                         found = true;
                         break;
@@ -3196,7 +3259,13 @@ command_list_for_key_draw_data(
                 {
                     for (uint32_t j = 0; j < num_containers_needed; ++j)
                     {
-                        command_list.texcontainer_index[command_list.num_texcontainer_indices] = containers_needed[j];
+                        command_list.texcontainer_index[command_list.num_texcontainer_indices].container_index = containers_needed[j];
+                        command_list.texcontainer_sampler_mapping[containers_needed[j]] =
+                        {
+                            command_list.generation,
+                            command_list.num_texcontainer_indices,
+
+                        };
                         ++command_list.num_texcontainer_indices;
                     }
                 }
@@ -3221,7 +3290,13 @@ command_list_for_key_draw_data(
 
             for (uint32_t j = 0; j < num_containers; ++j)
             {
-                command_list.texcontainer_index[command_list.num_texcontainer_indices] = containers[j];
+                command_list.texcontainer_index[command_list.num_texcontainer_indices].container_index = containers[j];
+                command_list.texcontainer_sampler_mapping[containers[j]] =
+                {
+                    command_list.generation,
+                    command_list.num_texcontainer_indices,
+
+                };
                 ++command_list.num_texcontainer_indices;
             }
         }
@@ -3264,6 +3339,7 @@ command_list_for_key_draw_data(
 void
 draw_mesh_from_asset_v3_bones(
     renderer_state *state,
+    RenderEntryListConfig *config,
     m4 *matrices,
     asset_descriptor *descriptors,
     LightDescriptor *light_descriptors,
@@ -3300,6 +3376,28 @@ draw_mesh_from_asset_v3_bones(
     if (debug)
     {
         hassert(debug);
+    }
+    struct
+    {
+        int32_t asset_descriptor;
+        int32_t *texaddress_index;
+    } load[] =
+    {
+        { config->reflection_asset_descriptor, &config->_reflection_texaddress_index },
+        { config->refraction_asset_descriptor, &config->_refraction_texaddress_index },
+        { config->refraction_depth_asset_descriptor, &config->_refraction_depth_texaddress_index },
+        { config->dudv_map_asset_descriptor, &config->_dudv_map_texaddress_index },
+        { config->normal_map_asset_descriptor, &config->_normal_map_texaddress_index },
+    };
+    for (uint32_t i = 0; i < harray_count(load); ++i)
+    {
+        get_texaddress_index_from_asset_descriptor(
+            state,
+            descriptors,
+            load[i].asset_descriptor,
+            load[i].texaddress_index,
+            &st0,
+            &st1);
     }
     switch (mesh_from_asset->flags.use_materials)
     {
@@ -3418,6 +3516,7 @@ draw_mesh_from_asset_v3_bones(
         state->command_state,
         &key,
         &cmd,
+        config,
         &draw_data,
         mesh->num_bones,
         bones
@@ -3429,6 +3528,7 @@ draw_mesh_from_asset_v3_bones(
 void
 draw_mesh_from_asset_v3_boneless(
     renderer_state *state,
+    RenderEntryListConfig *config,
     m4 *matrices,
     asset_descriptor *descriptors,
     LightDescriptor *light_descriptors,
@@ -3468,6 +3568,28 @@ draw_mesh_from_asset_v3_boneless(
     if (debug)
     {
         hassert(debug);
+    }
+    struct
+    {
+        int32_t asset_descriptor;
+        int32_t *texaddress_index;
+    } load[] =
+    {
+        { config->reflection_asset_descriptor, &config->_reflection_texaddress_index },
+        { config->refraction_asset_descriptor, &config->_refraction_texaddress_index },
+        { config->refraction_depth_asset_descriptor, &config->_refraction_depth_texaddress_index },
+        { config->dudv_map_asset_descriptor, &config->_dudv_map_texaddress_index },
+        { config->normal_map_asset_descriptor, &config->_normal_map_texaddress_index },
+    };
+    for (uint32_t i = 0; i < harray_count(load); ++i)
+    {
+        get_texaddress_index_from_asset_descriptor(
+            state,
+            descriptors,
+            load[i].asset_descriptor,
+            load[i].texaddress_index,
+            &st0,
+            &st1);
     }
     switch (mesh_from_asset->flags.use_materials)
     {
@@ -3578,6 +3700,7 @@ draw_mesh_from_asset_v3_boneless(
         state->command_state,
         &key,
         &cmd,
+        config,
         &draw_data,
         0,
         0
@@ -3588,6 +3711,7 @@ draw_mesh_from_asset_v3_boneless(
 void
 draw_mesh_from_asset(
     renderer_state *state,
+    RenderEntryListConfig *config,
     m4 *matrices,
     asset_descriptor *descriptors,
     LightDescriptor *light_descriptors,
@@ -3603,6 +3727,7 @@ draw_mesh_from_asset(
         {
             return draw_mesh_from_asset_v3_bones(
                 state,
+                config,
                 matrices,
                 descriptors,
                 light_descriptors,
@@ -3615,6 +3740,7 @@ draw_mesh_from_asset(
         {
             return draw_mesh_from_asset_v3_boneless(
                 state,
+                config,
                 matrices,
                 descriptors,
                 light_descriptors,
@@ -4032,6 +4158,8 @@ draw_indirect(
             shaderconfig.texarray_1_shaderconfig.flags.show_specular = list->config.show_specular;
             shaderconfig.texarray_1_shaderconfig.flags.show_specularmap = list->config.show_specularmap;
             shaderconfig.texarray_1_shaderconfig.flags.show_object_identifier = list->config.show_object_identifier;
+            shaderconfig.texarray_1_shaderconfig.flags.show_texcontainer_index = list->config.show_texcontainer_index;
+            shaderconfig.texarray_1_shaderconfig.flags.show_newtexcontainer_index = list->config.show_newtexcontainer_index;
         } break;
         case ShaderType::variance_shadow_map:
         {
@@ -4205,13 +4333,15 @@ draw_indirect(
     };
     if (state->crash_on_gl_errors) hglErrorAssert();
     hglUniform1iv(pd.texcontainer_uniform, harray_count(texcontainer_textures), texcontainer_textures);
+    /*
     for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
     {
         hglActiveTexture(GL_TEXTURE0 + i);
         hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
     }
-
     hglActiveTexture(GL_TEXTURE0);
+    */
+
     if (state->crash_on_gl_errors) hglErrorAssert();
 
     for (uint32_t i = 0; i < command_lists.num_command_lists; ++i)
@@ -4226,6 +4356,7 @@ draw_indirect(
 
         if (command_key.vertexformat > 3)
         {
+            ++command_list.generation;
             command_list.num_commands = 0;
             command_list.num_bones = 0;
             command_list.num_texcontainer_indices = 0;
@@ -4341,7 +4472,7 @@ draw_indirect(
                 {
                     comma[0] = ' ';
                 }
-                texture_list_len += sprintf(texture_list + texture_list_len, "%s%d", comma, command_list.texcontainer_index[j]);
+                texture_list_len += sprintf(texture_list + texture_list_len, "%s%d", comma, command_list.texcontainer_index[j].container_index);
             }
             ImGui::Text("Textures: %s", texture_list);
         }
@@ -4372,6 +4503,82 @@ draw_indirect(
             0,
             sizeof(BoneDataList),
             command_list.bone_data_list.data);
+
+        if (state->crash_on_gl_errors) hglErrorAssert();
+
+        hglBindBufferBase(
+            GL_UNIFORM_BUFFER,
+            4,
+            command_state.texcontainer_sampler_mapping_buffer.ubo);
+
+        if (state->crash_on_gl_errors) hglErrorAssert();
+
+        hglBindBuffer(
+            GL_UNIFORM_BUFFER,
+            command_state.texcontainer_sampler_mapping_buffer.ubo);
+
+        if (state->crash_on_gl_errors) hglErrorAssert();
+
+        struct
+        {
+            TexContainerIndexItem texcontainer_index[8];
+            TexContainerSamplerMapping texcontainer_sampler_mapping[16];
+        } cb4_data;
+
+        memcpy(
+            cb4_data.texcontainer_sampler_mapping,
+            command_list.texcontainer_sampler_mapping,
+            sizeof(cb4_data.texcontainer_sampler_mapping)
+        );
+
+        memcpy(
+            cb4_data.texcontainer_index,
+            command_list.texcontainer_index,
+            sizeof(cb4_data.texcontainer_index)
+        );
+        /*
+        cb4_data.texcontainer_index[0].container_index = 1;
+        cb4_data.texcontainer_index[1].container_index = 2;
+        cb4_data.texcontainer_index[2].container_index = 3;
+        cb4_data.texcontainer_index[3].container_index = 4;
+        cb4_data.texcontainer_index[4].container_index = 5;
+        cb4_data.texcontainer_index[5].container_index = 6;
+        cb4_data.texcontainer_index[6].container_index = 7;
+        cb4_data.texcontainer_index[7].container_index = 8;
+        */
+
+        for (uint32_t j = 0; j < harray_count(command_state.textures); ++j)
+        {
+            hglActiveTexture(GL_TEXTURE0 + j);
+            hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[j]);
+        }
+
+        for (uint32_t j = 0; j < command_list.num_texcontainer_indices; ++j)
+        {
+            hglActiveTexture(GL_TEXTURE0 + j);
+            uint32_t container_index = command_list.texcontainer_index[j].container_index;
+            hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[container_index]);
+            ImGui::Text("texcontainer_index[%d] = %d", j, container_index);
+        }
+        hglActiveTexture(GL_TEXTURE0);
+
+        for (uint32_t j = 0; j < NUM_TEXARRAY_TEXTURES; ++j)
+        {
+            TexContainerSamplerMapping tcsm = command_list.texcontainer_sampler_mapping[j];
+            if (tcsm.generation == command_list.generation)
+            {
+                ImGui::Text("texcontainer_sampler_mapping[%d] = %d", j, tcsm.texcontainer_index);
+            }
+        }
+        if (state->crash_on_gl_errors) hglErrorAssert();
+
+        hglBufferSubData(
+            GL_UNIFORM_BUFFER,
+            0,
+            sizeof(cb4_data),
+            (void *)&cb4_data);
+
+        if (state->crash_on_gl_errors) hglErrorAssert();
 
         hglBindBuffer(GL_UNIFORM_BUFFER, 0);
 
@@ -4423,6 +4630,7 @@ draw_indirect(
             }
         }
 
+        ++command_list.generation;
         command_list.num_commands = 0;
         command_list.num_texcontainer_indices = 0;
         command_list.num_bones = 0;
@@ -4855,7 +5063,15 @@ extern "C" RENDERER_RENDER(renderer_render)
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
                     ++meshes_drawn[item->mesh_asset_descriptor_id];
-                    draw_mesh_from_asset(state, matrices, asset_descriptors, lights.descriptors, armatures.descriptors, materials.materials, item);
+                    draw_mesh_from_asset(
+                        state,
+                        &render_list->config,
+                        matrices,
+                        asset_descriptors,
+                        lights.descriptors,
+                        armatures.descriptors,
+                        materials.materials,
+                        item);
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::apply_filter:
