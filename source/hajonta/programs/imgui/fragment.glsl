@@ -29,7 +29,10 @@ void main()
     {
         Tex2DAddress addr = texAddress[u_texaddress_index];
         vec3 texCoord = vec3(v_uv.st, addr.Page);
-        vec4 diffuse_color = texture(TexContainer[addr.Container], texCoord);
+        // addr.Container is always 0, since there's only one
+        // texture per draw in imgui, and there's no need
+        // to maintain the whole container->sampler indirection
+        vec4 diffuse_color = texture(TexContainer[0], texCoord);
         o_color = v_color * diffuse_color;
     }
     if (o_color.a < 0.001)

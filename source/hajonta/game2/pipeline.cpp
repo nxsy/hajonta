@@ -122,7 +122,7 @@ CreatePipeline(game_state *state)
     pipeline_elements.fb_shadowmap = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_shadowmap = pipeline->framebuffers[pipeline_elements.fb_shadowmap];
     //fb_shadowmap.use_depth_texture = 1;
-    //fb_shadowmap.use_rg32f_buffer = 1;
+    fb_shadowmap.use_rg32f_buffer = 1;
     fb_shadowmap.size = {
         (int32_t)state->shadowmap_size,
         (int32_t)state->shadowmap_size
@@ -132,14 +132,14 @@ CreatePipeline(game_state *state)
 
     pipeline_elements.fb_sm_blur_x = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_x = pipeline->framebuffers[pipeline_elements.fb_sm_blur_x];
-    //fb_sm_blur_x.use_rg32f_buffer = 1;
+    fb_sm_blur_x.use_rg32f_buffer = 1;
     fb_sm_blur_x.size = v2div(fb_shadowmap.size, 2);
     fb_sm_blur_x.fixed_size = 1;
     fb_sm_blur_x.no_clear_each_frame = 1;
 
     pipeline_elements.fb_sm_blur_xy = RenderPipelineAddFramebuffer(pipeline);
     auto &fb_sm_blur_xy = pipeline->framebuffers[pipeline_elements.fb_sm_blur_xy];
-    //fb_sm_blur_xy.use_rg32f_buffer = 1;
+    fb_sm_blur_xy.use_rg32f_buffer = 1;
     fb_sm_blur_xy.size = v2div(fb_shadowmap.size, 2);
     fb_sm_blur_xy.fixed_size = 1;
     fb_sm_blur_xy.no_clear_each_frame = 1;

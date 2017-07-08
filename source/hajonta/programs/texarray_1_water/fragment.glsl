@@ -86,16 +86,9 @@ struct TexContainerSamplerMapping
     uint texcontainer_index;
 };
 
-struct TexContainerIndexItem
-{
-    uint container_index;
-    // 3 bytes wasted due to alignment!
-};
-
 layout(std140) uniform CB4
 {
-    TexContainerIndexItem texcontainer_index[8];
-    TexContainerSamplerMapping texcontainer_sampler_mapping[16];
+    TexContainerSamplerMapping texcontainer_sampler_mapping[32];
 };
 
 uniform sampler2DArray TexContainer[14];

@@ -2923,7 +2923,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         perlin.min_noise_height = FLT_MAX;
         perlin.max_noise_height = FLT_MIN;
         //auto &path = state->cowboy_path;
-        state->active_demo = 0;
+        state->active_demo = 1;
     }
 
     for (uint32_t i = 0;
@@ -3682,7 +3682,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
+
     PushQuad(&state->pipeline_elements.rl_framebuffer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids.mouse_cursor);
+    PushDebugTextureLoad(&state->pipeline_elements.rl_framebuffer.list, state->asset_ids.player);
+    PushDebugTextureLoad(&state->pipeline_elements.rl_framebuffer.list, state->asset_ids.familiar_ship);
+    PushDebugTextureLoad(&state->pipeline_elements.rl_framebuffer.list, state->asset_ids.another_ground_0);
 
     if (state->debug.show_textures) {
         ImGui::Begin("Textures", &state->debug.show_textures);

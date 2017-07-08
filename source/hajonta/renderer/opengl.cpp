@@ -168,7 +168,7 @@ TexContainerSamplerMapping
     uint32_t reserved[2];
 };
 
-#define NUM_TEXARRAY_TEXTURES 14
+#define NUM_TEXARRAY_TEXTURES 32
 #define NUM_CONTAINER_TEXARRAY_TEXTURES 8
 struct
 CommandList
@@ -2279,11 +2279,13 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 
     hglUniform1iv(state->imgui_texcontainer, harray_count(texcontainer_textures), texcontainer_textures);
     if (state->crash_on_gl_errors) hglErrorAssert();
+    /*
     for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
     {
         hglActiveTexture(GL_TEXTURE0 + texcontainer_textures[i]);
         hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
     }
+    */
 
     // Handle cases of screen coordinates != from framebuffer coordinates (e.g. retina displays)
     ImGuiIO& io = ImGui::GetIO();
@@ -2328,8 +2330,15 @@ void render_draw_lists(ImDrawData* draw_data, renderer_state *state)
 
         for (const ImDrawCmd* pcmd = cmd_list->CmdBuffer.begin(); pcmd != cmd_list->CmdBuffer.end(); pcmd++)
         {
-            uint32_t imgui_texid = (GLuint)(intptr_t)pcmd->TextureId;
+            int32_t imgui_texid = (int32_t)(intptr_t)pcmd->TextureId;
             hglUniform1i(state->imgui_program.u_texaddress_index_id, imgui_texid);
+            if (imgui_texid >= 0)
+            {
+                hglActiveTexture(GL_TEXTURE0);
+                TextureAddress texaddress = command_state.texture_addresses[imgui_texid];
+                uint32_t container_id = texaddress.container_index;
+                hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[container_id]);
+            }
             if (pcmd->UserCallback)
             {
                 pcmd->UserCallback(cmd_list, pcmd);
@@ -2959,11 +2968,17 @@ draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, r
 
     hglUniform1iv(state->imgui_texcontainer, harray_count(texcontainer_textures), texcontainer_textures);
     if (state->crash_on_gl_errors) hglErrorAssert();
+    /*
     for (uint32_t i = 0; i < harray_count(command_state.textures); ++i)
     {
         hglActiveTexture(GL_TEXTURE0 + texcontainer_textures[i]);
         hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[i]);
     }
+    */
+    hglActiveTexture(GL_TEXTURE0);
+    TextureAddress texaddress = command_state.texture_addresses[texture];
+    uint32_t container_id = texaddress.container_index;
+    hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[container_id]);
     if (state->crash_on_gl_errors) hglErrorAssert();
     hglActiveTexture(GL_TEXTURE0);
     if (state->crash_on_gl_errors) hglErrorAssert();
@@ -4521,7 +4536,6 @@ draw_indirect(
 
         struct
         {
-            TexContainerIndexItem texcontainer_index[8];
             TexContainerSamplerMapping texcontainer_sampler_mapping[16];
         } cb4_data;
 
@@ -4530,22 +4544,6 @@ draw_indirect(
             command_list.texcontainer_sampler_mapping,
             sizeof(cb4_data.texcontainer_sampler_mapping)
         );
-
-        memcpy(
-            cb4_data.texcontainer_index,
-            command_list.texcontainer_index,
-            sizeof(cb4_data.texcontainer_index)
-        );
-        /*
-        cb4_data.texcontainer_index[0].container_index = 1;
-        cb4_data.texcontainer_index[1].container_index = 2;
-        cb4_data.texcontainer_index[2].container_index = 3;
-        cb4_data.texcontainer_index[3].container_index = 4;
-        cb4_data.texcontainer_index[4].container_index = 5;
-        cb4_data.texcontainer_index[5].container_index = 6;
-        cb4_data.texcontainer_index[6].container_index = 7;
-        cb4_data.texcontainer_index[7].container_index = 8;
-        */
 
         for (uint32_t j = 0; j < harray_count(command_state.textures); ++j)
         {

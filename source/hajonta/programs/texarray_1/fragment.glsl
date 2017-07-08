@@ -96,16 +96,9 @@ struct TexContainerSamplerMapping
     uint texcontainer_index;
 };
 
-struct TexContainerIndexItem
-{
-    uint container_index;
-    // 3 bytes wasted due to alignment!
-};
-
 layout(std140) uniform CB4
 {
-    TexContainerIndexItem texcontainer_index[8];
-    TexContainerSamplerMapping texcontainer_sampler_mapping[16];
+    TexContainerSamplerMapping texcontainer_sampler_mapping[32];
 };
 
 uniform sampler2DArray TexContainer[14];
@@ -217,8 +210,7 @@ void main()
     {
         Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
         TexContainerSamplerMapping tcsm = texcontainer_sampler_mapping[addr.Container];
-        uint newContainer = texcontainer_index[tcsm.texcontainer_index].container_index;
-        //uint newContainer = tcsm.texcontainer_index;
+        uint newContainer = tcsm.texcontainer_index;
         o_color = vec4(
             (newContainer & 1) == 1 ? 0.25f : 0.0f +
             (newContainer & 8) == 8 ? 0.5f : 0.0f,
