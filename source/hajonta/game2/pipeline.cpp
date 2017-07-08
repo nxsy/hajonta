@@ -108,7 +108,7 @@ PipelineAddDependency(RenderPipeline *pipeline, uint32_t entry_depends, uint32_t
 }
 
 void
-CreatePipeline(game_state *state)
+CreatePipeline(demo_cowboy_state *state)
 {
     auto &pipeline_elements = state->pipeline_elements;
     auto pipeline = &state->render_pipeline;

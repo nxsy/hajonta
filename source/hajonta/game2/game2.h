@@ -24,7 +24,7 @@ struct demo_data {
     demo_func *func;
 };
 
-struct demo_b_state
+struct demo_imgui_state
 {
     bool show_window;
 };
@@ -394,106 +394,6 @@ terrain
     land,
 };
 
-enum struct
-FurnitureType
-{
-    none,
-    ship,
-    wall,
-    MAX = wall,
-};
-
-enum struct
-furniture_status
-{
-    normal,
-    constructing,
-    deconstructing,
-};
-
-struct
-Furniture
-{
-    FurnitureType type;
-    furniture_status status;
-};
-
-
-enum struct
-job_type
-{
-    build_furniture,
-};
-
-struct
-furniture_job_data
-{
-    v2i tile;
-    FurnitureType type;
-    float remaining_build_time;
-};
-
-struct
-job
-{
-    job_type type;
-    union {
-        furniture_job_data furniture_data;
-    };
-};
-
-
-struct
-map_data
-{
-    array2<MAP_WIDTH, MAP_HEIGHT, terrain> terrain_tiles;
-    int32_t texture_tiles[MAP_HEIGHT * MAP_WIDTH];
-    array2<MAP_WIDTH, MAP_HEIGHT, Furniture> furniture_tiles;
-    bool passable_x[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
-    bool passable_y[(MAP_HEIGHT + 1) * (MAP_WIDTH + 1)];
-};
-
-template<uint32_t TARGETS>
-struct
-_click_targets
-{
-    uint32_t target_count;
-    rectangle2 targets[TARGETS];
-};
-
-template<uint32_t TARGETS>
-void
-clear_click_targets(_click_targets<TARGETS> *targets)
-{
-    targets->target_count = 0;
-}
-
-template<uint32_t TARGETS>
-void
-add_click_target(_click_targets<TARGETS> *targets, rectangle2 r)
-{
-    assert(targets->target_count < TARGETS);
-    targets->targets[targets->target_count++] = r;
-}
-
-enum struct
-ToolType
-{
-    none,
-    furniture,
-    MAX = furniture,
-};
-
-struct
-SelectedTool
-{
-    ToolType type;
-    union
-    {
-        FurnitureType furniture_type;
-    };
-};
-
 enum struct matrix_ids
 {
     pixel_projection_matrix,
@@ -633,19 +533,10 @@ Pathfinding
 typedef array2<NOISE_WIDTH,NOISE_HEIGHT,float> noise_float_array;
 typedef array2<NOISE_WIDTH,NOISE_HEIGHT,v4b> noise_v4b_array;
 
-struct game_state
+struct
+demo_cowboy_state
 {
-    MemoryArena arena;
-    bool initialized;
-
-    MemoryBlock *demo_a_block;
-
     uint32_t shadowmap_size;
-
-    SelectedTool selected_tool;
-
-    _click_targets<10> click_targets;
-
     FrameState frame_state;
 
     v2i middle_base_location;
@@ -655,7 +546,6 @@ struct game_state
     GamePipelineElements pipeline_elements;
 
     m4 matrices[(uint32_t)matrix_ids::MAX + 1];
-
     m4 light_projection_matrix;
 
     LightDescriptor lights[(uint32_t)LightIds::MAX + 1];
@@ -665,38 +555,17 @@ struct game_state
     m4 bone_matrices[100];
     m4 bone_matrices2[100];
 
-    _asset_ids asset_ids;
-    AssetDescriptors<512> assets;
-
-    int32_t active_demo;
-
-    demo_b_state b;
-
-    uint32_t mouse_texture;
-
-    int32_t pixel_size;
-
-    map_data map;
+    debug_state *debug;
+    _asset_ids *asset_ids;
+    AssetDescriptors<512> *assets;
+    MemoryArena *arena;
 
     v2 camera_offset;
 
+    int32_t pixel_size;
     entity_movement player_movement;
     entity_movement familiar_movement;
     float acceleration_multiplier;
-
-    game_mode mode;
-
-    movement_history player_history;
-    movement_history familiar_history;
-    movement_history_playback history_playback;
-
-    uint32_t repeat_count;
-
-    debug_state debug;
-
-    uint32_t job_count;
-    job jobs[10];
-    int32_t furniture_to_asset[(uint32_t)FurnitureType::MAX + 1];
 
     CameraState camera;
     CameraState np_camera;
@@ -733,5 +602,32 @@ struct game_state
 
     Pathfinding dog_path;
     float dog_rotation;
+};
+
+struct game_state
+{
+    MemoryArena arena;
+    bool initialized;
+
+    MemoryBlock *demo_a_block;
+    MemoryBlock *demo_cowboy_block;
+
+    debug_state debug;
+
+    uint32_t shadowmap_size;
+
+    _asset_ids asset_ids;
+    AssetDescriptors<512> assets;
+
+    int32_t active_demo;
+
+    demo_imgui_state imgui;
+
+    uint32_t mouse_texture;
+
+    game_mode mode;
+
+    uint32_t repeat_count;
+
 };
 
