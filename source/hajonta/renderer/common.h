@@ -47,6 +47,7 @@ render_entry_type
     sky,
 
     debug_texture_load,
+    readpixel,
     mesh_from_asset,
 
     MAX = mesh_from_asset,
@@ -70,6 +71,21 @@ render_entry_type_debug_texture_load
 {
     render_entry_header header;
     int32_t asset_descriptor_id;
+};
+
+struct
+ReadPixelResult
+{
+    bool pixel_returned;
+    char pixel[4];
+};
+
+struct
+render_entry_type_readpixel
+{
+    render_entry_header header;
+    v2i pixel_location;
+    ReadPixelResult *result;
 };
 
 struct
@@ -815,6 +831,21 @@ PushDebugTextureLoad(
 }
 
 inline void
+PushReadPixel(
+    render_entry_list *list,
+    v2i pixel_location,
+    ReadPixelResult *result
+)
+{
+    render_entry_type_readpixel *entry = PushRenderElement(list, readpixel);
+    if (entry)
+    {
+        entry->pixel_location = pixel_location;
+        entry->result = result;
+    }
+}
+
+inline void
 PushMeshFromAsset(
     render_entry_list *list,
     int32_t projection_matrix_id,
@@ -917,4 +948,10 @@ RegisterRenderList(render_entry_list *list)
     _platform->render_lists[_platform->render_lists_count] = list;
     list->slot = (int32_t)(_platform->render_lists_count++);
     return list->slot;
+}
+
+inline void
+ClearRenderLists()
+{
+    _platform->render_lists_count = 0;
 }

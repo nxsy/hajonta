@@ -1871,7 +1871,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
     }
 #endif
     */
-    _platform->render_lists_count = 0;
+    //_platform->render_lists_count = 0;
     renderer_state *state = (renderer_state *)memory->renderer_block->base;
     _state = state;
 
@@ -1938,24 +1938,6 @@ extern "C" RENDERER_SETUP(renderer_setup)
         //state->flush_for_profiling = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
-        add_tilemap_asset(state, "sea_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 31);
-        add_tilemap_asset(state, "ground_0", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 21);
-        add_tilemap_asset(state, "sea_ground_br", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 13);
-        add_tilemap_asset(state, "sea_ground_bl", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 14);
-        add_tilemap_asset(state, "sea_ground_tr", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 33);
-        add_tilemap_asset(state, "sea_ground_tl", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 34);
-        add_tilemap_asset(state, "sea_ground_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 32);
-        add_tilemap_asset(state, "sea_ground_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 30);
-        add_tilemap_asset(state, "sea_ground_t", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 11);
-        add_tilemap_asset(state, "sea_ground_b", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 51);
-        add_tilemap_asset(state, "sea_ground_t_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 10);
-        add_tilemap_asset(state, "sea_ground_t_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 12);
-        add_tilemap_asset(state, "sea_ground_b_l", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 50);
-        add_tilemap_asset(state, "sea_ground_b_r", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 52);
-        add_tilemap_asset(state, "bottom_wall", "testing/kenney/RPGpack_sheet_2X.png", 2560, 1664, 128, 128, 0, 69);
-        add_asset(state, "player", "testing/kenney/alienPink_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_asset(state, "familiar_ship", "testing/kenney/shipBlue.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_asset(state, "familiar", "testing/kenney/alienBlue_stand.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "plane_mesh", "testing/plane.hjm");
         add_mesh_asset(state, "ground_plane_mesh", "testing/ground_plane.hjm");
         add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
@@ -4556,10 +4538,10 @@ draw_indirect(
             hglActiveTexture(GL_TEXTURE0 + j);
             uint32_t container_index = command_list.texcontainer_index[j].container_index;
             hglBindTexture(GL_TEXTURE_2D_ARRAY, command_state.textures[container_index]);
-            ImGui::Text("texcontainer_index[%d] = %d", j, container_index);
         }
         hglActiveTexture(GL_TEXTURE0);
 
+        /*
         for (uint32_t j = 0; j < NUM_TEXARRAY_TEXTURES; ++j)
         {
             TexContainerSamplerMapping tcsm = command_list.texcontainer_sampler_mapping[j];
@@ -4568,6 +4550,7 @@ draw_indirect(
                 ImGui::Text("texcontainer_sampler_mapping[%d] = %d", j, tcsm.texcontainer_index);
             }
         }
+        */
         if (state->crash_on_gl_errors) hglErrorAssert();
 
         hglBufferSubData(
@@ -4816,7 +4799,7 @@ framebuffer_setup(
         GLenum framebuffer_status = hglCheckFramebufferStatus(GL_FRAMEBUFFER);
         hassert(framebuffer_status == GL_FRAMEBUFFER_COMPLETE);
     }
-    hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer->_fbo);
+    hglBindFramebuffer(GL_FRAMEBUFFER, framebuffer->_fbo);
 
     *size = framebuffer_size;
     if (state->flush_for_profiling) hglFlush();
@@ -5100,6 +5083,19 @@ extern "C" RENDERER_RENDER(renderer_render)
                         state, asset_descriptors, item->asset_descriptor_id,
                         &texture, &st0, &st1);
                     if (state->crash_on_gl_errors) hglErrorAssert();
+                } break;
+                case render_entry_type::readpixel:
+                {
+                    ExtractRenderElementWithSize(readpixel, item, header, element_size);
+                    hglReadPixels(
+                        item->pixel_location.x,
+                        item->pixel_location.y,
+                        1,
+                        1,
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
+                        item->result->pixel);
+                    item->result->pixel_returned = true;
                 } break;
                 default:
                 {

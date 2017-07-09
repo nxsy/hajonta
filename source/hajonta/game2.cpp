@@ -1937,6 +1937,9 @@ demo_a_state
     RenderPipelineRendererId r_m;
     _render_list<2 * 1024 * 1024> rl_m;
 
+    RenderPipelineRendererId r_mouse;
+    _render_list<2 * 1024 * 1024> rl_mouse;
+
     RenderPipelineRendererId r_mousepicking;
     _render_list<2 * 1024 * 1024> rl_mousepicking;
 
@@ -1944,7 +1947,7 @@ demo_a_state
 
     bool show_camera;
     CameraState camera;
-    m4 matrices[2];
+    m4 matrices[3];
 
     bool show_lights;
     LightDescriptor lights[1];
@@ -1977,6 +1980,7 @@ demo_a_state
     int32_t mouse_cursor;
 
     Material materials[4];
+    ReadPixelResult readpixel_result;
 };
 
 DEMO(demo_a)
@@ -2002,6 +2006,20 @@ DEMO(demo_a)
             -1,
         };
         state->rl_m.list.name = DEBUG_NAME("m");
+
+        state->r_mouse = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *mouse = state->render_pipeline.entries + state->r_mouse;
+        *mouse = {
+            &state->rl_mouse.list,
+            state->rl_mouse.buffer,
+            sizeof(state->rl_mouse.buffer),
+            -1,
+            -1,
+        };
+        state->rl_mouse.list.name = DEBUG_NAME("mouse");
+
+        PipelineAddDependency(&state->render_pipeline, state->r_mouse, state->r_m);
+
         state->fb_mousepicking = RenderPipelineAddFramebuffer(&state->render_pipeline);
 
         state->r_mousepicking = RenderPipelineAddRenderer(&state->render_pipeline);
@@ -2016,7 +2034,8 @@ DEMO(demo_a)
         state->rl_mousepicking.list.name = DEBUG_NAME("mousepicking");
         state->rl_mousepicking.list.config.show_object_identifier = 1;
 
-        //RenderPipelineFramebuffer *fb_mousepicking = state->render_pipeline.frambuffers + state->fb_mousepicking;
+        RenderPipelineFramebuffer *fb_mousepicking = state->render_pipeline.framebuffers + state->fb_mousepicking;
+        fb_mousepicking->no_clear_each_frame = 1;
         PipelineInit(&state->render_pipeline, &state->assets);
         state->ground_plane = add_asset(&state->assets, "ground_plane_mesh");
         state->diffuse46 = add_asset(&state->assets, "pattern_46_diffuse");
@@ -2082,6 +2101,17 @@ DEMO(demo_a)
         float ratio = (float)input->window.width / (float)input->window.height;
         update_camera(&state->camera, ratio);
     }
+
+    ImGui::Begin("Debug");
+    static bool progress = true;
+    ImGui::Checkbox("Progress", &progress);
+    ImGui::End();
+
+    if (!progress)
+    {
+        return;
+    }
+    ClearRenderLists();
 
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
@@ -2182,6 +2212,7 @@ DEMO(demo_a)
     update_camera(&state->camera, ratio);
     state->matrices[0] = state->camera.projection;
     state->matrices[1] = state->camera.view;
+    state->matrices[2] = m4orthographicprojection(1.0f, -1.0f, {0.0f, 0.0f}, {(float)input->window.width, (float)input->window.height});
 
     float theta = state->sun_rotation.y;
     float phi = state->sun_rotation.x;
@@ -2300,6 +2331,22 @@ DEMO(demo_a)
 
     state->rl_m.list.config.camera_position = state->camera.location;
     PushClear(&state->rl_m.list, {0,0,0,1});
+
+    if (BUTTON_WENT_DOWN(input->mouse.buttons.left))
+    {
+        state->readpixel_result.pixel_returned = 0;
+        PushReadPixel(
+            &state->rl_mousepicking.list,
+            {
+                input->mouse.x,
+                input->window.height - input->mouse.y
+            },
+            &state->readpixel_result);
+    }
+    auto &pixel = state->readpixel_result.pixel;
+    int32_t object_id = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
+    ImGui::Text("Mouse picked object_id %d", object_id);
+    PushClear(&state->rl_mousepicking.list, {0,0,0,1});
 
     render_entry_list *lists[] =
     {
@@ -2462,7 +2509,13 @@ DEMO(demo_a)
 
     v3 mouse_bl = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y), 0.0f};
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
-    PushQuad(&state->rl_m.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->mouse_cursor);
+    PushQuad(
+        &state->rl_m.list,
+        mouse_bl,
+        mouse_size,
+        {1,1,1,1},
+        2,
+        state->mouse_cursor);
 
     auto &rfb = state->render_pipeline.framebuffers[state->fb_mousepicking];
     ImGui::Image(
@@ -3558,9 +3611,6 @@ DEMO(demo_cowboy)
     v3 mouse_size = {16.0f, -16.0f, 0.0f};
 
     PushQuad(&state->pipeline_elements.rl_framebuffer.list, mouse_bl, mouse_size, {1,1,1,1}, 0, state->asset_ids->mouse_cursor);
-    PushDebugTextureLoad(&state->pipeline_elements.rl_framebuffer.list, state->asset_ids->player);
-    PushDebugTextureLoad(&state->pipeline_elements.rl_framebuffer.list, state->asset_ids->familiar_ship);
-    PushDebugTextureLoad(&state->pipeline_elements.rl_framebuffer.list, state->asset_ids->another_ground_0);
 
     if (state->debug->show_textures) {
         ImGui::Begin("Textures", &state->debug->show_textures);
@@ -3624,24 +3674,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->initialized = 1;
         //initialize(memory, state);
         auto *asset_descriptors = &state->assets;
-        state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
-        state->asset_ids.sea_0 = add_asset(asset_descriptors, "sea_0");
-        state->asset_ids.ground_0 = add_asset(asset_descriptors, "ground_0");
-        state->asset_ids.sea_ground_br = add_asset(asset_descriptors, "sea_ground_br");
-        state->asset_ids.sea_ground_bl = add_asset(asset_descriptors, "sea_ground_bl");
-        state->asset_ids.sea_ground_tr = add_asset(asset_descriptors, "sea_ground_tr");
-        state->asset_ids.sea_ground_tl = add_asset(asset_descriptors, "sea_ground_tl");
-        state->asset_ids.sea_ground_r = add_asset(asset_descriptors, "sea_ground_r");
-        state->asset_ids.sea_ground_l = add_asset(asset_descriptors, "sea_ground_l");
-        state->asset_ids.sea_ground_t = add_asset(asset_descriptors, "sea_ground_t");
-        state->asset_ids.sea_ground_b = add_asset(asset_descriptors, "sea_ground_b");
-        state->asset_ids.sea_ground_t_l = add_asset(asset_descriptors, "sea_ground_t_l");
-        state->asset_ids.sea_ground_t_r = add_asset(asset_descriptors, "sea_ground_t_r");
-        state->asset_ids.sea_ground_b_l = add_asset(asset_descriptors, "sea_ground_b_l");
-        state->asset_ids.sea_ground_b_r = add_asset(asset_descriptors, "sea_ground_b_r");
-        state->asset_ids.bottom_wall = add_asset(asset_descriptors, "bottom_wall");
-        state->asset_ids.player = add_asset(asset_descriptors, "player");
-        state->asset_ids.familiar_ship = add_asset(asset_descriptors, "familiar_ship");
+        //state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
         state->asset_ids.plane_mesh = add_asset(asset_descriptors, "plane_mesh");
         state->asset_ids.ground_plane_mesh = add_asset(asset_descriptors, "ground_plane_mesh");
         state->asset_ids.tree_mesh = add_asset(asset_descriptors, "tree_mesh");

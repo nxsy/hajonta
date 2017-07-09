@@ -193,6 +193,23 @@ calculate_normal(DrawData dd)
 void main()
 {
     DrawData dd = draw_data[v_draw_id];
+    if ((shader_config.flags & show_object_identifier_flag) == show_object_identifier_flag)
+    {
+    /*
+        o_color = vec4(
+            (dd.object_identifier & 1) == 1 ? 1.0f : 0.0f,
+            (dd.object_identifier & 2) == 2 ? 1.0f : 0.0f,
+            (dd.object_identifier & 4) == 4 ? 1.0f : 0.0f,
+            1.0f
+        );
+        */
+        o_color = vec4(
+            (dd.object_identifier & 0x0000ff) / 255.0f,
+            ((dd.object_identifier & 0x00ff00) >> 8) / 255.0f,
+            ((dd.object_identifier & 0xff0000) >> 16) / 255.0f,
+            1.0f
+        );
+    } else
     if ((shader_config.flags & show_texcontainer_index_flag) == show_texcontainer_index_flag)
     {
         Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
@@ -309,15 +326,6 @@ void main()
         if ((shader_config.flags & show_specular_flag) == show_specular_flag)
         {
             o_color = vec4(vec3(specular), 1.0f);
-        }
-        if ((shader_config.flags & show_object_identifier_flag) == show_object_identifier_flag)
-        {
-            o_color = vec4(
-                (dd.object_identifier & 1) == 1 ? 1.0f : 0.0f,
-                (dd.object_identifier & 2) == 2 ? 1.0f : 0.0f,
-                (dd.object_identifier & 4) == 4 ? 1.0f : 0.0f,
-                1.0f
-            );
         }
     }
     else
