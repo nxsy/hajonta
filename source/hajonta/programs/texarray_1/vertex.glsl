@@ -38,6 +38,7 @@ ShaderConfig
 {
     Plane clipping_plane;
     int flags;
+    vec4 color;
 };
 
 layout(std140) uniform SHADERCONFIG

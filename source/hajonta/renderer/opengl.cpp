@@ -21,6 +21,7 @@
 
 #include "hajonta/programs/imgui.h"
 #include "hajonta/programs/filters/filter_gaussian_7x1.h"
+#include "hajonta/programs/filters/filter_sobel.h"
 #include "hajonta/programs/sky.h"
 #include "hajonta/programs/texarray_1.h"
 #include "hajonta/programs/texarray_1_vsm.h"
@@ -480,7 +481,7 @@ TexArray1ShaderConfigFlags
     unsigned int show_tangent:1;
     unsigned int show_object_identifier:1;
     unsigned int show_texcontainer_index:1;
-    unsigned int show_newtexcontainer_index:1;
+    unsigned int use_color:1;
 };
 
 struct
@@ -488,6 +489,7 @@ TexArray1ShaderConfig
 {
     Plane clipping_plane;
     TexArray1ShaderConfigFlags flags;
+    v4 color;
 };
 
 struct
@@ -529,12 +531,20 @@ TexArray1WaterShaderConfig
     float far_;
 };
 
+struct
+FilterSobelShaderConfig
+{
+    int texaddress_index;
+    v2 texture_scale;
+};
+
 union
 ShaderConfig
 {
     TexArray1ShaderConfig texarray_1_shaderconfig;
     TexArray1WaterShaderConfig texarray_1_water_shaderconfig;
     SkyShaderConfig sky_shaderconfig;
+    FilterSobelShaderConfig filter_sobel_shaderconfig;
 };
 
 struct
@@ -655,6 +665,11 @@ struct renderer_state
     filter_gaussian_7x1_program_struct filter_gaussian_7x1_program;
     uint32_t filter_gaussian_7x1_cb0;
     int32_t filter_gaussian_7x1_texcontainer;
+
+    filter_sobel_program_struct filter_sobel_program;
+    uint32_t filter_sobel_cb0;
+    uint32_t filter_sobel_shaderconfig;
+    int32_t filter_sobel_texcontainer;
 
     sky_program_struct sky_program;
     uint32_t sky_shaderconfig;
@@ -1585,6 +1600,22 @@ program_init(renderer_state *state)
             state->filter_gaussian_7x1_cb0,
             0);
         state->filter_gaussian_7x1_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
+    }
+
+    {
+        filter_sobel_program_struct *program = &state->filter_sobel_program;
+        loaded &= filter_sobel_program(program);
+        state->filter_sobel_cb0 = hglGetUniformBlockIndex(program->program, "CB0");
+        hglUniformBlockBinding(
+            program->program,
+            state->filter_sobel_cb0,
+            0);
+        state->filter_sobel_shaderconfig = hglGetUniformBlockIndex(program->program, "SHADERCONFIG");
+        hglUniformBlockBinding(
+            program->program,
+            state->filter_sobel_shaderconfig,
+            9);
+        state->filter_sobel_texcontainer = hglGetUniformLocation(program->program, "TexContainer");
     }
 
     {
@@ -2842,7 +2873,7 @@ get_mesh_from_asset_descriptor(
 void
 draw_quads(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_QUADS *quads)
 {
-    hglDisable(GL_BLEND);
+    //hglDisable(GL_BLEND);
     if (state->crash_on_gl_errors) hglErrorAssert();
     m4 projection = matrices[quads->matrix_id];
 
@@ -3772,11 +3803,17 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
 
     int32_t texcontainer = -1;
 
+    void *shaderconfig = {};
+    uint32_t shaderconfig_size = 0;
+
+    FilterSobelShaderConfig fssc;
+
     hglBindVertexArray(state->vao);
     switch (filter->type)
     {
         case ApplyFilterType::none:
         {
+            ImGui::Text("Filter::none");
             auto &program = state->filter_gaussian_7x1_program;
             texcontainer = state->filter_gaussian_7x1_texcontainer;
             hglUseProgram(program.program);
@@ -3788,6 +3825,7 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
         case ApplyFilterType::gaussian_7x1_x:
         case ApplyFilterType::gaussian_7x1_y:
         {
+            ImGui::Text("Filter::gaussian");
             auto &program = state->filter_gaussian_7x1_program;
             texcontainer = state->filter_gaussian_7x1_texcontainer;
             hglUseProgram(program.program);
@@ -3796,13 +3834,34 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
             hglUniformMatrix4fv(program.u_model_matrix_id, 1, GL_FALSE, (float *)&state->m4identity);
             a_position_id = program.a_position_id;
             a_texcoord_id = program.a_texcoord_id;
-            v2 blur_scale = { 1.0f / state->blur_scale_divisor, 0 };
+            float blur_scale_divisor = filter->args.gaussian.blur_scale_divisor;
+            if (!blur_scale_divisor)
+            {
+                blur_scale_divisor = state->blur_scale_divisor;
+            }
+            v2 blur_scale = { 1.0f / blur_scale_divisor, 0 };
             if (filter->type == ApplyFilterType::gaussian_7x1_y)
             {
-                blur_scale = { 0, 1.0f / state->blur_scale_divisor };
+                blur_scale = { 0, 1.0f / blur_scale_divisor };
             }
             hglUniform2fv(program.u_blur_scale_id, 1, (float *)&blur_scale);
             hglUniform1i(program.u_texaddress_index_id, texture);
+        } break;
+        case ApplyFilterType::sobel:
+        {
+            ImGui::Text("Sobel");
+            auto &program = state->filter_sobel_program;
+            fssc.texaddress_index = texture;
+            texcontainer = state->filter_sobel_texcontainer;
+            hglUseProgram(program.program);
+            shaderconfig = &fssc;
+            shaderconfig_size = sizeof(fssc);
+            a_position_id = program.a_position_id;
+            a_texcoord_id = program.a_texcoord_id;
+            fssc.texture_scale = {
+                1.0f / 960.f,
+                1.0f / 540.f,
+            };
         } break;
     }
 
@@ -3849,6 +3908,19 @@ apply_filter(renderer_state *state, asset_descriptor *descriptors, render_entry_
         0,
         command_state.texture_address_buffers[0].uniform_buffer.ubo);
 
+    if (shaderconfig)
+    {
+        hglBindBufferBase(
+            GL_UNIFORM_BUFFER,
+            9,
+            command_state.shaderconfig_buffer.ubo);
+        hglBindBuffer(GL_UNIFORM_BUFFER, command_state.shaderconfig_buffer.ubo);
+        hglBufferSubData(
+            GL_UNIFORM_BUFFER,
+            0,
+            shaderconfig_size,
+            shaderconfig);
+    }
     static int32_t texcontainer_textures[harray_count(command_state.textures)] =
     {
         0,
@@ -4156,7 +4228,9 @@ draw_indirect(
             shaderconfig.texarray_1_shaderconfig.flags.show_specularmap = list->config.show_specularmap;
             shaderconfig.texarray_1_shaderconfig.flags.show_object_identifier = list->config.show_object_identifier;
             shaderconfig.texarray_1_shaderconfig.flags.show_texcontainer_index = list->config.show_texcontainer_index;
-            shaderconfig.texarray_1_shaderconfig.flags.show_newtexcontainer_index = list->config.show_newtexcontainer_index;
+
+            shaderconfig.texarray_1_shaderconfig.flags.use_color = list->config.use_color;
+            shaderconfig.texarray_1_shaderconfig.color = list->config.color;
         } break;
         case ShaderType::variance_shadow_map:
         {

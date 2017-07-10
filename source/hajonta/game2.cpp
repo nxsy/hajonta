@@ -1945,6 +1945,26 @@ demo_a_state
 
     RenderPipelineFramebufferId fb_mousepicking;
 
+    RenderPipelineRendererId r_outline;
+    _render_list<2 * 1024 * 1024> rl_outline;
+
+    RenderPipelineRendererId r_outline_blur_x;
+    _render_list<2 * 1024 * 1024> rl_outline_blur_x;
+
+    RenderPipelineRendererId r_outline_blur_y;
+    _render_list<2 * 1024 * 1024> rl_outline_blur_y;
+
+    RenderPipelineRendererId r_outline_sobel;
+    _render_list<2 * 1024 * 1024> rl_outline_sobel;
+
+    RenderPipelineRendererId r_outline_draw;
+    _render_list<2 * 1024 * 1024> rl_outline_draw;
+
+    RenderPipelineFramebufferId fb_outline;
+    RenderPipelineFramebufferId fb_outline_blur_x;
+    RenderPipelineFramebufferId fb_outline_blur_y;
+    RenderPipelineFramebufferId fb_outline_sobel;
+
     bool show_camera;
     CameraState camera;
     m4 matrices[3];
@@ -2007,6 +2027,94 @@ DEMO(demo_a)
         };
         state->rl_m.list.name = DEBUG_NAME("m");
 
+        state->fb_outline = RenderPipelineAddFramebuffer(&state->render_pipeline);
+        state->fb_outline_blur_x = RenderPipelineAddFramebuffer(&state->render_pipeline);
+        state->fb_outline_blur_y = RenderPipelineAddFramebuffer(&state->render_pipeline);
+        state->fb_outline_sobel = RenderPipelineAddFramebuffer(&state->render_pipeline);
+        auto *fb_outline = state->render_pipeline.framebuffers + state->fb_outline;
+        fb_outline->half_size = 1;
+        auto *fb_outline_blur_x = state->render_pipeline.framebuffers + state->fb_outline_blur_x;
+        fb_outline_blur_x->half_size = 1;
+        auto *fb_outline_blur_y = state->render_pipeline.framebuffers + state->fb_outline_blur_y;
+        fb_outline_blur_y->half_size = 1;
+        auto *fb_outline_sobel = state->render_pipeline.framebuffers + state->fb_outline_sobel;
+        fb_outline_sobel->half_size = 1;
+        fb_outline_sobel->clear_color = { 1, 1, 1, 0 };
+
+        state->r_outline = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *outline = state->render_pipeline.entries + state->r_outline;
+        *outline = {
+            &state->rl_outline.list,
+            state->rl_outline.buffer,
+            sizeof(state->rl_outline.buffer),
+            state->fb_outline,
+            -1,
+        };
+        state->rl_outline.list.name = DEBUG_NAME("outline");
+        state->rl_outline.list.config.use_color = 1;
+        state->rl_outline.list.config.color = {1.0f, 0.2f, 0.2f, 1.0f};
+
+        ApplyFilterArgs args = {};
+
+        state->r_outline_sobel = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *outline_sobel = state->render_pipeline.entries + state->r_outline_sobel;
+        args = {};
+        *outline_sobel = {
+            &state->rl_outline_sobel.list,
+            state->rl_outline_sobel.buffer,
+            sizeof(state->rl_outline_sobel.buffer),
+            state->fb_outline_sobel,
+            state->fb_outline,
+            ApplyFilterType::sobel,
+            args,
+        };
+        state->rl_outline_sobel.list.name = DEBUG_NAME("outline_sobel");
+        PipelineAddDependency(&state->render_pipeline, state->r_outline_sobel, state->r_outline);
+
+
+        state->r_outline_blur_x = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *outline_blur_x = state->render_pipeline.entries + state->r_outline_blur_x;
+        args = {};
+        args.gaussian.blur_scale_divisor = input->window.width / 0.25f;
+        *outline_blur_x = {
+            &state->rl_outline_blur_x.list,
+            state->rl_outline_blur_x.buffer,
+            sizeof(state->rl_outline_blur_x.buffer),
+            state->fb_outline_blur_x,
+            state->fb_outline_sobel,
+            ApplyFilterType::gaussian_7x1_x,
+            args,
+        };
+        state->rl_outline_blur_x.list.name = DEBUG_NAME("outline_blur_x");
+        PipelineAddDependency(&state->render_pipeline, state->r_outline_blur_x, state->r_outline_sobel);
+
+        args.gaussian.blur_scale_divisor = input->window.height / 0.25f;
+        state->r_outline_blur_y = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *outline_blur_y = state->render_pipeline.entries + state->r_outline_blur_y;
+        *outline_blur_y = {
+            &state->rl_outline_blur_y.list,
+            state->rl_outline_blur_y.buffer,
+            sizeof(state->rl_outline_blur_y.buffer),
+            state->fb_outline_blur_y,
+            state->fb_outline_blur_x,
+            ApplyFilterType::gaussian_7x1_y,
+            args,
+        };
+        state->rl_outline_blur_y.list.name = DEBUG_NAME("outline_blur_y");
+        PipelineAddDependency(&state->render_pipeline, state->r_outline_blur_y, state->r_outline_blur_x);
+
+
+        state->r_outline_draw = RenderPipelineAddRenderer(&state->render_pipeline);
+        RenderPipelineEntry *outline_draw = state->render_pipeline.entries + state->r_outline_draw;
+        *outline_draw = {
+            &state->rl_outline_draw.list,
+            state->rl_outline_draw.buffer,
+            sizeof(state->rl_outline_draw.buffer),
+            -1,
+            -1,
+        };
+        state->rl_outline_draw.list.name = DEBUG_NAME("outline_draw");
+        PipelineAddDependency(&state->render_pipeline, state->r_outline_draw, state->r_outline_blur_y);
         state->r_mouse = RenderPipelineAddRenderer(&state->render_pipeline);
         RenderPipelineEntry *mouse = state->render_pipeline.entries + state->r_mouse;
         *mouse = {
@@ -2017,7 +2125,6 @@ DEMO(demo_a)
             -1,
         };
         state->rl_mouse.list.name = DEBUG_NAME("mouse");
-
         PipelineAddDependency(&state->render_pipeline, state->r_mouse, state->r_m);
 
         state->fb_mousepicking = RenderPipelineAddFramebuffer(&state->render_pipeline);
@@ -2323,12 +2430,6 @@ DEMO(demo_a)
         state->rl_m.list.config.show_texcontainer_index = (uint32_t)foo;
     }
 
-    {
-        bool foo = state->rl_m.list.config.show_newtexcontainer_index;
-        ImGui::Checkbox("Show new texcontainer_index", &foo);
-        state->rl_m.list.config.show_newtexcontainer_index = (uint32_t)foo;
-    }
-
     state->rl_m.list.config.camera_position = state->camera.location;
     PushClear(&state->rl_m.list, {0,0,0,1});
 
@@ -2344,9 +2445,10 @@ DEMO(demo_a)
             &state->readpixel_result);
     }
     auto &pixel = state->readpixel_result.pixel;
-    int32_t object_id = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
-    ImGui::Text("Mouse picked object_id %d", object_id);
+    int32_t selected_object_id = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
+    ImGui::Text("Mouse picked object_id %d", selected_object_id);
     PushClear(&state->rl_mousepicking.list, {0,0,0,1});
+    PushClear(&state->rl_outline.list, {0,0,0,0});
 
     render_entry_list *lists[] =
     {
@@ -2355,139 +2457,101 @@ DEMO(demo_a)
         0,
     };
 
-    for (render_entry_list **li = lists; *li; ++li)
+    struct
     {
-        render_entry_list *l = *li;
+        m4 model_matrix;
+        uint32_t depth_disabled;
+        int32_t model_id;
+        int32_t material;
+        int32_t object_id;
+    } objects[] =
+    {
         {
-            m4 model = m4scale(5);
-            MeshFromAssetFlags flags = {};
-            flags.depth_disabled = 1;
-            flags.use_materials = 1;
+            m4scale(5),
+            1,
+            state->ground_plane,
+            0,
+            1,
+        },
+        {
+            m4scale(0.01f),
+            0,
+            state->barrel_mesh,
+            1,
+            2,
+        },
+        {
+            m4mul(m4translate({1,0,0}), m4scale(0.01f)),
+            0,
+            state->metal_barrel_mesh,
+            2,
+            3,
+        },
+        {
+            m4mul(m4rotation({0,1,0}, h_pi), m4mul(m4translate({0,0,5}), m4scale(0.01f))),
+            0,
+            state->modular_building_brick_door_mesh,
+            3,
+            4,
+        },
+        {
+            m4mul(m4rotation({0,1,0}, h_pi), m4mul(m4translate({2.5,0,5}), m4scale(0.01f))),
+            0,
+            state->modular_building_brick_wall_mesh,
+            3,
+            5,
+        },
+        {
+            m4mul(m4rotation({0,1,0}, h_pi), m4mul(m4translate({-2.5,0,5}), m4scale(0.01f))),
+            0,
+            state->modular_building_brick_small_window_mesh,
+            3,
+            6,
+        },
+    };
+
+    for (uint32_t object_index = 0; object_index < harray_count(objects); ++object_index)
+    {
+        auto &object = objects[object_index];
+        MeshFromAssetFlags flags = {};
+        flags.depth_disabled = object.depth_disabled;
+        flags.use_materials = 1;
+        for (render_entry_list **li = lists; *li; ++li)
+        {
+            render_entry_list *l = *li;
             PushMeshFromAsset(
                 l,
                 0, // projection matrix - matrices[0]
                 1, // view materix - matrices[1]
-                model,
-                state->ground_plane,
-                0, // material 0
+                object.model_matrix,
+                object.model_id,
+                object.material, // material 0
                 0, // light 0
                 -1, // no armature
                 flags,
                 ShaderType::standard,
-                1 // object_id
+                object.object_id // object_id
             );
         }
-
+        if (object.object_id == selected_object_id)
         {
-            m4 model = m4scale(0.01f);
-            MeshFromAssetFlags flags = {};
-            flags.use_materials = 1;
+            render_entry_list *l = &state->rl_outline.list;
             PushMeshFromAsset(
                 l,
                 0, // projection matrix - matrices[0]
-                1, // view matrix - matrices[1]
-                model,
-                state->barrel_mesh,
-                1, // material 0
+                1, // view materix - matrices[1]
+                object.model_matrix,
+                object.model_id,
+                object.material, // material 0
                 0, // light 0
                 -1, // no armature
                 flags,
                 ShaderType::standard,
-                2 // object_id
+                object.object_id // object_id
             );
         }
-
-        {
-            m4 model = m4mul(
-                m4translate({1,0,0}),
-                m4scale(0.01f));
-            MeshFromAssetFlags flags = {};
-            flags.use_materials = 1;
-            PushMeshFromAsset(
-                l,
-                0, // projection matrix - matrices[0]
-                1, // view matrix - matrices[1]
-                model,
-                state->metal_barrel_mesh,
-                2,
-                0, // light 0
-                -1, // no armature
-                flags,
-                ShaderType::standard,
-                3 // object_id
-            );
-        }
-
-        {
-            m4 model = m4mul(
-                m4rotation({0,1,0}, h_pi),
-                m4mul(
-                    m4translate({0,0,5}),
-                    m4scale(0.01f)));
-            MeshFromAssetFlags flags = {};
-            flags.use_materials = 1;
-            PushMeshFromAsset(
-                l,
-                0, // projection matrix - matrices[0]
-                1, // view matrix - matrices[1]
-                model,
-                state->modular_building_brick_door_mesh,
-                3,
-                0, // light 0
-                -1, // no armature
-                flags,
-                ShaderType::standard,
-                4
-            );
-        }
-
-        {
-            m4 model = m4mul(
-                m4rotation({0,1,0}, h_pi),
-                m4mul(
-                    m4translate({2.5,0,5}),
-                    m4scale(0.01f)));
-            MeshFromAssetFlags flags = {};
-            flags.use_materials = 1;
-            PushMeshFromAsset(
-                l,
-                0, // projection matrix - matrices[0]
-                1, // view matrix - matrices[1]
-                model,
-                state->modular_building_brick_wall_mesh,
-                3,
-                0, // light 0
-                -1, // no armature
-                flags,
-                ShaderType::standard,
-                5
-            );
-        }
-
-        {
-            m4 model = m4mul(
-                m4rotation({0,1,0}, h_pi),
-                m4mul(
-                    m4translate({-2.5,0,5}),
-                    m4scale(0.01f)));
-            MeshFromAssetFlags flags = {};
-            flags.use_materials = 1;
-            PushMeshFromAsset(
-                l,
-                0, // projection matrix - matrices[0]
-                1, // view matrix - matrices[1]
-                model,
-                state->modular_building_brick_small_window_mesh,
-                3,
-                0, // light 0
-                -1, // no armature
-                flags,
-                ShaderType::standard,
-                6
-            );
-        }
-
     }
+
 
     {
         PushSky(&state->rl_m.list,
@@ -2517,12 +2581,62 @@ DEMO(demo_a)
         2,
         state->mouse_cursor);
 
-    auto &rfb = state->render_pipeline.framebuffers[state->fb_mousepicking];
-    ImGui::Image(
-        (void *)(intptr_t)rfb.framebuffer._texture,
-        {256, 256.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
-        {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
-    );
+    {
+        auto &rfb = state->render_pipeline.framebuffers[state->fb_mousepicking];
+        ImGui::Image(
+            (void *)(intptr_t)rfb.framebuffer._texture,
+            {512, 512.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+    }
+
+    {
+        auto &rfb = state->render_pipeline.framebuffers[state->fb_outline];
+        ImGui::Image(
+            (void *)(intptr_t)rfb.framebuffer._texture,
+            {1024, 1024.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+    }
+
+    {
+        auto &rfb = state->render_pipeline.framebuffers[state->fb_outline_sobel];
+        ImGui::Image(
+            (void *)(intptr_t)rfb.framebuffer._texture,
+            {1024, 1024.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+    }
+
+    {
+        auto &rfb = state->render_pipeline.framebuffers[state->fb_outline_blur_x];
+        ImGui::Image(
+            (void *)(intptr_t)rfb.framebuffer._texture,
+            {1024, 1024.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+    }
+
+    {
+        auto &rfb = state->render_pipeline.framebuffers[state->fb_outline_blur_y];
+        ImGui::Image(
+            (void *)(intptr_t)rfb.framebuffer._texture,
+            {1024, 1024.0f * (float)rfb.framebuffer.size.y / (float)rfb.framebuffer.size.x},
+            {0,1}, {1,0}, {1,1,1,1}, {0.5f, 0.5f, 0.5f, 0.5f}
+        );
+    }
+
+    {
+        auto *fb_outline_blur_y = state->render_pipeline.framebuffers + state->fb_outline_blur_y;
+        PushQuad(
+            &state->rl_outline_draw.list,
+            {0,0},
+            {(float)input->window.width, (float)input->window.height},
+            {1,1,1,1},
+            2,
+            fb_outline_blur_y->asset_descriptor
+        );
+    }
 }
 
 void

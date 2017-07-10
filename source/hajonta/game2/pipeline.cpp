@@ -68,7 +68,12 @@ PipelineReset(RenderPipeline *pipeline, PipelineResetData *data)
         {
             auto source_framebuffer = pipeline->framebuffers[entry->source_framebuffer_id];
             if (entry->filter_type != ApplyFilterType::none) {
-                PushApplyFilter(entry->list, entry->filter_type, source_framebuffer.asset_descriptor);
+                PushApplyFilter(
+                    entry->list,
+                    entry->filter_type,
+                    source_framebuffer.asset_descriptor,
+                    entry->filter_args
+                    );
             }
             else
             {

@@ -11,8 +11,7 @@ RenderPipelineEntry
     int32_t source_framebuffer_id;
 
     ApplyFilterType filter_type;
-
-    v4 clear_color;
+    ApplyFilterArgs filter_args;
 };
 
 struct

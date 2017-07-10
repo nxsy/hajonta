@@ -24,13 +24,14 @@ const int show_specularmap_flag = 1 << 5;
 const int show_tangent_flag = 1 << 6;
 const int show_object_identifier_flag = 1 << 7;
 const int show_texcontainer_index_flag = 1 << 8;
-const int show_newtexcontainer_index_flag = 1 << 9;
+const int use_color_flag = 1 << 9;
 
 struct
 ShaderConfig
 {
     Plane clipping_plane;
     int flags;
+    vec4 color;
 };
 
 layout(std140) uniform SHADERCONFIG
@@ -223,25 +224,14 @@ void main()
             1.0f
         );
     } else
-    if ((shader_config.flags & show_newtexcontainer_index_flag) == show_newtexcontainer_index_flag)
+    if ((shader_config.flags & use_color_flag) == use_color_flag)
     {
-        Tex2DAddress addr = texAddress[dd.texture_texaddress_index];
-        TexContainerSamplerMapping tcsm = texcontainer_sampler_mapping[addr.Container];
-        uint newContainer = tcsm.texcontainer_index;
-        o_color = vec4(
-            (newContainer & 1) == 1 ? 0.25f : 0.0f +
-            (newContainer & 8) == 8 ? 0.5f : 0.0f,
-            (newContainer & 2) == 2 ? 0.25f : 0.0f +
-            (newContainer & 16) == 16 ? 0.5f : 0.0f,
-            (newContainer & 4) == 4 ? 0.25f : 0.0f +
-            (newContainer & 32) == 32 ? 0.5f : 0.0f,
-            1.0f
-        );
-        if (skip)
+        vec4 diffuse_color = texcontainer_fetch(dd.texture_texaddress_index, v_texcoord.xy);
+        if (diffuse_color.a < 0.001)
         {
-            o_color = vec4(0.25, 0.5, 0.75, 1.0);
-            o_color = texcontainer_fetch(dd.texture_texaddress_index, v_texcoord.xy);
+            discard;
         }
+        o_color = vec4(shader_config.color.r, shader_config.color.g, shader_config.color.b, 1);
     } else
     if (dd.texture_texaddress_index >= 0)
     {

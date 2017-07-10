@@ -9,6 +9,7 @@ cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\program.cpp /link /incremental:no 
 .\program.exe ..\source hajonta\programs texarray_1_vsm
 .\program.exe ..\source hajonta\programs texarray_1_water
 .\program.exe ..\source hajonta\programs\filters filter_gaussian_7x1
+.\program.exe ..\source hajonta\programs\filters filter_sobel
 cl %CPPFLAGS% /Zi ..\source\hajonta\bootstrap\unit.cpp /link /incremental:no User32.lib /SUBSYSTEM:CONSOLE
 .\unit.exe
 del *.pdb > NUL 2> NUL

@@ -387,8 +387,21 @@ ApplyFilterType
     none,
     gaussian_7x1_x,
     gaussian_7x1_y,
+    sobel,
 
-    MAX = gaussian_7x1_y,
+    MAX = sobel,
+};
+
+struct
+ApplyFilterArgs
+{
+    union
+    {
+        struct
+        {
+            float blur_scale_divisor;
+        } gaussian;
+    };
 };
 
 struct
@@ -397,6 +410,7 @@ render_entry_type_apply_filter
     render_entry_header header;
     ApplyFilterType type;
     int32_t source_asset_descriptor_id;
+    ApplyFilterArgs args;
 };
 
 struct FramebufferFlags
@@ -525,7 +539,7 @@ RenderEntryListConfig
         unsigned int show_tangent:1;
         unsigned int show_object_identifier:1;
         unsigned int show_texcontainer_index:1;
-        unsigned int show_newtexcontainer_index:1;
+        unsigned int use_color:1;
     };
 
     int32_t reflection_asset_descriptor;
@@ -544,6 +558,8 @@ RenderEntryListConfig
     float near_;
     float far_;
     Plane clipping_plane;
+
+    v4 color;
 };
 
 struct
@@ -903,13 +919,14 @@ PushMeshFromAsset(
 }
 
 inline void
-PushApplyFilter(render_entry_list *list, ApplyFilterType type, int32_t source_asset_descriptor_id)
+PushApplyFilter(render_entry_list *list, ApplyFilterType type, int32_t source_asset_descriptor_id, ApplyFilterArgs args)
 {
     render_entry_type_apply_filter *entry = PushRenderElement(list, apply_filter);
     if (entry)
     {
        entry->type = type;
        entry->source_asset_descriptor_id = source_asset_descriptor_id;
+       entry->args = args;
     }
 }
 
