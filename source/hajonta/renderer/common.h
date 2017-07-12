@@ -441,7 +441,7 @@ FramebufferDescriptor
 };
 
 enum struct
-asset_descriptor_type
+asset_descriptor_source_type
 {
     name,
     framebuffer,
@@ -470,7 +470,7 @@ DynamicTextureDescriptor
 struct
 asset_descriptor
 {
-    asset_descriptor_type type;
+    asset_descriptor_source_type source_type;
     union
     {
         const char *asset_name;
@@ -483,7 +483,10 @@ asset_descriptor
     int32_t load_state;
     union
     {
-        V3Bones *v3bones;
+        struct
+        {
+            V3Bones *v3bones;
+        };
     };
     union
     {

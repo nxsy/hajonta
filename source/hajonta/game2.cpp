@@ -48,12 +48,12 @@ DEMO(demo_imgui)
 
 template<uint32_t SIZE>
 int32_t
-add_asset(AssetDescriptors<SIZE> *asset_descriptors, const char *name, asset_descriptor_type type, bool debug)
+add_asset(AssetDescriptors<SIZE> *asset_descriptors, const char *name, asset_descriptor_source_type source_type, bool debug)
 {
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
     {
-        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::name;
+        asset_descriptors->descriptors[asset_descriptors->count].source_type = asset_descriptor_source_type::name;
         asset_descriptors->descriptors[asset_descriptors->count].asset_name = name;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
@@ -65,7 +65,7 @@ template<uint32_t SIZE>
 int32_t
 add_asset(AssetDescriptors<SIZE> *asset_descriptors, const char *name, bool debug = false)
 {
-    return add_asset(asset_descriptors, name, asset_descriptor_type::name, debug);
+    return add_asset(asset_descriptors, name, asset_descriptor_source_type::name, debug);
 }
 
 template<uint32_t SIZE>
@@ -76,7 +76,7 @@ add_dynamic_mesh_asset(AssetDescriptors<SIZE> *asset_descriptors, Mesh *ptr, boo
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
     {
         hassert(ptr->dynamic);
-        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::dynamic_mesh;
+        asset_descriptors->descriptors[asset_descriptors->count].source_type = asset_descriptor_source_type::dynamic_mesh;
         asset_descriptors->descriptors[asset_descriptors->count].ptr = ptr;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
@@ -91,7 +91,7 @@ add_dynamic_texture_asset(AssetDescriptors<SIZE> *asset_descriptors, DynamicText
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
     {
-        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::dynamic_texture;
+        asset_descriptors->descriptors[asset_descriptors->count].source_type = asset_descriptor_source_type::dynamic_texture;
         asset_descriptors->descriptors[asset_descriptors->count].dynamic_texture_descriptor = ptr;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
@@ -106,7 +106,7 @@ add_framebuffer_asset(AssetDescriptors<SIZE> *asset_descriptors, FramebufferDesc
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
     {
-        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::framebuffer;
+        asset_descriptors->descriptors[asset_descriptors->count].source_type = asset_descriptor_source_type::framebuffer;
         asset_descriptors->descriptors[asset_descriptors->count].framebuffer = framebuffer;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;
@@ -121,7 +121,7 @@ add_framebuffer_depth_asset(AssetDescriptors<SIZE> *asset_descriptors, Framebuff
     int32_t result = -1;
     if (asset_descriptors->count < harray_count(asset_descriptors->descriptors))
     {
-        asset_descriptors->descriptors[asset_descriptors->count].type = asset_descriptor_type::framebuffer_depth;
+        asset_descriptors->descriptors[asset_descriptors->count].source_type = asset_descriptor_source_type::framebuffer_depth;
         asset_descriptors->descriptors[asset_descriptors->count].framebuffer = framebuffer;
         result = (int32_t)asset_descriptors->count;
         ++asset_descriptors->count;

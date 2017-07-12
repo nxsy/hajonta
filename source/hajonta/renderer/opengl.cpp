@@ -2576,9 +2576,9 @@ get_texaddress_index_from_asset_descriptor(
     if (asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
-        switch (descriptor->type)
+        switch (descriptor->source_type)
         {
-            case asset_descriptor_type::name:
+            case asset_descriptor_source_type::name:
             {
                 update_asset_descriptor_asset_id(state, descriptor);
                 if (descriptor->asset_id >= 0)
@@ -2598,25 +2598,25 @@ get_texaddress_index_from_asset_descriptor(
                     }
                 }
             } break;
-            case asset_descriptor_type::framebuffer:
+            case asset_descriptor_source_type::framebuffer:
             {
                 if (FramebufferInitialized(descriptor->framebuffer))
                 {
                     *texaddress_index = (int32_t)descriptor->framebuffer->_texture;
                 }
             } break;
-            case asset_descriptor_type::framebuffer_depth:
+            case asset_descriptor_source_type::framebuffer_depth:
             {
                 if (FramebufferInitialized(descriptor->framebuffer))
                 {
                     *texaddress_index = (int32_t)descriptor->framebuffer->_renderbuffer;
                 }
             } break;
-            case asset_descriptor_type::dynamic_mesh:
+            case asset_descriptor_source_type::dynamic_mesh:
             {
                 hassert(!"Not a texture asset type");
             } break;
-            case asset_descriptor_type::dynamic_texture:
+            case asset_descriptor_source_type::dynamic_texture:
             {
                 auto &command_state = *state->command_state;
                 DynamicTextureDescriptor *d = descriptor->dynamic_texture_descriptor;
@@ -2677,9 +2677,9 @@ get_texture_id_from_asset_descriptor(
     if (asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
-        switch (descriptor->type)
+        switch (descriptor->source_type)
         {
-            case asset_descriptor_type::name:
+            case asset_descriptor_source_type::name:
             {
                 update_asset_descriptor_asset_id(state, descriptor);
                 if (descriptor->asset_id >= 0)
@@ -2703,25 +2703,25 @@ get_texture_id_from_asset_descriptor(
                     }
                 }
             } break;
-            case asset_descriptor_type::framebuffer:
+            case asset_descriptor_source_type::framebuffer:
             {
                 if (FramebufferInitialized(descriptor->framebuffer))
                 {
                     *texture = descriptor->framebuffer->_texture;
                 }
             } break;
-            case asset_descriptor_type::framebuffer_depth:
+            case asset_descriptor_source_type::framebuffer_depth:
             {
                 if (FramebufferInitialized(descriptor->framebuffer))
                 {
                     *texture = descriptor->framebuffer->_renderbuffer;
                 }
             } break;
-            case asset_descriptor_type::dynamic_mesh:
+            case asset_descriptor_source_type::dynamic_mesh:
             {
                 hassert(!"Not a texture asset type");
             } break;
-            case asset_descriptor_type::dynamic_texture:
+            case asset_descriptor_source_type::dynamic_texture:
             {
                 hassert(!"Not implemented");
             } break;
@@ -2742,16 +2742,16 @@ get_mesh_from_asset_descriptor(
     if (asset_descriptor_id != -1)
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
-        switch (descriptor->type)
+        switch (descriptor->source_type)
         {
-            case asset_descriptor_type::framebuffer:
-            case asset_descriptor_type::framebuffer_depth:
-            case asset_descriptor_type::dynamic_texture:
+            case asset_descriptor_source_type::framebuffer:
+            case asset_descriptor_source_type::framebuffer_depth:
+            case asset_descriptor_source_type::dynamic_texture:
             {
                 hassert(!"Not a mesh asset");
 
             } break;
-            case asset_descriptor_type::name:
+            case asset_descriptor_source_type::name:
             {
                 update_asset_descriptor_asset_id(state, descriptor);
                 if (descriptor->asset_id >= 0)
@@ -2772,7 +2772,7 @@ get_mesh_from_asset_descriptor(
                     }
                 }
             } break;
-            case asset_descriptor_type::dynamic_mesh:
+            case asset_descriptor_source_type::dynamic_mesh:
             {
                 mesh = (Mesh *)descriptor->ptr;
                 hassert(mesh->dynamic);
