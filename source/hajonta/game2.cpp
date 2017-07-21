@@ -341,14 +341,14 @@ MeshProxy
     _vertexformat_1 *vertices;
     v3i *triangles;
     uint32_t *vertex_index;
-    uint32_t *num_triangles;
+    uint32_t *num_indices;
 };
 
 void
 meshp_reset(const MeshProxy &meshp)
 {
     *meshp.vertex_index = 0;
-    *meshp.num_triangles = 0;
+    *meshp.num_indices = 0;
 }
 
 rectangle2
@@ -393,17 +393,21 @@ append_square(const MeshProxy &meshp, rectangle2 rect)
         { uv_square.x + uv_square.width, uv_square.y },
     };
 
-    meshp.triangles[(*meshp.num_triangles)++] = {
+    meshp.triangles[*meshp.num_indices] = {
         base_vertex_index,
         base_vertex_index + 1,
         base_vertex_index + 2,
     };
 
-    meshp.triangles[(*meshp.num_triangles)++] = {
+    (*meshp.num_indices) += 3;
+
+    meshp.triangles[*meshp.num_indices] = {
         base_vertex_index + 2,
         base_vertex_index + 3,
         base_vertex_index,
     };
+
+    (*meshp.num_indices) += 3;
 }
 
 void
@@ -447,17 +451,19 @@ append_line(const MeshProxy &meshp, line2 line, float width)
         { uv_line.x + uv_line.width, uv_line.y },
     };
 
-    meshp.triangles[(*meshp.num_triangles)++] = {
+    meshp.triangles[*meshp.num_indices] = {
         base_vertex_index,
         base_vertex_index + 1,
         base_vertex_index + 2,
     };
+    (*meshp.num_indices) += 3;
 
-    meshp.triangles[(*meshp.num_triangles)++] = {
+    meshp.triangles[*meshp.num_indices] = {
         base_vertex_index + 2,
         base_vertex_index + 3,
         base_vertex_index,
     };
+    (*meshp.num_indices) += 3;
 
 }
 
@@ -785,7 +791,7 @@ generate_terrain_mesh3(array2p<float> map, Mesh *mesh)
     }
 
     mesh->v3.vertex_count = (uint32_t)vertex_index;
-    mesh->num_triangles = num_triangles;
+    mesh->num_indices = 3 * num_triangles;
     mesh->reload = true;
 }
 
@@ -1677,7 +1683,7 @@ do_path_stuff(demo_cowboy_state *state, Pathfinding *path, v2i cowboy_location2,
         (_vertexformat_1 *)mesh.vertices.data,
         (v3i *)mesh.indices.data,
         &mesh.v3.vertex_count,
-        &mesh.num_triangles,
+        &mesh.num_indices,
     };
     m4 model = m4identity();
     MeshFromAssetFlags flags = {};
@@ -2001,6 +2007,11 @@ demo_a_state
 
     Material materials[4];
     ReadPixelResult readpixel_result;
+
+#define DEMO_A_TEST_MESH_COUNT 1
+    Mesh test_meshes[DEMO_A_TEST_MESH_COUNT];
+    int32_t test_mesh_descriptors[DEMO_A_TEST_MESH_COUNT];
+
 };
 
 DEMO(demo_a)
@@ -2207,6 +2218,22 @@ DEMO(demo_a)
         state->camera.rotation = {-0.1f, -0.8f, 0};
         float ratio = (float)input->window.width / (float)input->window.height;
         update_camera(&state->camera, ratio);
+
+        for (uint32_t i = 0; i < harray_count(state->test_meshes); ++i)
+        {
+            auto &mesh = state->test_meshes[i];
+            mesh.dynamic = true;
+            mesh.vertexformat = VertexFormat::just_vertices;
+            mesh.dynamic_max_vertices = 1000;
+            mesh.dynamic_max_indices = 2 * 1000;
+            mesh.mesh_format = MeshFormat::just_vertices;
+            mesh.vertices.size = sizeof(vertexformat_just_vertices) * mesh.dynamic_max_vertices;
+            mesh.vertices.data = malloc(mesh.vertices.size);
+            mesh.indices.size = 4 * mesh.dynamic_max_indices;
+            mesh.indices.data = malloc(mesh.indices.size);
+
+            state->test_mesh_descriptors[i] = add_dynamic_mesh_asset(&state->assets, state->test_meshes + i);
+        }
     }
 
     ImGui::Begin("Debug");
@@ -2582,6 +2609,45 @@ DEMO(demo_a)
         state->mouse_cursor);
 
     {
+        auto *mesh = state->test_meshes + 0;
+        vertexformat_just_vertices *vertices = (vertexformat_just_vertices *)mesh->vertices.data;
+        uint32_t vertex_count = 0;
+        vertices[vertex_count++].position = { 0, 0, 0};
+        vertices[vertex_count++].position = { 100, 100, 0};
+        vertices[vertex_count++].position = { 0, 0, -1};
+        vertices[vertex_count++].position = { 100, 100, -1};
+        vertices[vertex_count++].position = { 0, 0, 1};
+        vertices[vertex_count++].position = { 100, 100, 1};
+        int32_t *indices = (int32_t *)mesh->indices.data;
+        uint32_t num_indices = 0;
+        indices[num_indices++] = 0;
+        indices[num_indices++] = 1;
+        indices[num_indices++] = 2;
+        indices[num_indices++] = 3;
+        indices[num_indices++] = 4;
+        indices[num_indices++] = 5;
+        mesh->v3.vertex_count = vertex_count;
+        mesh->num_indices = num_indices;
+        mesh->primitive_type = PrimitiveType::lines;
+        mesh->reload = true;
+        MeshFromAssetFlags flags = {};
+        flags.depth_disabled = 1;
+        PushMeshFromAsset(
+            &state->rl_m.list,
+            2, // projection matrix - matrices[0]
+            -1, // view matrix - matrices[1]
+            m4identity(),
+            state->test_mesh_descriptors[0],
+            -1, // no material
+            -1, // no lights
+            -1, // no armature
+            flags,
+            ShaderType::standard,
+            -1
+        );
+    }
+
+    {
         auto &rfb = state->render_pipeline.framebuffers[state->fb_mousepicking];
         ImGui::Image(
             (void *)(intptr_t)rfb.framebuffer._texture,
@@ -2865,13 +2931,13 @@ initialize(platform_memory *memory, demo_cowboy_state *state)
     {
         auto &mesh = state->test_meshes[i];
         mesh.dynamic = true;
-        mesh.vertexformat = 1;
+        mesh.vertexformat = VertexFormat::v1;
         mesh.dynamic_max_vertices = 120000;
-        mesh.dynamic_max_triangles = 120000;
+        mesh.dynamic_max_indices = 3 * 120000;
         mesh.mesh_format = MeshFormat::v3_boneless;
         mesh.vertices.size = sizeof(_vertexformat_1) * mesh.dynamic_max_vertices;
         mesh.vertices.data = malloc(mesh.vertices.size);
-        mesh.indices.size = 4 * 3 * mesh.dynamic_max_triangles;
+        mesh.indices.size = 4 * mesh.dynamic_max_indices;
         mesh.indices.data = malloc(mesh.indices.size);
 
         state->test_mesh_descriptors[i] = add_dynamic_mesh_asset(state->assets, state->test_meshes + i);
@@ -2881,13 +2947,13 @@ initialize(platform_memory *memory, demo_cowboy_state *state)
     {
         auto &mesh = state->ui_mesh;
         mesh.dynamic = true;
-        mesh.vertexformat = 1;
+        mesh.vertexformat = VertexFormat::v1;
         mesh.dynamic_max_vertices = 10000;
-        mesh.dynamic_max_triangles = 10000;
+        mesh.dynamic_max_indices = 3 * 10000;
         mesh.mesh_format = MeshFormat::v3_boneless;
         mesh.vertices.size = sizeof(_vertexformat_1) * mesh.dynamic_max_vertices;
         mesh.vertices.data = malloc(mesh.vertices.size);
-        mesh.indices.size = 4 * 3 * mesh.dynamic_max_triangles;
+        mesh.indices.size = 4 * mesh.dynamic_max_indices;
         mesh.indices.data = malloc(mesh.indices.size);
         state->ui_mesh_descriptor = add_dynamic_mesh_asset(state->assets, &mesh);
     }

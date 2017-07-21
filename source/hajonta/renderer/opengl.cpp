@@ -67,9 +67,10 @@ CommandKey
 {
     uint32_t count;
     ShaderType shader_type;
-    uint32_t vertexformat;
+    VertexFormat vertexformat;
     uint32_t vertex_buffer;
     uint32_t index_buffer;
+    uint32_t primitive_type;
 
     bool operator==(const CommandKey &other) const
     {
@@ -78,14 +79,16 @@ CommandKey
             (shader_type == other.shader_type) &&
             (vertexformat == other.vertexformat) &&
             (vertex_buffer == other.vertex_buffer) &&
-            (index_buffer == other.index_buffer);
+            (index_buffer == other.index_buffer) &&
+            (primitive_type == other.primitive_type) &&
+            1;
     }
 };
 
 struct
 BufferKey
 {
-    uint32_t vertexformat;
+    VertexFormat vertexformat;
 
     bool operator==(const BufferKey &other) const
     {
@@ -1141,7 +1144,8 @@ load_mesh_asset(
         format.indices_size = v3_format->indices_size;
         format.num_triangles = v3_format->num_triangles;
         mesh->mesh_format = MeshFormat::v3_boneless;
-        mesh->vertexformat = v3_format->vertexformat;
+        mesh->vertexformat = (VertexFormat)v3_format->vertexformat;
+        mesh->primitive_type = PrimitiveType::triangles;
         mesh->v3.vertex_count = v3_format->num_vertices;
         mesh_buffer += v3_format->header_size;
         vertexformat_1 *vf = (vertexformat_1 *)mesh_buffer;
@@ -1152,7 +1156,7 @@ load_mesh_asset(
         vertexformat_1 vf4 = vf[4];
         vertexformat_1 vf5 = vf[5];
         vertexformat_1 vf6 = vf[6];
-        mesh->num_triangles = format.num_triangles;
+        mesh->num_indices = 3 * format.num_triangles;
         mesh->num_bones = format.num_bones;
     }
     else if (version->version == 4)
@@ -1192,7 +1196,8 @@ load_mesh_asset(
         format.indices_size = v3_format->indices_size;
         format.num_triangles = v3_format->num_triangles;
         mesh->mesh_format = MeshFormat::v3_bones;
-        mesh->vertexformat = v3_format->vertexformat;
+        mesh->vertexformat = (VertexFormat)v3_format->vertexformat;
+        mesh->primitive_type = PrimitiveType::triangles;
         mesh->v3.vertex_count = v3_format->num_vertices;
 
         format.num_bones = v3_format->num_bones;
@@ -1208,7 +1213,7 @@ load_mesh_asset(
         format.animation_size = v3_format->animations_size;
 
         mesh_buffer += v3_format->header_size;
-        mesh->num_triangles = format.num_triangles;
+        mesh->num_indices = 3 * format.num_triangles;
         mesh->num_bones = format.num_bones;
 
         uint8_t *base_offset = mesh_buffer;
@@ -2864,6 +2869,11 @@ get_mesh_from_asset_descriptor(
                 {
                     hassert(!"deprecated");
                 } break;
+
+                case MeshFormat::just_vertices:
+                {
+                    // Nothing to do.
+                } break;
             }
         }
     }
@@ -3097,18 +3107,23 @@ load_mesh_to_buffers(
             hglGenBuffers(1, &index_buffer.ibo);
             switch (mesh->vertexformat)
             {
-                case 1:
+                case VertexFormat::v1:
                 {
                     vertex_buffer.vertex_size = sizeof(vertexformat_1);
                 } break;
-                case 2:
+                case VertexFormat::v2:
                 {
                     vertex_buffer.vertex_size = sizeof(vertexformat_2);
                 } break;
-                case 3:
+                case VertexFormat::v3:
                 {
                     vertex_buffer.vertex_size = sizeof(vertexformat_3);
                 } break;
+                case VertexFormat::just_vertices:
+                {
+                    vertex_buffer.vertex_size = sizeof(vertexformat_just_vertices);
+                } break;
+                case VertexFormat::v0:
                 default:
                 {
                     hassert(!"Unhandled");
@@ -3134,7 +3149,7 @@ load_mesh_to_buffers(
                 GL_DYNAMIC_DRAW);
         }
         vertex_buffer.vertex_count += mesh->v3.vertex_count;
-        index_buffer.index_count += mesh->num_triangles * 3;
+        index_buffer.index_count += mesh->num_indices;
 
         mesh->loaded = true;
         mesh->reload = true;
@@ -3169,18 +3184,18 @@ load_mesh_to_buffers(
             vertex_buffer.vertex_size * mesh->v3.vertex_count,
             mesh->vertices.data);
 
-        if (!mesh->dynamic_max_triangles)
+        if (!mesh->dynamic_max_indices)
         {
-            hassert(4 * mesh->num_triangles * 3 == mesh->indices.size);
+            hassert(4 * mesh->num_indices == mesh->indices.size);
         }
         else
         {
-            hassert(4 * mesh->dynamic_max_triangles * 3 == mesh->indices.size);
+            hassert(4 * mesh->dynamic_max_indices == mesh->indices.size);
         }
 
         hglBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
             4 * index_offset,
-            4 * mesh->num_triangles * 3,
+            4 * mesh->num_indices,
             mesh->indices.data);
         mesh->reload = false;
     }
@@ -3389,7 +3404,7 @@ draw_mesh_from_asset_v3_bones(
     load_mesh_to_buffers(state, mesh);
 
     DrawElementsIndirectCommand cmd = {};
-    cmd.count = 3 * mesh->num_triangles;
+    cmd.count = mesh->num_indices;
     cmd.primCount = 1; // number of instances
     cmd.firstIndex = mesh->v3.index_offset;
     cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
@@ -3539,6 +3554,7 @@ draw_mesh_from_asset_v3_bones(
     key.vertex_buffer = mesh->v3.vertex_buffer;
     key.index_buffer = mesh->v3.index_buffer;
     key.count = 0;
+    key.primitive_type = GL_TRIANGLES;
 
     command_list_for_key_draw_data(
         state->command_state,
@@ -3581,7 +3597,7 @@ draw_mesh_from_asset_v3_boneless(
     }
 
     DrawElementsIndirectCommand cmd = {};
-    cmd.count = 3 * mesh->num_triangles;
+    cmd.count = mesh->num_indices;
     cmd.primCount = 1; // number of instances
     cmd.firstIndex = mesh->v3.index_offset;
     cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
@@ -3723,6 +3739,82 @@ draw_mesh_from_asset_v3_boneless(
     key.vertex_buffer = mesh->v3.vertex_buffer;
     key.index_buffer = mesh->v3.index_buffer;
     key.count = 0;
+    key.primitive_type = GL_TRIANGLES;
+
+    command_list_for_key_draw_data(
+        state->command_state,
+        &key,
+        &cmd,
+        config,
+        &draw_data,
+        0,
+        0
+    );
+    return;
+}
+
+void
+draw_mesh_from_asset_just_vertices(
+    renderer_state *state,
+    RenderEntryListConfig *config,
+    m4 *matrices,
+    asset_descriptor *descriptors,
+    LightDescriptor *light_descriptors,
+    ArmatureDescriptor *armature_descriptors,
+    Material *materials,
+    render_entry_type_mesh_from_asset *mesh_from_asset,
+    Mesh *mesh
+)
+{
+    TIMED_FUNCTION();
+
+    bool loaded = load_mesh_to_buffers(state, mesh);
+    if (!loaded)
+    {
+        return;
+    }
+
+    DrawElementsIndirectCommand cmd = {};
+    cmd.count = mesh->num_indices;
+    cmd.primCount = 1; // number of instances
+    cmd.firstIndex = mesh->v3.index_offset;
+    cmd.baseVertex = (int32_t)mesh->v3.vertex_base;
+    cmd.baseInstance = 0;
+
+    m4 &projection = matrices[mesh_from_asset->projection_matrix_id];
+    m4 view;
+    if (mesh_from_asset->view_matrix_id >= 0)
+    {
+        view = matrices[mesh_from_asset->view_matrix_id];
+    }
+    else
+    {
+        view = m4identity();
+    }
+    m4 &model = mesh_from_asset->model_matrix;
+
+    DrawData draw_data = {};
+    draw_data.texture_texaddress_index = -1;
+    draw_data.normal_texaddress_index = -1;
+    draw_data.specular_texaddress_index = -1;
+    draw_data.shadowmap_texaddress_index = -1;
+    draw_data.shadowmap_color_texaddress_index = -1;
+    draw_data.projection = projection;
+    draw_data.view = view;
+    draw_data.model = model;
+    draw_data.light_index = 0;
+    v3 camera_position = calculate_camera_position(view);
+    draw_data.camera_position = camera_position;
+    draw_data.bone_offset = -1;
+    draw_data.object_identifier = mesh_from_asset->object_identifier;
+
+    CommandKey key = {};
+    key.shader_type = mesh_from_asset->shader_type;
+    key.vertexformat = mesh->vertexformat;
+    key.vertex_buffer = mesh->v3.vertex_buffer;
+    key.index_buffer = mesh->v3.index_buffer;
+    key.count = 0;
+    key.primitive_type = GL_LINES;
 
     command_list_for_key_draw_data(
         state->command_state,
@@ -3749,6 +3841,8 @@ draw_mesh_from_asset(
 )
 {
     Mesh *mesh = get_mesh_from_asset_descriptor(state, descriptors, mesh_from_asset->mesh_asset_descriptor_id);
+
+    hassert(mesh->primitive_type != PrimitiveType::unset);
     switch(mesh->mesh_format)
     {
         case MeshFormat::v3_bones:
@@ -3777,6 +3871,19 @@ draw_mesh_from_asset(
                 mesh_from_asset,
                 mesh);
         } break;
+        case MeshFormat::just_vertices:
+        {
+            return draw_mesh_from_asset_just_vertices(
+                state,
+                config,
+                matrices,
+                descriptors,
+                light_descriptors,
+                armature_descriptors,
+                materials,
+                mesh_from_asset,
+                mesh);
+        }
         case MeshFormat::first:
         {
             hassert(!"Unreachable");
@@ -4425,13 +4532,22 @@ draw_indirect(
             continue;
         }
 
-        if (command_key.vertexformat > 3)
+        switch (command_key.vertexformat)
         {
-            ++command_list.generation;
-            command_list.num_commands = 0;
-            command_list.num_bones = 0;
-            command_list.num_texcontainer_indices = 0;
-            continue;
+            case VertexFormat::v1:
+            case VertexFormat::v2:
+            case VertexFormat::v3:
+            case VertexFormat::just_vertices:
+            break;
+            case VertexFormat::v0:
+            default:
+            {
+                ++command_list.generation;
+                command_list.num_commands = 0;
+                command_list.num_bones = 0;
+                command_list.num_texcontainer_indices = 0;
+                continue;
+            } break;
         }
 
         if (!command_list._vao_initialized)
@@ -4443,7 +4559,7 @@ draw_indirect(
                 command_state.vertex_buffers[command_key.vertex_buffer].vbo);
             switch (command_key.vertexformat)
             {
-                case 1:
+                case VertexFormat::v1:
                 {
                     hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_1), (void *)offsetof(vertexformat_1, position));
                     hglEnableVertexAttribArray((GLuint)pd.a_position_id);
@@ -4458,7 +4574,7 @@ draw_indirect(
                         hglEnableVertexAttribArray((GLuint)pd.a_normal_id);
                     }
                 } break;
-                case 2:
+                case VertexFormat::v2:
                 {
                     hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_2), (void *)offsetof(vertexformat_2, position));
                     hglEnableVertexAttribArray((GLuint)pd.a_position_id);
@@ -4494,7 +4610,7 @@ draw_indirect(
                         hglEnableVertexAttribArray((GLuint)pd.a_bone_weights_id);
                     }
                 } break;
-                case 3:
+                case VertexFormat::v3:
                 {
                     hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_3), (void *)offsetof(vertexformat_3, position));
                     hglEnableVertexAttribArray((GLuint)pd.a_position_id);
@@ -4513,6 +4629,18 @@ draw_indirect(
                         hglVertexAttribPointer((GLuint)pd.a_tangent_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_3), (void *)offsetof(vertexformat_3, tangent));
                         hglEnableVertexAttribArray((GLuint)pd.a_tangent_id);
                     }
+                } break;
+
+                case VertexFormat::just_vertices:
+                {
+                    hglVertexAttribPointer((GLuint)pd.a_position_id, 3, GL_FLOAT, GL_FALSE, sizeof(vertexformat_just_vertices), (void *)offsetof(vertexformat_just_vertices, position));
+                    hglEnableVertexAttribArray((GLuint)pd.a_position_id);
+                } break;
+
+                case VertexFormat::v0:
+                default:
+                {
+                    hassert(!"Unreachable");
                 } break;
             }
             command_list._vao_initialized = true;
@@ -4643,11 +4771,14 @@ draw_indirect(
             0,
             sizeof(command_list.commands),
             command_list.commands);
+        // For now, no points
+        hglLineWidth(1.0f);
+        hassert(command_key.primitive_type);
         if (state->gl_extensions.gl_arb_multi_draw_indirect && multi_draw_enabled)
         {
             hglUniform1i(pd.draw_data_index_uniform, 0);
             hglMultiDrawElementsIndirect(
-                GL_TRIANGLES,
+                command_key.primitive_type,
                 GL_UNSIGNED_INT,
                 (void *)0,
                 command_list.num_commands,
@@ -4662,7 +4793,7 @@ draw_indirect(
                 hglUniform1i(pd.draw_data_index_uniform, j);
                 /*
                 hglDrawElementsBaseVertex(
-                    GL_TRIANGLES,
+                    command_key.primitive_type,
                     command.count,
                     GL_UNSIGNED_INT,
                     (void *)(intptr_t)(command.firstIndex * 4),
@@ -4670,7 +4801,7 @@ draw_indirect(
                 */
                 /*
                 hglDrawElementsInstancedBaseVertexBaseInstance(
-                    GL_TRIANGLES,
+                    command_key.primitive_type,
                     command.count,
                     GL_UNSIGNED_INT,
                     (void *)(intptr_t)(command.firstIndex * 4),
@@ -4679,7 +4810,7 @@ draw_indirect(
                     0);
                 */
                 hglDrawElementsIndirect(
-                    GL_TRIANGLES,
+                    command_key.primitive_type,
                     GL_UNSIGNED_INT,
                     (void *)(j * sizeof(DrawElementsIndirectCommand)));
             }

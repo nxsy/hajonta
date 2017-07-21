@@ -3,6 +3,24 @@
 #include "hajonta/platform/neutral.h"
 #include "hajonta/math.h"
 
+enum struct
+VertexFormat
+{
+    v0,
+    v1,
+    v2,
+    v3,
+    just_vertices,
+};
+
+enum struct
+PrimitiveType
+{
+    unset, // crash if seen
+    triangles,
+    lines,
+};
+
 struct
 vertexformat_1
 {
@@ -28,6 +46,12 @@ vertexformat_3
     v3 normal;
     v3 tangent;
     v2 texcoords;
+};
+
+struct
+vertexformat_just_vertices
+{
+    v3 position;
 };
 
 enum struct
@@ -262,6 +286,7 @@ MeshFormat {
     first,
     v3_boneless,
     v3_bones,
+    just_vertices,
 };
 
 enum struct
@@ -312,8 +337,9 @@ V3Bones
 struct
 Mesh
 {
-    uint32_t num_triangles;
-    uint32_t vertexformat;
+    uint32_t num_indices;
+    VertexFormat vertexformat;
+    PrimitiveType primitive_type;
     uint32_t num_bones;
 
     buffer vertices;
@@ -336,7 +362,7 @@ Mesh
     bool dynamic;
     bool reload;
     uint32_t dynamic_max_vertices;
-    uint32_t dynamic_max_triangles;
+    uint32_t dynamic_max_indices;
 };
 
 struct MeshFromAssetFlags
