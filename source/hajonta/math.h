@@ -127,6 +127,14 @@ union v4
         };
     };
     float E[4];
+    struct
+    {
+        v3 v3;
+    };
+    struct
+    {
+        v2 v2;
+    };
 };
 
 struct

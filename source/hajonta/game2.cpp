@@ -1928,6 +1928,18 @@ apply_path(
     advance_armature(state->assets->descriptors + mesh_id, state->armatures + (uint32_t)armature_id, delta_t * playback_speed, cowboy_speed, time_to_idle);
 }
 
+
+struct _ObjectData
+{
+    v3 position;
+    v3 rotation;
+    v3 scale;
+    uint32_t depth_disabled;
+    int32_t model_id;
+    int32_t material;
+    int32_t object_id;
+};
+
 struct
 demo_a_state
 {
@@ -2011,6 +2023,9 @@ demo_a_state
 #define DEMO_A_TEST_MESH_COUNT 1
     Mesh test_meshes[DEMO_A_TEST_MESH_COUNT];
     int32_t test_mesh_descriptors[DEMO_A_TEST_MESH_COUNT];
+
+    _ObjectData objects[25];
+    uint32_t num_objects;
 
 };
 
@@ -2202,9 +2217,9 @@ DEMO(demo_a)
             state->modular_building_specular,
         };
 
-        state->sun_rotation = {0,0};
+        state->sun_rotation = {-2.525f,-0.92f};
         light.type = LightType::directional;
-        light.direction = {1.0f, -0.66f, -0.288f};
+        light.direction = {0.323f, -0.794f, -0.516f};
         light.color = {1.0f, 1.0f, 1.0f};
         light.ambient_intensity = 0.298f;
         light.diffuse_intensity = 1.0f;
@@ -2234,6 +2249,68 @@ DEMO(demo_a)
 
             state->test_mesh_descriptors[i] = add_dynamic_mesh_asset(&state->assets, state->test_meshes + i);
         }
+
+        state->objects[0] =
+            {
+                {0,0,0},
+                {0,0,0},
+                {5,5,5},
+                1,
+                state->ground_plane,
+                0,
+                1,
+            };
+        state->objects[1] =
+            {
+                {0,0,0},
+                {0,0,0},
+                {0.01f, 0.01f, 0.01f},
+                0,
+                state->barrel_mesh,
+                1,
+                2,
+            };
+        state->objects[2] =
+            {
+                {1, 0, 0},
+                {0, 0, 0},
+                {0.01f, 0.01f, 0.01f},
+                0,
+                state->metal_barrel_mesh,
+                2,
+                3,
+            };
+        state->objects[3] =
+            {
+                {0, 0, 5},
+                {0, h_pi, 0},
+                {0.01f, 0.01f, 0.01f},
+                0,
+                state->modular_building_brick_door_mesh,
+                3,
+                4,
+            };
+        state->objects[4] =
+            {
+                {2.5f, 0, 5},
+                {0, h_pi, 0},
+                {0.01f, 0.01f, 0.01f},
+                0,
+                state->modular_building_brick_wall_mesh,
+                3,
+                5,
+            };
+        state->objects[5] =
+            {
+                {-2.5f, 0, 5},
+                {0, h_pi, 0},
+                {0.01f, 0.01f, 0.01f},
+                0,
+                state->modular_building_brick_small_window_mesh,
+                3,
+                6,
+            };
+        state->num_objects = 6;
     }
 
     ImGui::Begin("Debug");
@@ -2359,6 +2436,7 @@ DEMO(demo_a)
     if (state->show_lights) {
         ImGui::Begin("Lights", &state->show_lights);
         ImGui::DragFloat3("Direction", &light.direction.x, 0.001f, -1.0f, 1.0f);
+        ImGui::Text("Sun rotation is %f, %f", state->sun_rotation.x, state->sun_rotation.y);
         static bool animate_sun = false;
         if (ImGui::Button("Normalize"))
         {
@@ -2484,62 +2562,20 @@ DEMO(demo_a)
         0,
     };
 
-    struct
-    {
-        m4 model_matrix;
-        uint32_t depth_disabled;
-        int32_t model_id;
-        int32_t material;
-        int32_t object_id;
-    } objects[] =
-    {
-        {
-            m4scale(5),
-            1,
-            state->ground_plane,
-            0,
-            1,
-        },
-        {
-            m4scale(0.01f),
-            0,
-            state->barrel_mesh,
-            1,
-            2,
-        },
-        {
-            m4mul(m4translate({1,0,0}), m4scale(0.01f)),
-            0,
-            state->metal_barrel_mesh,
-            2,
-            3,
-        },
-        {
-            m4mul(m4rotation({0,1,0}, h_pi), m4mul(m4translate({0,0,5}), m4scale(0.01f))),
-            0,
-            state->modular_building_brick_door_mesh,
-            3,
-            4,
-        },
-        {
-            m4mul(m4rotation({0,1,0}, h_pi), m4mul(m4translate({2.5,0,5}), m4scale(0.01f))),
-            0,
-            state->modular_building_brick_wall_mesh,
-            3,
-            5,
-        },
-        {
-            m4mul(m4rotation({0,1,0}, h_pi), m4mul(m4translate({-2.5,0,5}), m4scale(0.01f))),
-            0,
-            state->modular_building_brick_small_window_mesh,
-            3,
-            6,
-        },
-    };
+    _ObjectData *selected_object = 0;
+    m4 selected_model_matrix = {};
 
-    for (uint32_t object_index = 0; object_index < harray_count(objects); ++object_index)
+
+    for (uint32_t object_index = 0; object_index < state->num_objects; ++object_index)
     {
-        auto &object = objects[object_index];
+        auto &object = state->objects[object_index];
+        m4 model_matrix = m4mul(
+            m4translate(object.position),
+            m4mul(
+                m4scale(object.scale),
+                m4rotation(QuaternionFromEulerZYX(object.rotation))
+            )
+        );
         MeshFromAssetFlags flags = {};
         flags.depth_disabled = object.depth_disabled;
         flags.use_materials = 1;
@@ -2550,7 +2586,7 @@ DEMO(demo_a)
                 l,
                 0, // projection matrix - matrices[0]
                 1, // view materix - matrices[1]
-                object.model_matrix,
+                model_matrix,
                 object.model_id,
                 object.material, // material 0
                 0, // light 0
@@ -2567,7 +2603,7 @@ DEMO(demo_a)
                 l,
                 0, // projection matrix - matrices[0]
                 1, // view materix - matrices[1]
-                object.model_matrix,
+                model_matrix,
                 object.model_id,
                 object.material, // material 0
                 0, // light 0
@@ -2576,6 +2612,8 @@ DEMO(demo_a)
                 ShaderType::standard,
                 object.object_id // object_id
             );
+            selected_object = state->objects + object_index;
+            selected_model_matrix = model_matrix;
         }
     }
 
@@ -2609,42 +2647,154 @@ DEMO(demo_a)
         state->mouse_cursor);
 
     {
+        v3 screen_pos = { input->window.width / 2.0f, input->window.height / 2.0f, 0 };
+        m4 rotate = m4identity();
+        v3 screen_pos_x = v3add(screen_pos, {100, 0, 0});
+        v3 screen_pos_y = v3add(screen_pos, {0, 100, 0});
+        v3 screen_pos_z = v3add(screen_pos, {0, 0, 100});
+        if (selected_object)
+        {
+            ImGui::Begin("Selected Object");
+            ImGui::DragFloat3("Position", (float *)&selected_object->position, 0.001f);
+            ImGui::DragFloat3("Rotation", (float *)&selected_object->rotation, 0.001f);
+            ImGui::DragFloat3("Scale", (float *)&selected_object->scale, 0.001f);
+            ImGui::End();
+            v4 world_pos = m4mul(
+                selected_model_matrix,
+                m4mul(
+                    m4rotation(QuaternionFromEulerZYX(selected_object->rotation)),
+                    v4{0, 0, 0, 1}
+                )
+            );
+            v4 view_space = m4mul(state->camera.view, world_pos);
+            v4 clip = m4mul(state->camera.projection, view_space);
+            clip = v4div(clip, clip.w);
+
+            v2 clip2 = v2add({0.5f,0.5f}, v2mul({clip.x, clip.y}, 0.5f));
+
+            screen_pos = {
+                clip2.x * input->window.width,
+                clip2.y * input->window.height,
+                0,
+            };
+
+            v4 world_pos_x = v4add(
+                world_pos,
+                m4mul(
+                    m4rotation(QuaternionFromEulerZYX(selected_object->rotation)),
+                    v4{1, 0, 0, 0}
+                )
+            );
+
+            v4 view_space_x = m4mul(state->camera.view, world_pos_x);
+            v4 clip_space_x = m4mul(state->camera.projection, view_space_x);
+            clip_space_x = v4div(clip_space_x, clip_space_x.w);
+
+            v2 clip2_x = v2add({0.5f,0.5f}, v2mul({clip_space_x.x, clip_space_x.y}, 0.5f));
+
+            screen_pos_x = {
+                clip2_x.x * input->window.width,
+                clip2_x.y * input->window.height,
+                0,
+            };
+
+
+            v4 world_pos_y = v4add(
+                world_pos,
+                m4mul(
+                    m4rotation(QuaternionFromEulerZYX(selected_object->rotation)),
+                    v4{0, 1, 0, 0}
+                )
+            );
+            v4 view_space_y = m4mul(state->camera.view, world_pos_y);
+            v4 clip_space_y = m4mul(state->camera.projection, view_space_y);
+            clip_space_y = v4div(clip_space_y, clip_space_y.w);
+
+            v2 clip2_y = v2add({0.5f,0.5f}, v2mul({clip_space_y.x, clip_space_y.y}, 0.5f));
+
+            screen_pos_y = {
+                clip2_y.x * input->window.width,
+                clip2_y.y * input->window.height,
+                0,
+            };
+
+            v4 world_pos_z = v4add(
+                world_pos,
+                m4mul(
+                    m4rotation(QuaternionFromEulerZYX(selected_object->rotation)),
+                    v4{0, 0, 1, 0}
+                )
+            );
+            v4 view_space_z = m4mul(state->camera.view, world_pos_z);
+            v4 clip_space_z = m4mul(state->camera.projection, view_space_z);
+            clip_space_z = v4div(clip_space_z, clip_space_z.w);
+
+            v2 clip2_z = v2add({0.5f,0.5f}, v2mul({clip_space_z.x, clip_space_z.y}, 0.5f));
+
+            screen_pos_z = {
+                clip2_z.x * input->window.width,
+                clip2_z.y * input->window.height,
+                0,
+            };
+        }
+        ImGui::Begin("Lines");
         auto *mesh = state->test_meshes + 0;
         vertexformat_just_vertices *vertices = (vertexformat_just_vertices *)mesh->vertices.data;
         uint32_t vertex_count = 0;
-        vertices[vertex_count++].position = { 0, 0, 0};
-        vertices[vertex_count++].position = { 100, 100, 0};
-        vertices[vertex_count++].position = { 0, 0, -1};
-        vertices[vertex_count++].position = { 100, 100, -1};
-        vertices[vertex_count++].position = { 0, 0, 1};
-        vertices[vertex_count++].position = { 100, 100, 1};
-        int32_t *indices = (int32_t *)mesh->indices.data;
         uint32_t num_indices = 0;
-        indices[num_indices++] = 0;
-        indices[num_indices++] = 1;
-        indices[num_indices++] = 2;
-        indices[num_indices++] = 3;
-        indices[num_indices++] = 4;
-        indices[num_indices++] = 5;
+        const uint32_t num_segments = 32;
+        v3 last_pos = { 0, 1, 0 };
+        uint32_t *indices = (uint32_t *)mesh->indices.data;
+        for (uint32_t i = 0; i < num_segments; ++i)
+        {
+            float angle = (i + 1.0f) / (float)num_segments * h_twopi;
+            v3 pos = { sin(angle), cos(angle), 0 };
+            ImGui::Text("From %f, %f to %f, %f",
+                last_pos.x, last_pos.y,
+                pos.x, pos.y);
+            vertices[vertex_count++].position = v3add(screen_pos, v3mul(last_pos, 100));
+            vertices[vertex_count++].position = v3add(screen_pos, v3mul(pos, 100));
+            last_pos = pos;
+            indices[num_indices++] = num_indices;
+            indices[num_indices++] = num_indices;
+        }
+        vertices[vertex_count++].position = screen_pos;
+        vertices[vertex_count++].position = screen_pos_x;
+        indices[num_indices++] = num_indices;
+        indices[num_indices++] = num_indices;
+
+        vertices[vertex_count++].position = screen_pos;
+        vertices[vertex_count++].position = screen_pos_y;
+        indices[num_indices++] = num_indices;
+        indices[num_indices++] = num_indices;
+
+        vertices[vertex_count++].position = screen_pos;
+        vertices[vertex_count++].position = screen_pos_z;
+        indices[num_indices++] = num_indices;
+        indices[num_indices++] = num_indices;
         mesh->v3.vertex_count = vertex_count;
         mesh->num_indices = num_indices;
         mesh->primitive_type = PrimitiveType::lines;
         mesh->reload = true;
         MeshFromAssetFlags flags = {};
         flags.depth_disabled = 1;
-        PushMeshFromAsset(
-            &state->rl_m.list,
-            2, // projection matrix - matrices[0]
-            -1, // view matrix - matrices[1]
-            m4identity(),
-            state->test_mesh_descriptors[0],
-            -1, // no material
-            -1, // no lights
-            -1, // no armature
-            flags,
-            ShaderType::standard,
-            -1
-        );
+        if (selected_object)
+        {
+            PushMeshFromAsset(
+                &state->rl_m.list,
+                2, // projection matrix - matrices[0]
+                -1, // view matrix - matrices[1]
+                m4identity(),
+                state->test_mesh_descriptors[0],
+                -1, // no material
+                -1, // no lights
+                -1, // no armature
+                flags,
+                ShaderType::standard,
+                -1
+            );
+        }
+        ImGui::End();
     }
 
     {
@@ -2939,6 +3089,7 @@ initialize(platform_memory *memory, demo_cowboy_state *state)
         mesh.vertices.data = malloc(mesh.vertices.size);
         mesh.indices.size = 4 * mesh.dynamic_max_indices;
         mesh.indices.data = malloc(mesh.indices.size);
+        mesh.primitive_type = PrimitiveType::triangles;
 
         state->test_mesh_descriptors[i] = add_dynamic_mesh_asset(state->assets, state->test_meshes + i);
         state->test_texture_descriptors[i] = add_dynamic_texture_asset(state->assets, state->test_textures + i);
@@ -2955,6 +3106,7 @@ initialize(platform_memory *memory, demo_cowboy_state *state)
         mesh.vertices.data = malloc(mesh.vertices.size);
         mesh.indices.size = 4 * mesh.dynamic_max_indices;
         mesh.indices.data = malloc(mesh.indices.size);
+        mesh.primitive_type = PrimitiveType::triangles;
         state->ui_mesh_descriptor = add_dynamic_mesh_asset(state->assets, &mesh);
     }
 

@@ -912,6 +912,36 @@ AxisAngleFromQuaternion(Quaternion _q)
     };
 }
 
+Quaternion
+QuaternionFromEulerXYZ(v3 rotation)
+{
+    Quaternion q;
+    v3 h = v3mul(rotation, 0.5f);
+    v3 c = {cosf(h.x), cosf(h.y), cosf(h.z)};
+    v3 s = {sinf(h.x), sinf(h.y), sinf(h.z)};
+
+    q.x = s.x * c.y * c.z - c.x * s.y * s.z;
+    q.y = c.x * s.y * c.z + s.x * c.y * s.z;
+    q.z = c.x * c.y * s.z - s.x * s.y * c.z;
+    q.w = c.x * c.y * c.z + s.x * s.y * s.z;
+    return q;
+}
+
+Quaternion
+QuaternionFromEulerZYX(v3 rotation)
+{
+    Quaternion q;
+    v3 h = v3mul(rotation, 0.5f);
+    v3 c = {cosf(h.x), cosf(h.y), cosf(h.z)};
+    v3 s = {sinf(h.x), sinf(h.y), sinf(h.z)};
+
+    q.x = s.x * c.y * c.z + c.x * s.y * s.z;
+    q.y = c.x * s.y * c.z - s.x * c.y * s.z;
+    q.z = c.x * c.y * s.z + s.x * s.y * c.z;
+    q.w = c.x * c.y * c.z - s.x * s.y * s.z;
+    return q;
+}
+
 m4
 m4rotation(v3 axis, float angle)
 {
