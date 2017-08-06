@@ -1985,7 +1985,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_mesh_asset(state, "konserian_mesh", "testing/konserian_swamptree/konserian.hjm");
         add_asset(state, "konserian_texture", "testing/konserian_swamptree/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "cactus_mesh", "testing/cactus/cactus.hjm");
-        add_asset(state, "cactus_texture", "testing/cactus/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
+        add_asset(state, "cactus_diffuse", "testing/cactus/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "kitchen_mesh", "testing/kitchen/kitchen.hjm");
         add_asset(state, "kitchen_texture", "testing/kitchen/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "nature_pack_tree_mesh", "testing/kenney/Nature_Pack_3D/tree.hjm");
@@ -2164,7 +2164,13 @@ extern "C" RENDERER_SETUP(renderer_setup)
     io.MouseWheel = input->mouse.vertical_wheel_delta;
 
     io.KeysDown[8] = false;
+    io.KeysDown[9] = false;
+    io.KeysDown[13] = false;
+    io.KeysDown[27] = false;
     io.KeyMap[ImGuiKey_Backspace] = 8;
+    io.KeyMap[ImGuiKey_Tab] = 9;
+    io.KeyMap[ImGuiKey_Enter] = 13;
+    io.KeyMap[ImGuiKey_Escape] = 27;
 
     if (memory->debug_keyboard)
     {
@@ -2176,13 +2182,19 @@ extern "C" RENDERER_SETUP(renderer_setup)
             keyboard_input *ki = k + idx;
             if (ki->type == keyboard_input_type::ASCII)
             {
-                if (ki->ascii == 8)
+                switch (ki->ascii)
                 {
-                     io.KeysDown[(uint32_t)ki->ascii] = true;
-                }
-                else
-                {
-                    io.AddInputCharacter((ImWchar)ki->ascii);
+                    case 8:
+                    case 9:
+                    case 13:
+                    case 27:
+                    {
+                        io.KeysDown[(uint32_t)ki->ascii] = true;
+                    } break;
+                    default:
+                    {
+                        io.AddInputCharacter((ImWchar)ki->ascii);
+                    } break;
                 }
             }
         }

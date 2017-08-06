@@ -2008,6 +2008,9 @@ demo_a_state
     int32_t metal_barrel_normal;
     int32_t metal_barrel_specular;
 
+    int32_t cactus_mesh;
+    int32_t cactus_diffuse;
+
     int32_t modular_building_brick_door_mesh;
     int32_t modular_building_brick_wall_mesh;
     int32_t modular_building_brick_small_window_mesh;
@@ -2017,7 +2020,7 @@ demo_a_state
 
     int32_t mouse_cursor;
 
-    Material materials[4];
+    Material materials[5];
     ReadPixelResult readpixel_result;
 
 #define DEMO_A_TEST_MESH_COUNT 1
@@ -2193,6 +2196,9 @@ DEMO(demo_a)
         state->modular_building_brick_wall_mesh = add_asset(&state->assets, "modular_building_brick_wall_mesh");
         state->modular_building_brick_small_window_mesh = add_asset(&state->assets, "modular_building_brick_small_window_mesh");
 
+        state->cactus_diffuse = add_asset(&state->assets, "cactus_diffuse");
+        state->cactus_mesh = add_asset(&state->assets, "cactus_mesh");
+
         state->materials[0] = {
             state->diffuse46,
             state->normal46,
@@ -2215,6 +2221,12 @@ DEMO(demo_a)
             state->modular_building_diffuse,
             state->modular_building_normal,
             state->modular_building_specular,
+        };
+
+        state->materials[4] = {
+            state->cactus_diffuse,
+            -1,
+            -1,
         };
 
         state->sun_rotation = {-2.525f,-0.92f};
@@ -2310,7 +2322,17 @@ DEMO(demo_a)
                 3,
                 6,
             };
-        state->num_objects = 6;
+        state->objects[6] =
+            {
+                {-1, 0, 0},
+                {0, 0, 0},
+                {0.01f, 0.01f, 0.01f},
+                0,
+                state->cactus_mesh,
+                4,
+                7,
+            };
+        state->num_objects = 7;
     }
 
     ImGui::Begin("Debug");

@@ -27,6 +27,13 @@ struct sdl2_audio_buffer
     uint32_t write_position;
 };
 
+enum class
+KeyboardMode
+{
+    standard,
+    debug,
+};
+
 struct
 Sdl2MemoryBlock
 {
@@ -39,6 +46,7 @@ Sdl2MemoryBlock
 struct sdl2_state
 {
     bool stopping;
+    KeyboardMode keyboard_mode;
     char *stop_reason;
 
     bool sdl_inited;
@@ -460,42 +468,87 @@ handle_sdl2_events(sdl2_state *state)
             case SDL_KEYDOWN:
             case SDL_KEYUP:
             {
+                auto &key = sdl_event.key;
+                auto &keysym = key.keysym;
+                auto &sym = keysym.sym;
                 bool was_down = (sdl_event.type == SDL_KEYUP);
                 bool is_down = (sdl_event.type != SDL_KEYUP);
 
-                GameButtonState *button_state = 0;
-                switch(sdl_event.key.keysym.sym)
+                switch (state->keyboard_mode)
                 {
-                    case SDLK_w:
+                    case KeyboardMode::standard:
                     {
-                        button_state = &new_keyboard_controller->buttons.move_up;
+                        GameButtonState *button_state = 0;
+                        switch(sdl_event.key.keysym.sym)
+                        {
+                            case SDLK_w:
+                            {
+                                button_state = &new_keyboard_controller->buttons.move_up;
+                            } break;
+                            case SDLK_s:
+                            {
+                                button_state = &new_keyboard_controller->buttons.move_down;
+                            } break;
+                            case SDLK_a:
+                            {
+                                button_state = &new_keyboard_controller->buttons.move_left;
+                            } break;
+                            case SDLK_d:
+                            {
+                                button_state = &new_keyboard_controller->buttons.move_right;
+                            } break;
+                            case SDLK_ESCAPE:
+                            {
+                                button_state = &new_keyboard_controller->buttons.back;
+                            } break;
+                            case SDLK_RETURN:
+                            case SDLK_RETURN2:
+                            {
+                                button_state = &new_keyboard_controller->buttons.start;
+                            } break;
+                        }
+                        if (button_state)
+                        {
+                            sdl2_process_keypress(button_state, was_down, is_down);
+                        }
                     } break;
-                    case SDLK_s:
+                    case KeyboardMode::debug:
                     {
-                        button_state = &new_keyboard_controller->buttons.move_down;
-                    } break;
-                    case SDLK_a:
-                    {
-                        button_state = &new_keyboard_controller->buttons.move_left;
-                    } break;
-                    case SDLK_d:
-                    {
-                        button_state = &new_keyboard_controller->buttons.move_right;
-                    } break;
-                    case SDLK_ESCAPE:
-                    {
-                        button_state = &new_keyboard_controller->buttons.back;
-                    } break;
-                    case SDLK_RETURN:
-                    case SDLK_RETURN2:
-                    {
-                        button_state = &new_keyboard_controller->buttons.start;
+                        if (sdl_event.type != SDL_KEYUP)
+                        {
+                            break;
+                        }
+                        const char *foo = SDL_GetScancodeName(keysym.scancode);
+                        const char *bar = SDL_GetKeyName(sym);
+                        int keypress = sym & ~SDLK_SCANCODE_MASK;
+                        char c = 0;
+                        if (keypress < 0x80 && keypress > 0)
+                        {
+                            c = (char)keypress;
+                        }
+                        else
+                        {
+                        }
+                        if (!c)
+                        {
+                            break;
+                        }
+                        keyboard_input *k = state->new_input->keyboard_inputs;
+                        for (uint32_t idx = 0;
+                                idx < harray_count(state->new_input->keyboard_inputs);
+                                ++idx)
+                        {
+                            keyboard_input *ki = k + idx;
+                            if (ki->type == keyboard_input_type::NONE)
+                            {
+                                ki->type = keyboard_input_type::ASCII;
+                                ki->ascii = c;
+                                break;
+                            }
+                        }
                     } break;
                 }
-                if (button_state)
-                {
-                    sdl2_process_keypress(button_state, was_down, is_down);
-                }
+
             } break;
             case SDL_MOUSEMOTION:
             {
@@ -738,6 +791,7 @@ main(int argc, char *argv[])
         {
             state.stopping = 1;
         }
+        state.keyboard_mode = (KeyboardMode)memory.debug_keyboard;
         auto frame_end_time = std::chrono::steady_clock::now();
         auto diff = frame_end_time - last_frame_start_time;
         int64_t duration_us = std::chrono::duration_cast<std::chrono::microseconds>(diff).count();
