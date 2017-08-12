@@ -84,7 +84,7 @@ typedef PLATFORM_DEBUG_MESSAGE(platform_debug_message_func);
 #define PLATFORM_GLGETPROCADDRESS(func_name) void* func_name(char *function_name)
 typedef PLATFORM_GLGETPROCADDRESS(platform_glgetprocaddress_func);
 
-#define PLATFORM_LOAD_ASSET(func_name) bool func_name(const char *asset_path, uint32_t size, uint8_t *dest)
+#define PLATFORM_LOAD_ASSET(func_name) bool func_name(const char *asset_path, uint32_t size, uint8_t *dest, uint32_t *actual_size)
 typedef PLATFORM_LOAD_ASSET(platform_load_asset_func);
 
 #define PLATFORM_EDITOR_LOAD_FILE(func_name) bool func_name(loaded_file *target)

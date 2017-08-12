@@ -570,12 +570,6 @@ demo_cowboy_state
     CameraState camera;
     CameraState np_camera;
 
-    uint32_t num_assets;
-    AssetListEntry asset_lists[100];
-    uint32_t num_asset_classes;
-    AssetClassEntry asset_classes[10];
-    const char *asset_class_names[10];
-
     uint32_t num_squares;
     Mesh *test_meshes;
     DynamicTextureDescriptor *test_textures;

@@ -30,6 +30,8 @@
 #include "stb_truetype.h"
 #include "hajonta/image.cpp"
 #include "hajonta/math.cpp"
+#include "hajonta/algo/fnv1a.cpp"
+#include "hajonta/assets.cpp"
 
 #ifndef HAJONTA_QUERY_TIMER
 #define HAJONTA_QUERY_TIMER 0
@@ -294,7 +296,7 @@ asset_file
 };
 
 enum struct
-AssetType
+RendererAssetType
 {
     texture,
     mesh,
@@ -331,7 +333,7 @@ TEXTURE_FORMATS
 struct
 asset
 {
-    AssetType type;
+    RendererAssetType type;
     uint32_t asset_id;
     char asset_name[100];
     int32_t asset_file_id;
@@ -632,6 +634,9 @@ struct renderer_state
     MemoryArena arena;
     bool initialized;
     CommandState *command_state;
+    AssetManagementState asset_state;
+
+    AssetPack asset_pack;
 
     TimerQueryData timer_query_data;
 
@@ -806,22 +811,6 @@ lookup_asset_file_to_texaddress_index(renderer_state *state, int32_t asset_file_
 }
 
 int32_t
-lookup_asset_file_to_texture(renderer_state *state, int32_t asset_file_id)
-{
-    int32_t result = -1;
-    for (uint32_t i = 0; i < state->texture_lookup_count; ++i)
-    {
-        asset_file_to_texture *lookup = state->texture_lookup + i;
-        if (lookup->asset_file_id == asset_file_id)
-        {
-            result = lookup->texture_offset;
-            break;
-        }
-    }
-    return result;
-}
-
-int32_t
 lookup_asset_file_to_mesh(renderer_state *state, int32_t asset_file_id)
 {
     int32_t result = -1;
@@ -865,45 +854,6 @@ add_asset_file_mesh_lookup(renderer_state *state, int32_t asset_file_id, int32_t
     ++state->mesh_lookup_count;
     lookup->asset_file_id = asset_file_id;
     lookup->mesh_offset = mesh_offset;
-}
-
-bool
-load_texture_asset(
-    renderer_state *state,
-    const char *filename,
-    uint8_t *image_buffer,
-    uint32_t image_size,
-    int32_t *x,
-    int32_t *y,
-    GLuint *tex,
-    GLenum target
-)
-{
-    if (!_platform->load_asset(filename, image_size, image_buffer)) {
-        return false;
-    }
-
-    uint32_t actual_size;
-    load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, state->bitmap_scratch_size,
-            x, y, &actual_size);
-
-    if (tex)
-    {
-        if (!*tex)
-        {
-            hglGenTextures(1, tex);
-        }
-        hglBindTexture(GL_TEXTURE_2D, *tex);
-    }
-
-    hglTexImage2D(target, 0, GL_SRGB8_ALPHA8,
-        *x, *y, 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, state->bitmap_scratch);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    hglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    return true;
 }
 
 uint32_t
@@ -989,7 +939,6 @@ new_texaddress(CommandState *command_state, int32_t x, int32_t y, TextureFormat 
 bool
 load_texture_array_asset(
     renderer_state *state,
-    const char *filename,
     uint8_t *image_buffer,
     uint32_t image_size,
     TextureFormat format,
@@ -998,10 +947,6 @@ load_texture_array_asset(
     uint32_t *texaddress_index
 )
 {
-    if (!_platform->load_asset(filename, image_size, image_buffer)) {
-        return false;
-    }
-
     uint32_t actual_size;
     load_image(image_buffer, image_size, (uint8_t *)state->bitmap_scratch, state->bitmap_scratch_size,
             x, y, &actual_size);
@@ -1043,7 +988,7 @@ load_texture_array_asset(
 
 void
 load_texture_asset_failed(
-    char *filename
+    const char *filename
 )
 {
     char msg[1024];
@@ -1080,7 +1025,8 @@ load_mesh_asset(
     Mesh *mesh
 )
 {
-    if (!_platform->load_asset(filename, mesh_buffer_size, mesh_buffer)) {
+    uint32_t actual_file_size = {};
+    if (!_platform->load_asset(filename, mesh_buffer_size, mesh_buffer, &actual_file_size)) {
         return false;
     }
 
@@ -1707,28 +1653,6 @@ add_asset_file(renderer_state *state, const char *asset_file_path)
 }
 
 int32_t
-add_asset_file_texture(renderer_state *state, int32_t asset_file_id)
-{
-    int32_t result = lookup_asset_file_to_texture(state, asset_file_id);
-    hassert(state->texture_count < harray_count(state->textures));
-    if (result < 0)
-    {
-        int32_t x, y;
-        asset_file *asset_file0 = state->asset_files + asset_file_id;
-        bool loaded = load_texture_asset(state, asset_file0->asset_file_path, state->asset_scratch, state->asset_scratch_size, &x, &y, state->textures + state->texture_count, GL_TEXTURE_2D);
-        if (!loaded)
-        {
-            load_texture_asset_failed(asset_file0->asset_file_path);
-            return false;
-        }
-        result = (int32_t)state->texture_count;
-        ++state->texture_count;
-        add_asset_file_texture_lookup(state, asset_file_id, (int32_t)state->textures[result]);
-    }
-    return result;
-}
-
-int32_t
 add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id, TextureFormat format)
 {
     int32_t result = lookup_asset_file_to_texaddress_index(state, asset_file_id);
@@ -1738,11 +1662,23 @@ add_asset_file_texaddress_index(renderer_state *state, int32_t asset_file_id, Te
         int32_t x, y;
         asset_file *asset_file0 = state->asset_files + asset_file_id;
         uint32_t texaddress_index;
-        bool loaded = load_texture_array_asset(
-            state,
+
+        uint32_t actual_file_size = {};
+
+        bool loaded = _platform->load_asset(
             asset_file0->asset_file_path,
-            state->asset_scratch,
             state->asset_scratch_size,
+            state->asset_scratch,
+            &actual_file_size
+        );
+        if (!loaded) {
+            return false;
+        }
+
+        loaded = load_texture_array_asset(
+            state,
+            state->asset_scratch,
+            actual_file_size,
             format,
             &x,
             &y,
@@ -1786,7 +1722,7 @@ add_asset_file_mesh(renderer_state *state, int32_t asset_file_id)
 }
 
 int32_t
-_add_asset(renderer_state *state, AssetType type, const char *asset_name, int32_t asset_file_id)
+_add_asset(renderer_state *state, RendererAssetType type, const char *asset_name, int32_t asset_file_id)
 {
     int32_t result = -1;
     hassert(state->asset_count < harray_count(state->assets));
@@ -1803,7 +1739,7 @@ _add_asset(renderer_state *state, AssetType type, const char *asset_name, int32_
 int32_t
 add_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id, v2 st0, v2 st1)
 {
-    int32_t result = _add_asset(state, AssetType::texture, asset_name, asset_file_id);
+    int32_t result = _add_asset(state, RendererAssetType::texture, asset_name, asset_file_id);
     asset *asset0 = state->assets + result;
     asset0->st0 = st0;
     asset0->st1 = st1;
@@ -1844,7 +1780,7 @@ add_rgba8_asset(renderer_state *state, const char *asset_name, const char *asset
 int32_t
 add_mesh_asset(renderer_state *state, const char *asset_name, int32_t asset_file_id)
 {
-    int32_t result = _add_asset(state, AssetType::mesh, asset_name, asset_file_id);
+    int32_t result = _add_asset(state, RendererAssetType::mesh, asset_name, asset_file_id);
     return result;
 }
 
@@ -1861,20 +1797,53 @@ add_mesh_asset(renderer_state *state, const char *asset_name, const char *asset_
     return result;
 }
 
-int32_t
-add_tilemap_asset(renderer_state *state, const char *asset_name, const char *asset_file_name, uint32_t width, uint32_t height, uint32_t tile_width, uint32_t tile_height, uint32_t spacing, uint32_t tile_id)
+AssetPack
+build_asset_pack(MemoryArena *arena)
 {
-    uint32_t tiles_wide = (width + spacing) / (tile_width + spacing);
-    uint32_t tile_x_position = tile_id % tiles_wide;
-    uint32_t tile_y_position = tile_id / tiles_wide;
-    float tile_x_base = tile_x_position * (tile_width + spacing) / (float)width;
-    float tile_y_base = tile_y_position * (tile_height + spacing) / (float)height;
-    float tile_x_offset = (float)(tile_width - 1) / width;
-    float tile_y_offset = (float)(tile_height - 1) / height;
-    v2 st0 = { tile_x_base + 0.001f, tile_y_base + tile_y_offset };
-    v2 st1 = { tile_x_base + tile_x_offset, tile_y_base + 0.001f};
+    AssetPack result;
+    const int MAX_ASSETS = 10;
+    const int MAX_PIECES = 10;
+    const int HASH_BITS = 6;
+    result.assets = PushArray("temp_assets", arena, Asset, MAX_ASSETS);
+    result.asset_pieces = PushArray("temp_asset_pieces", arena, AssetPiece, MAX_PIECES);
+    result.asset_hash_size = 1 << HASH_BITS;
+    result.asset_hash = PushArray("temp_asset_hash", arena, uint32_t, result.asset_hash_size);
+    result.filenames = (char *)PushSize("temp_asset_filenames", arena, MAX_PIECES * 100);
+    result.piece_storage_type = AssetPieceStorageType::Files;
 
-    return add_asset(state, asset_name, asset_file_name, st0, st1);
+    uint32_t next_filename = 0;
+    uint32_t next_asset_id = 0;
+    uint32_t next_piece_id = 0;
+
+    {
+
+        Asset &a = result.assets[next_asset_id];
+        a.asset_type = AssetType::Texture;
+        a.asset_sub_type = AssetSubType::Diffuse;
+        a.last_modified = 0;
+        a.num_asset_pieces = 1;
+        a.asset_piece_id = next_piece_id;
+        const char *asset_name = "testing/nobiax/modular_building/diffuse";
+        uint32_t asset_id = fnv1a_32((uint8_t *)asset_name, (uint32_t)strlen(asset_name));
+        a.asset_id = asset_id;
+        result.asset_hash[asset_id % result.asset_hash_size] = next_asset_id + 1;
+        next_asset_id++;
+
+        AssetPiece &p = result.asset_pieces[next_piece_id];
+        const char *filename = "testing/nobiax/modular_building/diffuse.tga";
+        p.offset = next_filename;
+        strcpy(result.filenames + next_filename, filename);
+        next_filename += (uint32_t)strlen(filename) + 1;
+        p.size = 50331692;
+        p.metadata.texture.container_format = AssetContainerFormat::Plain;
+        p.metadata.texture.texture_format = AssetTextureFormat::CompressedImage;
+        p.metadata.texture.dimension = {4096, 4096, 0};
+        p.metadata.texture.bpp = 32;
+        p.metadata.texture.num_mipmaps = 1;
+        next_piece_id++;
+    }
+
+    return result;
 }
 
 extern "C" RENDERER_SETUP(renderer_setup)
@@ -1896,6 +1865,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->bitmap_scratch = (char *)PushSize("bitmap_scratch", &state->arena, state->bitmap_scratch_size);
         state->asset_scratch_size = 4096 * 4096 * 4;
         state->asset_scratch = (uint8_t *)PushSize("asset_scratch", &state->arena, state->bitmap_scratch_size);
+
+        asset_management_state_init(&state->asset_state, &state->arena, 64, 256);
+        state->asset_pack = build_asset_pack(&state->arena);
+        add_pack_to_asset_management_state(&state->asset_state, &state->asset_pack);
     }
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
@@ -2489,91 +2462,69 @@ draw_overdraw(renderer_state *state)
     hglDepthFunc(GL_LESS);
 }
 
-
-void
-draw_quad(renderer_state *state, m4 *matrices, asset_descriptor *descriptors, render_entry_type_quad *quad)
+bool
+get_texaddress_index_from_asset_pack(
+    renderer_state *state,
+    int32_t asset_descriptor_id,
+    int32_t *texaddress_index,
+    v2 *st0,
+    v2 *st1
+)
 {
-    m4 projection = matrices[quad->matrix_id];
+    TIMED_FUNCTION();
+    *st0 = {0, 0};
+    *st1 = {1, 1};
+    bool result = false;
 
-    uint32_t texture = state->white_texture;
-    v2 st0 = {0, 0};
-    v2 st1 = {1, 1};
-    if (quad->asset_descriptor_id != -1)
+    LoadedAsset *loaded_asset = load_asset(&state->asset_state, asset_descriptor_id);
+
+    if (!loaded_asset)
     {
-        asset_descriptor *descriptor = descriptors + quad->asset_descriptor_id;
-        update_asset_descriptor_asset_id(state, descriptor);
-        if (descriptor->asset_id >= 0)
-        {
-            asset *descriptor_asset = state->assets + descriptor->asset_id;
-            st0 = descriptor_asset->st0;
-            st1 = descriptor_asset->st1;
-            int32_t asset_file_id = descriptor_asset->asset_file_id;
-            int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
-            if (texture_lookup >= 0)
-            {
-                texture = (uint32_t)texture_lookup;
-            }
-            else
-            {
-                int32_t texture_id = add_asset_file_texture(state, asset_file_id);
-                if (texture_id >= 0)
-                {
-                    texture = (uint32_t)texture_id;
-                }
-            }
-        }
+        return result;
     }
 
-    hglUniformMatrix4fv(state->imgui_program.u_projection_id, 1, GL_FALSE, (float *)&projection);
-    hglUniform1f(state->imgui_program.u_use_color_id, 1.0f);
-    hglBindVertexArray(state->vao);
-
-    uint32_t col = 0x00000000;
-    col |= (uint32_t)(quad->color.w * 255.0f) << 24;
-    col |= (uint32_t)(quad->color.z * 255.0f) << 16;
-    col |= (uint32_t)(quad->color.y * 255.0f) << 8;
-    col |= (uint32_t)(quad->color.x * 255.0f) << 0;
-    hglBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    struct
+    if (!loaded_asset->texture.initialized)
     {
-        v2 pos;
-        v2 uv;
-        uint32_t col;
-    } vertices[] = {
-        {
-            { quad->position.x, quad->position.y, },
-            { st0.x, st0.y },
-            col,
-        },
-        {
-            { quad->position.x + quad->size.x, quad->position.y, },
-            { st1.x, st0.y },
-            col,
-        },
-        {
-            { quad->position.x + quad->size.x, quad->position.y + quad->size.y, },
-            { st1.x, st1.y },
-            col,
-        },
-        {
-            { quad->position.x, quad->position.y + quad->size.y, },
-            { st0.x, st1.y },
-            col,
-        },
-    };
-    hglBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+        loaded_asset->texture.initialized = true;
+        hassert(loaded_asset->pack->piece_storage_type == AssetPieceStorageType::Files);
 
-    uint32_t indices[] = {
-        0, 1, 2,
-        2, 3, 0,
-    };
-    hglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->ibo);
-    hglBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), (GLvoid*)indices, GL_STREAM_DRAW);
+        const char *filename = loaded_asset->pack->filenames + loaded_asset->asset_piece->offset;
 
-    hglBindTexture(GL_TEXTURE_2D, texture);
-    hglDrawElements(GL_TRIANGLES, (GLsizei)harray_count(indices), GL_UNSIGNED_INT, (void *)0);
+        uint32_t actual_file_size;
+        bool loaded = _platform->load_asset(
+            filename,
+            loaded_asset->asset_piece->size,
+            state->asset_scratch,
+            &actual_file_size
+        );
 
-    hglBindVertexArray(0);
+        if (!loaded) {
+            return false;
+        }
+
+        TextureFormat format = TextureFormat::srgba;
+
+        uint32_t _texaddress_index;
+        int32_t x, y;
+        loaded = load_texture_array_asset(
+            state,
+            state->asset_scratch,
+            actual_file_size,
+            format,
+            &x,
+            &y,
+            &_texaddress_index);
+        if (!loaded)
+        {
+            load_texture_asset_failed(filename);
+            return false;
+        }
+        loaded_asset->texture.texaddress_index = (int32_t)_texaddress_index;
+    }
+
+    *texaddress_index = loaded_asset->texture.texaddress_index;
+    return true;
+
 }
 
 void
@@ -2590,7 +2541,13 @@ get_texaddress_index_from_asset_descriptor(
     *st0 = {0, 0};
     *st1 = {1, 1};
 
-    if (asset_descriptor_id != -1)
+    if (asset_descriptor_id == -1)
+    {
+    }
+    else if (get_texaddress_index_from_asset_pack(state, asset_descriptor_id, texaddress_index, st0, st1))
+    {
+    }
+    else
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
         switch (descriptor->source_type)
@@ -2673,77 +2630,6 @@ get_texaddress_index_from_asset_descriptor(
                 *texaddress_index = (int32_t)d->_texture;
             } break;
         }
-    }
-}
-
-void
-get_texture_id_from_asset_descriptor(
-    renderer_state *state,
-    asset_descriptor *descriptors,
-    int32_t asset_descriptor_id,
-    // out
-    uint32_t *texture,
-    v2 *st0,
-    v2 *st1)
-{
-    TIMED_FUNCTION();
-    *texture = state->white_texture;
-    *st0 = {0, 0};
-    *st1 = {1, 1};
-
-    if (asset_descriptor_id != -1)
-    {
-        asset_descriptor *descriptor = descriptors + asset_descriptor_id;
-        switch (descriptor->source_type)
-        {
-            case asset_descriptor_source_type::name:
-            {
-                update_asset_descriptor_asset_id(state, descriptor);
-                if (descriptor->asset_id >= 0)
-                {
-                    asset *descriptor_asset = state->assets + descriptor->asset_id;
-                    *st0 = descriptor_asset->st0;
-                    *st1 = descriptor_asset->st1;
-                    int32_t asset_file_id = descriptor_asset->asset_file_id;
-                    int32_t texture_lookup = lookup_asset_file_to_texture(state, asset_file_id);
-                    if (texture_lookup >= 0)
-                    {
-                        *texture = (uint32_t)texture_lookup;
-                    }
-                    else
-                    {
-                        int32_t texture_id = add_asset_file_texture(state, asset_file_id);
-                        if (texture_id >= 0)
-                        {
-                            *texture = (uint32_t)texture_id;
-                        }
-                    }
-                }
-            } break;
-            case asset_descriptor_source_type::framebuffer:
-            {
-                if (FramebufferInitialized(descriptor->framebuffer))
-                {
-                    *texture = descriptor->framebuffer->_texture;
-                }
-            } break;
-            case asset_descriptor_source_type::framebuffer_depth:
-            {
-                if (FramebufferInitialized(descriptor->framebuffer))
-                {
-                    *texture = descriptor->framebuffer->_renderbuffer;
-                }
-            } break;
-            case asset_descriptor_source_type::dynamic_mesh:
-            {
-                hassert(!"Not a texture asset type");
-            } break;
-            case asset_descriptor_source_type::dynamic_texture:
-            {
-                hassert(!"Not implemented");
-            } break;
-        }
-
     }
 }
 
@@ -5213,15 +5099,6 @@ extern "C" RENDERER_RENDER(renderer_render)
                     hglScissor(0, 0, size.x, size.y);
                     hglClearColor(color->r, color->g, color->b, color->a);
                     hglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-                    if (state->crash_on_gl_errors) hglErrorAssert();
-                } break;
-                case render_entry_type::quad:
-                {
-                    ExtractRenderElementWithSize(quad, item, header, element_size);
-                    hassert(matrix_count > 0 || item->matrix_id == -1);
-                    hassert(asset_descriptor_count > 0 || item->asset_descriptor_id == -1);
-                    draw_quad(state, matrices, asset_descriptors, item);
-                    ++quads_drawn;
                     if (state->crash_on_gl_errors) hglErrorAssert();
                 } break;
                 case render_entry_type::matrices:

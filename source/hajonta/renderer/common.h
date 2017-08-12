@@ -58,7 +58,6 @@ enum struct
 render_entry_type
 {
     clear,
-    quad,
     matrices,
     asset_descriptors,
     descriptors,
@@ -110,17 +109,6 @@ render_entry_type_readpixel
     render_entry_header header;
     v2i pixel_location;
     ReadPixelResult *result;
-};
-
-struct
-render_entry_type_quad
-{
-    render_entry_header header;
-    v3 position;
-    v3 size;
-    v4 color;
-    int32_t matrix_id;
-    int32_t asset_descriptor_id;
 };
 
 struct
@@ -805,20 +793,6 @@ _PushQuadFast(render_entry_list *list, v3 position, v3 size, v4 color, int32_t m
         quad_entry.position = position;
         quad_entry.size = size;
         quad_entry.color = color;
-    }
-}
-
-inline void
-_PushQuadSlow(render_entry_list *list, v3 position, v3 size, v4 color, int32_t matrix_id, int32_t asset_descriptor_id)
-{
-    render_entry_type_quad *entry = PushRenderElement(list, quad);
-    if (entry)
-    {
-        entry->position = position;
-        entry->size = size;
-        entry->color = color;
-        entry->matrix_id = matrix_id;
-        entry->asset_descriptor_id = asset_descriptor_id;
     }
 }
 

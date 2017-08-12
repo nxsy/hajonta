@@ -344,7 +344,7 @@ PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory)
     header_size += (64 - header_size) % 64;
     uint64_t total_size = size + header_size;
 
-    Sdl2MemoryBlock *block = (Sdl2MemoryBlock *)malloc(total_size);
+    Sdl2MemoryBlock *block = (Sdl2MemoryBlock *)malloc((size_t)total_size);
     block->block.base = (uint8_t *)block + header_size;
     Sdl2MemoryBlock *sentinel = &_state->memory_sentinel;
 #ifdef HAJONTA_DEBUG
@@ -396,7 +396,22 @@ PLATFORM_LOAD_ASSET(platform_load_asset)
         return false;
     }
 
-    SDL_RWread(sdlrw, dest, 1, size);
+    int64_t _size = SDL_RWsize(sdlrw);
+    if (_size < 0)
+    {
+        const char *error = SDL_GetError();
+        hassert(!error);
+        return false;
+    }
+    if (_size > size)
+    {
+        const char *error = "File larger than buffer provided";
+        hassert(!error);
+        return false;
+    }
+    *actual_size = (uint32_t)_size;
+
+    SDL_RWread(sdlrw, dest, 1, (size_t)_size);
     SDL_RWclose(sdlrw);
     return true;
 }
@@ -518,8 +533,6 @@ handle_sdl2_events(sdl2_state *state)
                         {
                             break;
                         }
-                        const char *foo = SDL_GetScancodeName(keysym.scancode);
-                        const char *bar = SDL_GetKeyName(sym);
                         int keypress = sym & ~SDLK_SCANCODE_MASK;
                         char c = 0;
                         if (keypress < 0x80 && keypress > 0)
@@ -634,7 +647,7 @@ sdl_queue_sound(sdl2_state *state, game_sound_output *sound_output)
 
 int
 #ifdef _WIN32
-WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+__stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 #else
 main(int argc, char *argv[])
 #endif
@@ -664,7 +677,7 @@ main(int argc, char *argv[])
 
     platform_memory memory = {};
     memory.size = 256 * 1024 * 1024;
-    memory.memory = malloc(memory.size);
+    memory.memory = malloc((size_t)memory.size);
     memory.cursor_settings.supported_modes[(uint32_t)platform_cursor_mode::normal] = true;
     memory.cursor_settings.supported_modes[(uint32_t)platform_cursor_mode::unlimited] = false;
     memory.cursor_settings.mode = platform_cursor_mode::normal;

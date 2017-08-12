@@ -2189,7 +2189,11 @@ DEMO(demo_a)
         state->metal_barrel_specular = add_asset(&state->assets, "metal_barrel_specular");
         state->metal_barrel_mesh = add_asset(&state->assets, "metal_barrel_mesh");
 
-        state->modular_building_diffuse = add_asset(&state->assets, "modular_building_diffuse");
+        const char *asset_name = "testing/nobiax/modular_building/diffuse";
+        uint32_t asset_id = fnv1a_32((uint8_t *)asset_name, (uint32_t)strlen(asset_name));
+        state->modular_building_diffuse = asset_id;
+        //state->modular_building_diffuse = add_asset(&state->assets, "modular_building_diffuse");
+
         state->modular_building_normal = add_asset(&state->assets, "modular_building_normal");
         state->modular_building_specular = add_asset(&state->assets, "modular_building_specular");
         state->modular_building_brick_door_mesh = add_asset(&state->assets, "modular_building_brick_door_mesh");
@@ -2942,136 +2946,6 @@ initialize(platform_memory *memory, demo_cowboy_state *state)
     state->np_camera.rotation.x = 0.5f * h_halfpi;
     state->np_camera.orthographic = 1;
 
-    {
-        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-        f.name = "Brown Cliff";
-        struct
-        {
-            const char *pretty_name;
-            const char *asset_name;
-        } _assets[] =
-        {
-            { "01", "knp_Brown_Cliff_01" },
-            { "Bottom_01", "knp_Brown_Cliff_Bottom_01" },
-            { "Bottom_Corner_01", "knp_Brown_Cliff_Bottom_Corner_01" },
-            { "Bottom_Corner_Green_Top_01", "knp_Brown_Cliff_Bottom_Corner_Green_Top_01" },
-            { "Bottom_Green_Top_01", "knp_Brown_Cliff_Bottom_Green_Top_01" },
-            { "Corner_01", "knp_Brown_Cliff_Corner_01" },
-            { "Corner_Green_Top_01", "knp_Brown_Cliff_Corner_Green_Top_01" },
-            { "End_01", "knp_Brown_Cliff_End_01" },
-            { "End_Green_Top_01", "knp_Brown_Cliff_End_Green_Top_01" },
-            { "Green_Top_01", "knp_Brown_Cliff_Green_Top_01" },
-            { "Top_01", "knp_Brown_Cliff_Top_01" },
-            { "Top_Corner_01", "knp_Brown_Cliff_Top_Corner_01" },
-            { "Waterfall_01", "knp_Brown_Waterfall_01" },
-            { "Waterfall_Top_01", "knp_Brown_Waterfall_Top_01" },
-        };
-        f.asset_start = state->num_assets;
-        f.count = harray_count(_assets);
-        for (uint32_t i = 0; i < harray_count(_assets); ++i)
-        {
-            auto &a = _assets[i];
-            AssetListEntry &l = state->asset_lists[state->num_assets++];
-            l.pretty_name = a.pretty_name;
-            l.asset_name = a.asset_name;
-            l.asset_id = add_asset(state->assets, l.asset_name);
-        }
-    }
-
-    {
-        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-        f.name = "Grey Cliff";
-        struct
-        {
-            const char *pretty_name;
-            const char *asset_name;
-        } _assets[] =
-        {
-            { "01", "knp_Grey_Cliff_01" },
-            { "Bottom_01", "knp_Grey_Cliff_Bottom_01" },
-            { "Bottom_Corner_01", "knp_Grey_Cliff_Bottom_Corner_01" },
-            { "Bottom_Corner_Green_Top_01", "knp_Grey_Cliff_Bottom_Corner_Green_Top_01" },
-            { "Bottom_Green_Top_01", "knp_Grey_Cliff_Bottom_Green_Top_01" },
-            { "Corner_01", "knp_Grey_Cliff_Corner_01" },
-            { "Corner_Green_Top_01", "knp_Grey_Cliff_Corner_Green_Top_01" },
-            { "End_01", "knp_Grey_Cliff_End_01" },
-            { "End_Green_Top_01", "knp_Grey_Cliff_End_Green_Top_01" },
-            { "Green_Top_01", "knp_Grey_Cliff_Green_Top_01" },
-            { "Top_01", "knp_Grey_Cliff_Top_01" },
-            { "Top_Corner_01", "knp_Grey_Cliff_Top_Corner_01" },
-            { "Waterfall_01", "knp_Grey_Waterfall_01" },
-            { "Waterfall_Top_01", "knp_Grey_Waterfall_Top_01" },
-        };
-        f.asset_start = state->num_assets;
-        f.count = harray_count(_assets);
-        for (uint32_t i = 0; i < harray_count(_assets); ++i)
-        {
-            auto &a = _assets[i];
-            AssetListEntry &l = state->asset_lists[state->num_assets++];
-            l.pretty_name = a.pretty_name;
-            l.asset_name = a.asset_name;
-            l.asset_id = add_asset(state->assets, l.asset_name);
-        }
-    }
-
-    {
-        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-        f.name = "Ground";
-        struct
-        {
-            const char *pretty_name;
-            const char *asset_name;
-        } _assets[] =
-        {
-            { "Grass", "knp_Plate_Grass_01" },
-            { "Grass Dirt", "knp_Plate_Grass_Dirt_01" },
-            { "River", "knp_Plate_River_01" },
-            { "River_Corner", "knp_Plate_River_Corner_01" },
-            { "River Corner Dirt", "knp_Plate_River_Corner_Dirt_01" },
-            { "River Dirt", "knp_Plate_River_Dirt_01" },
-        };
-        f.asset_start = state->num_assets;
-        f.count = harray_count(_assets);
-        for (uint32_t i = 0; i < harray_count(_assets); ++i)
-        {
-            auto &a = _assets[i];
-            AssetListEntry &l = state->asset_lists[state->num_assets++];
-            l.pretty_name = a.pretty_name;
-            l.asset_name = a.asset_name;
-            l.asset_id = add_asset(state->assets, l.asset_name);
-        }
-    }
-
-    {
-        AssetClassEntry &f = state->asset_classes[state->num_asset_classes++];
-        f.name = "Trees";
-        struct
-        {
-            const char *pretty_name;
-            const char *asset_name;
-        } _assets[] =
-        {
-            { "Large Oak Dark", "knp_Large_Oak_Dark_01" },
-            { "Large Oak Fall", "knp_Large_Oak_Fall_01" },
-            { "Large Oak Green", "knp_Large_Oak_Green_01" },
-        };
-        f.asset_start = state->num_assets;
-        f.count = harray_count(_assets);
-        for (uint32_t i = 0; i < harray_count(_assets); ++i)
-        {
-            auto &a = _assets[i];
-            AssetListEntry &l = state->asset_lists[state->num_assets++];
-            l.pretty_name = a.pretty_name;
-            l.asset_name = a.asset_name;
-            l.asset_id = add_asset(state->assets, l.asset_name);
-        }
-    }
-
-    for (uint32_t i = 0; i < state->num_asset_classes; ++i)
-    {
-        state->asset_class_names[i] = state->asset_classes[i].name;
-    }
-
     state->num_squares = MESH_SQUARE;
     state->test_meshes = PushArray(
         "test_meshes",
@@ -3248,6 +3122,7 @@ DEMO(demo_cowboy)
 
         initialize(memory, state);
     }
+    ClearRenderLists();
     demo_cowboy_state *state = (demo_cowboy_state *)gs->demo_cowboy_block->base;
     state->frame_state.delta_t = input->delta_t;
     state->frame_state.mouse_position = {(float)input->mouse.x, (float)(input->window.height - input->mouse.y)};
