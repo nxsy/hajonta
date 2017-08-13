@@ -18,5 +18,6 @@ IF EXIST %BUILDDIR%\assimp-vc140-mt.lib (
 
 cl %TOOL_CPPFLAGS% %TOOL_PATH%\obj_to_mesh_v1.cpp %TOOL_LINK%
 cl %TOOL_CPPFLAGS% %TOOL_PATH%\palette_image.cpp %TOOL_LINK%
+cl %TOOL_CPPFLAGS% %TOOL_PATH%\build_asset_pack.cpp %TOOL_LINK%
 
 popd

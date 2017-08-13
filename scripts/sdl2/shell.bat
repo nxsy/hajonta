@@ -5,4 +5,4 @@ REM call %VCDIR%\vcvarsall.bat x64
 REM
 call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\Tools"\VsDevCmd.bat -arch=amd64 -host_arch=amd64
 
-set PATH=%~dp0;%PATH%
+set PATH=%~dp0;%~dp0\..\..\build;%PATH%

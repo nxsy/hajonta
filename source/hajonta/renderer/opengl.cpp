@@ -637,6 +637,7 @@ struct renderer_state
     AssetManagementState asset_state;
 
     AssetPack asset_pack;
+    AssetPack asset_pack_file;
 
     TimerQueryData timer_query_data;
 
@@ -1846,6 +1847,51 @@ build_asset_pack(MemoryArena *arena)
     return result;
 }
 
+AssetPack
+build_asset_pack_file(MemoryArena *arena)
+{
+    AssetPack result;
+
+    uint32_t actual_file_size;
+    bool loaded = _platform->load_asset(
+        "assets.pack",
+        _state->asset_scratch_size,
+        _state->asset_scratch,
+        &actual_file_size
+    );
+    hassert(loaded);
+
+    union _header
+    {
+        uint32_t format;
+        char format_string[4];
+    } *header = (_header *)_state->asset_scratch;
+
+    hassert(header->format_string[0] == 'H');
+
+    uint32_t *version = (uint32_t *)(header + 1);
+
+    AssetFile_0 *af = (AssetFile_0 *)(version + 1);
+
+
+    result.assets = (Asset *)PushSize("pack_assets", arena, af->asset_size);
+    result.asset_count = af->asset_count;
+    result.asset_pieces = (AssetPiece *)PushSize("pack_asset_pieces", arena, af->piece_size);
+    result.asset_hash_size = af->asset_hash_size;
+    result.asset_hash = PushArray("pack_asset_hash", arena, uint32_t, af->asset_hash_size);
+    result.filenames = (char *)PushSize("pack_asset_filenames", arena, af->filename_size);
+    result.piece_storage_type = af->piece_storage_type;
+
+    uint8_t *content = ((uint8_t *)af) + af->header_size;
+
+    memcpy(result.assets, content + af->asset_offset, af->asset_size);
+    memcpy(result.asset_pieces, content + af->piece_offset, af->piece_size);
+    memcpy(result.asset_hash, content + af->hash_offset, af->hash_size);
+    memcpy(result.filenames, content + af->filename_offset, af->filename_size);
+
+    return result;
+}
+
 extern "C" RENDERER_SETUP(renderer_setup)
 {
     static std::chrono::steady_clock::time_point last_frame_start_time = std::chrono::steady_clock::now();
@@ -1856,6 +1902,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         memory->renderer_block = _platform->allocate_memory("renderer", 256 * 1024 * 1024);
         bootstrap_memory_arena(memory->renderer_block, renderer_state, arena);
         renderer_state *state = (renderer_state *)memory->renderer_block->base;
+        _state = state;
         state->command_state = PushStruct("command_state", &state->arena, CommandState);
         for (uint32_t i = 0; i < harray_count(state->command_state->lists.command_lists); ++i)
         {
@@ -1866,9 +1913,10 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->asset_scratch_size = 4096 * 4096 * 4;
         state->asset_scratch = (uint8_t *)PushSize("asset_scratch", &state->arena, state->bitmap_scratch_size);
 
-        asset_management_state_init(&state->asset_state, &state->arena, 64, 256);
+        asset_management_state_init(&state->asset_state, &state->arena, 4, 8);
         state->asset_pack = build_asset_pack(&state->arena);
-        add_pack_to_asset_management_state(&state->asset_state, &state->asset_pack);
+        state->asset_pack_file = build_asset_pack_file(&state->arena);
+        add_pack_to_asset_management_state(&state->asset_state, &state->asset_pack_file);
     }
     GlobalDebugTable = memory->debug_table;
     TIMED_FUNCTION();
