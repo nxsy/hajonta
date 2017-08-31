@@ -1297,7 +1297,7 @@ load_program_failed(
 
 void
 load_mesh_asset_failed(
-    char *filename
+    const char *filename
 )
 {
     char msg[1024];
@@ -1820,7 +1820,7 @@ build_asset_pack(MemoryArena *arena)
 
         Asset &a = result.assets[next_asset_id];
         a.asset_type = AssetType::Texture;
-        a.asset_sub_type = AssetSubType::Diffuse;
+        a.asset_sub_type.texture = TextureAssetSubType::Diffuse;
         a.last_modified = 0;
         a.num_asset_pieces = 1;
         a.asset_piece_id = next_piece_id;
@@ -1913,7 +1913,7 @@ extern "C" RENDERER_SETUP(renderer_setup)
         state->asset_scratch_size = 4096 * 4096 * 4;
         state->asset_scratch = (uint8_t *)PushSize("asset_scratch", &state->arena, state->bitmap_scratch_size);
 
-        asset_management_state_init(&state->asset_state, &state->arena, 4, 8);
+        asset_management_state_init(&state->asset_state, &state->arena, 16, 32);
         state->asset_pack = build_asset_pack(&state->arena);
         state->asset_pack_file = build_asset_pack_file(&state->arena);
         add_pack_to_asset_management_state(&state->asset_state, &state->asset_pack_file);
@@ -1995,111 +1995,14 @@ extern "C" RENDERER_SETUP(renderer_setup)
         //state->flush_for_profiling = 1;
         add_asset(state, "mouse_cursor_old", "ui/slick_arrows/slick_arrow-delta.png", {0.0f, 0.0f}, {1.0f, 1.0f});
         add_asset(state, "mouse_cursor", "testing/kenney/cursorSword_silver.png", {0.0f, 0.0f}, {1.0f, 1.0f});
-        add_mesh_asset(state, "plane_mesh", "testing/plane.hjm");
-        add_mesh_asset(state, "ground_plane_mesh", "testing/ground_plane.hjm");
         add_mesh_asset(state, "tree_mesh", "testing/low_poly_tree/tree.hjm");
-        add_asset(state, "tree_texture", "testing/low_poly_tree/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "horse_mesh", "testing/rigged_horse/horse.hjm");
-        add_asset(state, "horse_texture", "testing/rigged_horse/bake.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "chest_mesh", "testing/chest/chest.hjm");
-        add_asset(state, "chest_texture", "testing/chest/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "konserian_mesh", "testing/konserian_swamptree/konserian.hjm");
-        add_asset(state, "konserian_texture", "testing/konserian_swamptree/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "cactus_mesh", "testing/cactus/cactus.hjm");
-        add_asset(state, "cactus_diffuse", "testing/cactus/diffuse.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "kitchen_mesh", "testing/kitchen/kitchen.hjm");
-        add_asset(state, "kitchen_texture", "testing/kitchen/BAKE.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "nature_pack_tree_mesh", "testing/kenney/Nature_Pack_3D/tree.hjm");
-        add_asset(state, "nature_pack_tree_texture", "testing/kenney/Nature_Pack_3D/tree.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_asset(state, "another_ground_0", "testing/kenney/rpgTile039.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "cube_mesh", "testing/cube.hjm");
-        add_asset(state, "cube_texture", "testing/wood-tex2a.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-
-        add_asset(state, "knp_palette", "testing/kenney/Nature_Pack_3D/palettised/palette.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "knp_Brown_Cliff_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Corner_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Bottom_Green_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Bottom_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Corner_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_End_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_End_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_End_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Cliff_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Top_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Cliff_Top_Corner_01", "testing/kenney/Nature_Pack_3D/Brown_Cliff_Top_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Waterfall_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_01.hjm");
-        add_mesh_asset(state, "knp_Brown_Waterfall_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Brown_Waterfall_Top_01.hjm");
-        add_mesh_asset(state, "knp_Campfire_01", "testing/kenney/Nature_Pack_3D/palettised/Campfire_01.hjm");
-        add_mesh_asset(state, "knp_Fallen_Trunk_01", "testing/kenney/Nature_Pack_3D/palettised/Fallen_Trunk_01.hjm");
-        add_mesh_asset(state, "knp_Flower_Red_01", "testing/kenney/Nature_Pack_3D/palettised/Flower_Red_01.hjm");
-        add_mesh_asset(state, "knp_Flower_Tall_Red_01", "testing/kenney/Nature_Pack_3D/palettised/Flower_Tall_Red_01.hjm");
-        add_mesh_asset(state, "knp_Flower_Tall_Yellow_01", "testing/kenney/Nature_Pack_3D/palettised/Flower_Tall_Yellow_01.hjm");
-        add_mesh_asset(state, "knp_Flower_Tall_Yellow_02", "testing/kenney/Nature_Pack_3D/palettised/Flower_Tall_Yellow_02.hjm");
-        add_mesh_asset(state, "knp_Flower_Yellow_01", "testing/kenney/Nature_Pack_3D/palettised/Flower_Yellow_01.hjm");
-        add_mesh_asset(state, "knp_Flower_Yellow_02", "testing/kenney/Nature_Pack_3D/palettised/Flower_Yellow_02.hjm");
-        add_mesh_asset(state, "knp_Grass_01", "testing/kenney/Nature_Pack_3D/palettised/Grass_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Bottom_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Bottom_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Bottom_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Bottom_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Bottom_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Bottom_Corner_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Bottom_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Bottom_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Corner_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Corner_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_End_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_End_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_End_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_End_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Green_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Green_Top_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Top_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Cliff_Top_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Cliff_Top_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Waterfall_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Waterfall_01.hjm");
-        add_mesh_asset(state, "knp_Grey_Waterfall_Top_01", "testing/kenney/Nature_Pack_3D/palettised/Grey_Waterfall_Top_01.hjm");
-        add_mesh_asset(state, "knp_Hanging_Moss_01", "testing/kenney/Nature_Pack_3D/palettised/Hanging_Moss_01.hjm");
-        add_mesh_asset(state, "knp_Large_Oak_Dark_01", "testing/kenney/Nature_Pack_3D/Large_Oak_Dark_01.hjm");
-        add_mesh_asset(state, "knp_Large_Oak_Fall_01", "testing/kenney/Nature_Pack_3D/Large_Oak_Fall_01.hjm");
-        add_mesh_asset(state, "knp_Large_Oak_Green_01", "testing/kenney/Nature_Pack_3D/Large_Oak_Green_01.hjm");
-        add_mesh_asset(state, "knp_Mushroom_Brown_01", "testing/kenney/Nature_Pack_3D/palettised/Mushroom_Brown_01.hjm");
-        add_mesh_asset(state, "knp_Mushroom_Red_01", "testing/kenney/Nature_Pack_3D/palettised/Mushroom_Red_01.hjm");
-        add_mesh_asset(state, "knp_Mushroom_Tall_01", "testing/kenney/Nature_Pack_3D/palettised/Mushroom_Tall_01.hjm");
-        add_mesh_asset(state, "knp_Oak_Dark_01", "testing/kenney/Nature_Pack_3D/palettised/Oak_Dark_01.hjm");
-        add_mesh_asset(state, "knp_Oak_Fall_01", "testing/kenney/Nature_Pack_3D/palettised/Oak_Fall_01.hjm");
-        add_mesh_asset(state, "knp_Oak_Green_01", "testing/kenney/Nature_Pack_3D/palettised/Oak_Green_01.hjm");
-        add_mesh_asset(state, "knp_Plant_1_01", "testing/kenney/Nature_Pack_3D/palettised/Plant_1_01.hjm");
-        add_mesh_asset(state, "knp_Plant_2_01", "testing/kenney/Nature_Pack_3D/palettised/Plant_2_01.hjm");
-        add_mesh_asset(state, "knp_Plant_3_01", "testing/kenney/Nature_Pack_3D/palettised/Plant_3_01.hjm");
-        add_mesh_asset(state, "knp_Plate_Grass_01", "testing/kenney/Nature_Pack_3D/Plate_Grass_01.hjm");
-        add_mesh_asset(state, "knp_Plate_Grass_Dirt_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_Grass_Dirt_01.hjm");
-        add_mesh_asset(state, "knp_Plate_River_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_River_01.hjm");
-        add_mesh_asset(state, "knp_Plate_River_Corner_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_River_Corner_01.hjm");
-        add_mesh_asset(state, "knp_Plate_River_Corner_Dirt_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_River_Corner_Dirt_01.hjm");
-        add_mesh_asset(state, "knp_Plate_River_Dirt_01", "testing/kenney/Nature_Pack_3D/palettised/Plate_River_Dirt_01.hjm");
-        add_mesh_asset(state, "knp_Rock_1_01", "testing/kenney/Nature_Pack_3D/palettised/Rock_1_01.hjm");
-        add_mesh_asset(state, "knp_Rock_2_01", "testing/kenney/Nature_Pack_3D/palettised/Rock_2_01.hjm");
-        add_mesh_asset(state, "knp_Rock_3_01", "testing/kenney/Nature_Pack_3D/palettised/Rock_3_01.hjm");
-        add_mesh_asset(state, "knp_Rock_4_01", "testing/kenney/Nature_Pack_3D/palettised/Rock_4_01.hjm");
-        add_mesh_asset(state, "knp_Rock_5_01", "testing/kenney/Nature_Pack_3D/palettised/Rock_5_01.hjm");
-        add_mesh_asset(state, "knp_Rock_6_01", "testing/kenney/Nature_Pack_3D/palettised/Rock_6_01.hjm");
-        add_mesh_asset(state, "knp_Tall_Rock_1_01", "testing/kenney/Nature_Pack_3D/palettised/Tall_Rock_1_01.hjm");
-        add_mesh_asset(state, "knp_Tall_Rock_2_01", "testing/kenney/Nature_Pack_3D/palettised/Tall_Rock_2_01.hjm");
-        add_mesh_asset(state, "knp_Tall_Rock_3_01", "testing/kenney/Nature_Pack_3D/palettised/Tall_Rock_3_01.hjm");
-        add_mesh_asset(state, "knp_Tent_01", "testing/kenney/Nature_Pack_3D/palettised/Tent_01.hjm");
-        add_mesh_asset(state, "knp_Tent_Poles_01", "testing/kenney/Nature_Pack_3D/palettised/Tent_Poles_01.hjm");
-        add_mesh_asset(state, "knp_Tree_01", "testing/kenney/Nature_Pack_3D/palettised/Tree_01.hjm");
-        add_mesh_asset(state, "knp_Tree_02", "testing/kenney/Nature_Pack_3D/palettised/Tree_02.hjm");
-        add_mesh_asset(state, "knp_Trunk_01", "testing/kenney/Nature_Pack_3D/palettised/Trunk_01.hjm");
-        add_mesh_asset(state, "knp_Trunk_02", "testing/kenney/Nature_Pack_3D/palettised/Trunk_02.hjm");
-        add_mesh_asset(state, "knp_Trunk_Alt_01", "testing/kenney/Nature_Pack_3D/palettised/Trunk_Alt_01.hjm");
-        add_mesh_asset(state, "knp_Trunk_Alt_02", "testing/kenney/Nature_Pack_3D/palettised/Trunk_Alt_02.hjm");
-        add_mesh_asset(state, "knp_Water_lily_01", "testing/kenney/Nature_Pack_3D/palettised/Water_lily_01.hjm");
-        add_mesh_asset(state, "knp_Wood_Fence_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_01.hjm");
-        add_mesh_asset(state, "knp_Wood_Fence_Broken_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Broken_01.hjm");
-        add_mesh_asset(state, "knp_Wood_Fence_Gate_01", "testing/kenney/Nature_Pack_3D/palettised/Wood_Fence_Gate_01.hjm");
 
         add_mesh_asset(state, "kenney_blocky_advanced_mesh", "testing/kenney/blocky_advanced4.hjm");
         add_mesh_asset(state, "kenney_blocky_advanced_mesh2", "testing/kenney/blocky_advanced4.hjm");
         add_asset(state, "kenney_blocky_advanced_cowboy_texture", "testing/kenney/skin_exclusiveCowboy.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "blockfigureRigged6_mesh", "testing/human_low.hjm");
         add_asset(state, "blockfigureRigged6_texture", "testing/blockfigureRigged6.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_mesh_asset(state, "cube_bounds_mesh", "testing/cube_bounds.hjm");
         add_asset(state, "white_texture", "testing/white.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_mesh_asset(state, "dog2_mesh", "testing/dog2/dog3.hjm");
         add_asset(state, "dog2_texture", "testing/dog2/dog3C.png", {0.0f, 1.0f}, {1.0f, 0.0f});
@@ -2107,27 +2010,6 @@ extern "C" RENDERER_SETUP(renderer_setup)
         add_rgba8_asset(state, "water_normal", "testing/water_normal.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_rgba8_asset(state, "water_dudv", "testing/water_dudv.png", {0.0f, 1.0f}, {1.0f, 0.0f});
         add_asset(state, "square_texture", "testing/square.png", {0.0f, 1.0f}, {1.0f, 0.0f});
-
-        add_asset(state, "pattern_46_diffuse", "testing/nobiax/textures/pack08/pattern_46/diffus.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "pattern_46_normal", "testing/nobiax/textures/pack08/pattern_46/normal.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "pattern_46_specular", "testing/nobiax/textures/pack08/pattern_46/specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-
-        add_mesh_asset(state, "barrel_mesh", "testing/nobiax/wood_barrels/big_wood_barrel.hjm");
-        add_asset(state, "barrel_diffuse", "testing/nobiax/wood_barrels/big_diffus.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "barrel_normal", "testing/nobiax/wood_barrels/big_normal.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "barrel_specular", "testing/nobiax/wood_barrels/big_specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-
-        add_mesh_asset(state, "metal_barrel_mesh", "testing/nobiax/metal_barrel/metal_barrel.hjm");
-        add_asset(state, "metal_barrel_diffuse", "testing/nobiax/metal_barrel/diffus_blue.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "metal_barrel_normal", "testing/nobiax/metal_barrel/normal_hard_bumps.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "metal_barrel_specular", "testing/nobiax/metal_barrel/specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-
-        add_mesh_asset(state, "modular_building_brick_door_mesh", "testing/nobiax/modular_building/brick_door.hjm");
-        add_mesh_asset(state, "modular_building_brick_wall_mesh", "testing/nobiax/modular_building/wall_brick_1.hjm");
-        add_mesh_asset(state, "modular_building_brick_small_window_mesh", "testing/nobiax/modular_building/brick_small_window_1.hjm");
-        add_asset(state, "modular_building_diffuse", "testing/nobiax/modular_building/diffuse.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "modular_building_normal", "testing/nobiax/modular_building/normal.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
-        add_rgba8_asset(state, "modular_building_specular", "testing/nobiax/modular_building/specular.tga", {0.0f, 1.0f}, {1.0f, 0.0f});
 
         uint32_t scratch_pos = 0;
         for (uint32_t i = 0; i < harray_count(state->indices_scratch) / 6; ++i)
@@ -2550,7 +2432,23 @@ get_texaddress_index_from_asset_pack(
             return false;
         }
 
-        TextureFormat format = TextureFormat::srgba;
+        TextureFormat format = {};
+        switch(loaded_asset->asset->asset_sub_type.texture)
+        {
+            case TextureAssetSubType::Diffuse:
+            {
+                format = TextureFormat::srgba;
+            } break;
+            case TextureAssetSubType::Specular:
+            case TextureAssetSubType::Normal:
+            {
+                format = TextureFormat::rgba8;
+            } break;
+            default:
+            {
+                hassert("!unreachable, hopefully");
+            }
+        }
 
         uint32_t _texaddress_index;
         int32_t x, y;
@@ -2681,6 +2579,42 @@ get_texaddress_index_from_asset_descriptor(
     }
 }
 
+LoadedAsset *
+load_mesh_from_asset_pack(
+    renderer_state *state,
+    uint32_t asset_descriptor_id
+)
+{
+    LoadedAsset *loaded_asset = load_asset(&state->asset_state, asset_descriptor_id);
+
+    if (!loaded_asset)
+    {
+        return loaded_asset;
+    }
+
+    if (!loaded_asset->mesh.initialized)
+    {
+        hassert(loaded_asset->pack->piece_storage_type == AssetPieceStorageType::Files);
+        const char *filename = loaded_asset->pack->filenames + loaded_asset->asset_piece->offset;
+
+        loaded_asset->mesh.mesh = PushStruct("mesh_from_asset_pack", &state->arena, Mesh);
+
+        bool loaded = load_mesh_asset(state, filename,
+            state->asset_scratch,
+            state->asset_scratch_size,
+            loaded_asset->mesh.mesh
+        );
+        if (!loaded)
+        {
+            load_mesh_asset_failed(filename);
+            return 0;
+        }
+        loaded_asset->mesh.initialized = 1;
+    }
+
+    return loaded_asset;
+}
+
 Mesh *
 get_mesh_from_asset_descriptor(
     renderer_state *state,
@@ -2690,7 +2624,21 @@ get_mesh_from_asset_descriptor(
     TIMED_FUNCTION();
     Mesh *mesh = 0;
     bool result = false;
-    if (asset_descriptor_id != -1)
+    if (asset_descriptor_id == -1)
+    {
+        return mesh;
+    }
+
+    LoadedAsset *loaded_asset = load_mesh_from_asset_pack(state, asset_descriptor_id);
+    int32_t *load_state = 0;
+    V3Bones **v3bones_target = 0;
+    if (loaded_asset)
+    {
+        mesh = loaded_asset->mesh.mesh;
+        load_state = &loaded_asset->mesh.load_state;
+        v3bones_target = &loaded_asset->mesh.v3bones;
+    }
+    else
     {
         asset_descriptor *descriptor = descriptors + asset_descriptor_id;
         switch (descriptor->source_type)
@@ -2730,97 +2678,104 @@ get_mesh_from_asset_descriptor(
                 result = true;
             } break;
         }
+        load_state = &descriptor->load_state;
+        v3bones_target = &descriptor->v3bones;
+    }
 
-        if (result && descriptor->load_state != 2)
+    if (!mesh)
+    {
+        return mesh;
+    }
+
+    if (result && *load_state != 2)
+    {
+        *load_state = 2;
+        switch (mesh->mesh_format)
         {
-            descriptor->load_state = 2;
-            switch (mesh->mesh_format)
+            case MeshFormat::v3_bones:
             {
-                case MeshFormat::v3_bones:
-                {
-                    auto &v3bones = *mesh->v3.v3bones;
-                    descriptor->v3bones = mesh->v3.v3bones;
+                auto &v3bones = *mesh->v3.v3bones;
+                *v3bones_target = mesh->v3.v3bones;
 
-                    int32_t first_bone = 0;
+                int32_t first_bone = 0;
+                for (uint32_t i = 0; i < mesh->num_bones; ++i)
+                {
+                    if (v3bones.bone_parents[i] == -1)
+                    {
+                        first_bone = (int32_t)i;
+                        break;
+                    }
+                }
+
+                int32_t stack_location = 0;
+
+                int32_t stack[100];
+                stack[0] = first_bone;
+                struct
+                {
+                    int32_t bone_id;
+                    m4 transform;
+                } parent_list[100];
+                int32_t parent_list_location = 0;
+
+                while (stack_location >= 0)
+                {
+                    int32_t bone = stack[stack_location];
+
+                    int32_t parent_bone = v3bones.bone_parents[bone];
+                    --stack_location;
+                    while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
+                    {
+                        --parent_list_location;
+                    }
+                    ++parent_list_location;
+
+                    m4 parent_matrix = m4identity();
+                    if (parent_list_location)
+                    {
+                        parent_matrix = parent_list[parent_list_location - 1].transform;
+                    }
+
+                    m4 scale = m4scale(v3bones.default_transforms[bone].scale);
+                    m4 translate = m4translate(v3bones.default_transforms[bone].translate);
+                    m4 rotate = m4rotation(v3bones.default_transforms[bone].q);
+                    m4 local_matrix = m4mul(translate,m4mul(rotate, scale));
+
+
+                    m4 global_transform = m4mul(parent_matrix, local_matrix);
+
+                    parent_list[parent_list_location] = {
+                        bone,
+                        global_transform,
+                    };
+
+                    v3bones.default_bones[bone] = m4mul(global_transform, v3bones.bone_offsets[bone]);
+
                     for (uint32_t i = 0; i < mesh->num_bones; ++i)
                     {
-                        if (v3bones.bone_parents[i] == -1)
+                        if (v3bones.bone_parents[i] == bone)
                         {
-                            first_bone = (int32_t)i;
-                            break;
+                            stack_location++;
+                            stack[stack_location] = (int32_t)i;
                         }
                     }
+                }
+            } break;
 
-                    int32_t stack_location = 0;
+            case MeshFormat::v3_boneless:
+            {
 
-                    int32_t stack[100];
-                    stack[0] = first_bone;
-                    struct
-                    {
-                        int32_t bone_id;
-                        m4 transform;
-                    } parent_list[100];
-                    int32_t parent_list_location = 0;
+            } break;
 
-                    while (stack_location >= 0)
-                    {
-                        int32_t bone = stack[stack_location];
+            case MeshFormat::first:
+            {
+                hassert(!"deprecated");
+            } break;
 
-                        int32_t parent_bone = v3bones.bone_parents[bone];
-                        --stack_location;
-                        while (parent_list[parent_list_location].bone_id != parent_bone && parent_list_location >= 0)
-                        {
-                            --parent_list_location;
-                        }
-                        ++parent_list_location;
-
-                        m4 parent_matrix = m4identity();
-                        if (parent_list_location)
-                        {
-                            parent_matrix = parent_list[parent_list_location - 1].transform;
-                        }
-
-                        m4 scale = m4scale(v3bones.default_transforms[bone].scale);
-                        m4 translate = m4translate(v3bones.default_transforms[bone].translate);
-                        m4 rotate = m4rotation(v3bones.default_transforms[bone].q);
-                        m4 local_matrix = m4mul(translate,m4mul(rotate, scale));
-
-
-                        m4 global_transform = m4mul(parent_matrix, local_matrix);
-
-                        parent_list[parent_list_location] = {
-                            bone,
-                            global_transform,
-                        };
-
-                        v3bones.default_bones[bone] = m4mul(global_transform, v3bones.bone_offsets[bone]);
-
-                        for (uint32_t i = 0; i < mesh->num_bones; ++i)
-                        {
-                            if (v3bones.bone_parents[i] == bone)
-                            {
-                                stack_location++;
-                                stack[stack_location] = (int32_t)i;
-                            }
-                        }
-                    }
-                } break;
-
-                case MeshFormat::v3_boneless:
-                {
-
-                } break;
-
-                case MeshFormat::first:
-                {
-                    hassert(!"deprecated");
-                } break;
-
-                case MeshFormat::just_vertices:
-                {
-                    // Nothing to do.
-                } break;
-            }
+            case MeshFormat::just_vertices:
+            {
+                // Nothing to do.
+            } break;
         }
     }
     return mesh;
@@ -5069,7 +5024,6 @@ extern "C" RENDERER_RENDER(renderer_render)
     }
 
     uint32_t quads_drawn = 0;
-    uint32_t meshes_drawn[1000] = {};
     for (uint32_t ii = 0; ii < render_lists_to_process_count; ++ii)
     {
         render_entry_list *render_list = _platform->render_lists[render_lists_to_process[ii]];
@@ -5185,7 +5139,6 @@ extern "C" RENDERER_RENDER(renderer_render)
                 case render_entry_type::mesh_from_asset:
                 {
                     ExtractRenderElementWithSize(mesh_from_asset, item, header, element_size);
-                    ++meshes_drawn[item->mesh_asset_descriptor_id];
                     draw_mesh_from_asset(
                         state,
                         &render_list->config,
@@ -5428,7 +5381,6 @@ extern "C" RENDERER_RENDER(renderer_render)
     CollectAndSwapTimers(&state->timer_query_data);
 
     input->mouse = state->original_mouse_input;
-    (void)meshes_drawn;
 
     hglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     hglErrorAssert();

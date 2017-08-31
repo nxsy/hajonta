@@ -159,7 +159,6 @@ show_debug_main_menu(demo_cowboy_state *state)
             ImGui::MenuItem("Show lights", "", &state->debug->show_lights);
             ImGui::MenuItem("Show textures", "", &state->debug->show_textures);
             ImGui::MenuItem("Show camera", "", &state->debug->show_camera);
-            ImGui::MenuItem("Show nature pack", "", &state->debug->show_nature_pack);
             ImGui::MenuItem("Show perlin", "", &state->debug->perlin.show);
             ImGui::MenuItem("Show armature", "", &state->debug->armature.show);
             ImGui::EndMenu();
@@ -2173,35 +2172,41 @@ DEMO(demo_a)
         RenderPipelineFramebuffer *fb_mousepicking = state->render_pipeline.framebuffers + state->fb_mousepicking;
         fb_mousepicking->no_clear_each_frame = 1;
         PipelineInit(&state->render_pipeline, &state->assets);
-        state->ground_plane = add_asset(&state->assets, "ground_plane_mesh");
-        state->diffuse46 = add_asset(&state->assets, "pattern_46_diffuse");
-        state->normal46 = add_asset(&state->assets, "pattern_46_normal");
-        state->specular46 = add_asset(&state->assets, "pattern_46_specular");
-        state->mouse_cursor = add_asset(&state->assets, "mouse_cursor");
 
-        state->barrel_diffuse = add_asset(&state->assets, "barrel_diffuse");
-        state->barrel_normal = add_asset(&state->assets, "barrel_normal");
-        state->barrel_specular = add_asset(&state->assets, "barrel_specular");
-        state->barrel_mesh = add_asset(&state->assets, "barrel_mesh");
+#define ASSET_ID(_asset_name) (fnv1a_32((uint8_t *)_asset_name, (uint32_t)strlen(_asset_name)));
 
-        state->metal_barrel_diffuse = add_asset(&state->assets, "metal_barrel_diffuse");
-        state->metal_barrel_normal = add_asset(&state->assets, "metal_barrel_normal");
-        state->metal_barrel_specular = add_asset(&state->assets, "metal_barrel_specular");
-        state->metal_barrel_mesh = add_asset(&state->assets, "metal_barrel_mesh");
+        state->ground_plane = ASSET_ID("testing/ground_plane_mesh");
 
-        const char *asset_name = "testing/nobiax/modular_building/diffuse";
-        uint32_t asset_id = fnv1a_32((uint8_t *)asset_name, (uint32_t)strlen(asset_name));
-        state->modular_building_diffuse = asset_id;
-        //state->modular_building_diffuse = add_asset(&state->assets, "modular_building_diffuse");
+        state->diffuse46 = ASSET_ID("testing/nobiax/textures/pack08/pattern_46/diffuse");
+        state->normal46 = ASSET_ID("testing/nobiax/textures/pack08/pattern_46/normal");
+        state->specular46 = ASSET_ID("testing/nobiax/textures/pack08/pattern_46/specular");
 
-        state->modular_building_normal = add_asset(&state->assets, "modular_building_normal");
-        state->modular_building_specular = add_asset(&state->assets, "modular_building_specular");
-        state->modular_building_brick_door_mesh = add_asset(&state->assets, "modular_building_brick_door_mesh");
-        state->modular_building_brick_wall_mesh = add_asset(&state->assets, "modular_building_brick_wall_mesh");
-        state->modular_building_brick_small_window_mesh = add_asset(&state->assets, "modular_building_brick_small_window_mesh");
+        state->mouse_cursor = ASSET_ID("testing/kenney/cursor");
 
-        state->cactus_diffuse = add_asset(&state->assets, "cactus_diffuse");
-        state->cactus_mesh = add_asset(&state->assets, "cactus_mesh");
+        state->barrel_diffuse = ASSET_ID("testing/nobiax/wood_barrels/diffuse");
+        state->barrel_normal = ASSET_ID("testing/nobiax/wood_barrels/normal");
+        state->barrel_specular = ASSET_ID("testing/nobiax/wood_barrels/specular");
+
+        state->barrel_mesh = ASSET_ID("testing/nobiax/wood_barrels/big_wood_barrel");
+
+        state->metal_barrel_diffuse = ASSET_ID("testing/nobiax/metal_barrel/diffuse");
+        state->metal_barrel_normal = ASSET_ID("testing/nobiax/metal_barrel/normal");
+        state->metal_barrel_specular = ASSET_ID("testing/nobiax/metal_barrel/specular");
+
+        state->metal_barrel_mesh = ASSET_ID("testing/nobiax/metal_barrel/metal_barrel");
+
+
+        state->modular_building_diffuse = ASSET_ID("testing/nobiax/modular_building/diffuse");
+        state->modular_building_normal = ASSET_ID("testing/nobiax/modular_building/normal");
+        state->modular_building_specular = ASSET_ID("testing/nobiax/modular_building/specular");
+
+        state->modular_building_brick_door_mesh = ASSET_ID("testing/nobiax/modular_building/brick_door");
+        state->modular_building_brick_wall_mesh = ASSET_ID("testing/nobiax/modular_building/wall_brick_1");
+        state->modular_building_brick_small_window_mesh = ASSET_ID("testing/nobiax/modular_building/brick_small_window_1");
+
+
+        state->cactus_diffuse = ASSET_ID("testing/cactus/diffuse");
+        state->cactus_mesh = ASSET_ID("testing/cactus/cactus");
 
         state->materials[0] = {
             state->diffuse46,
@@ -2657,6 +2662,8 @@ DEMO(demo_a)
         {
             ImGui::MenuItem("Show lights", "", &state->show_lights);
             ImGui::MenuItem("Show camera", "", &state->show_camera);
+
+			ImGui::MenuItem("Profiling", "", &gs->debug.debug_system->show);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -3669,43 +3676,6 @@ DEMO(demo_cowboy)
             state->asset_ids->blocky_advanced_texture,
             (int32_t)ArmatureIds::test1);
 
-        /*
-        model = m4translate({0, height + 0.5f, 0});
-        MeshFromAssetFlags cube_flags = {};
-        cube_flags.depth_disabled = 1;
-        PushMeshFromAsset(
-            &state->pipeline_elements.rl_three_dee.list,
-            (uint32_t)matrix_ids::mesh_projection_matrix,
-            (uint32_t)matrix_ids::mesh_view_matrix,
-            model,
-            state->asset_ids.cube_bounds_mesh,
-            state->asset_ids.white_texture,
-            0,
-            -1,
-            cube_flags,
-            ShaderType::standard
-        );
-        */
-        /*
-        {
-            m4 model = m4scale(0.5);
-            MeshFromAssetFlags flags = {};
-            flags.depth_disabled = 1;
-            PushMeshFromAsset(
-                &state->pipeline_elements.rl_three_dee_debug.list,
-                (uint32_t)matrix_ids::mesh_projection_matrix,
-                (uint32_t)matrix_ids::mesh_view_matrix,
-                model,
-                state->asset_ids.ground_plane_mesh,
-                state->asset_ids.square_texture,
-                0,
-                -1,
-                flags,
-                ShaderType::standard
-            );
-        }
-        */
-
         v2i noise_location = {
             (int32_t)(noise2p.width / 2) + 1,
             (int32_t)(noise2p.height / 2 - 1)
@@ -3903,26 +3873,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->initialized = 1;
         //initialize(memory, state);
         auto *asset_descriptors = &state->assets;
-        //state->asset_ids.mouse_cursor = add_asset(asset_descriptors, "mouse_cursor");
-        state->asset_ids.plane_mesh = add_asset(asset_descriptors, "plane_mesh");
-        state->asset_ids.ground_plane_mesh = add_asset(asset_descriptors, "ground_plane_mesh");
-        state->asset_ids.tree_mesh = add_asset(asset_descriptors, "tree_mesh");
-        state->asset_ids.tree_texture = add_asset(asset_descriptors, "tree_texture");
-        state->asset_ids.horse_mesh = add_asset(asset_descriptors, "horse_mesh", true);
-        state->asset_ids.horse_texture = add_asset(asset_descriptors, "horse_texture");
-        state->asset_ids.chest_mesh = add_asset(asset_descriptors, "chest_mesh");
-        state->asset_ids.chest_texture = add_asset(asset_descriptors, "chest_texture");
-        state->asset_ids.konserian_mesh = add_asset(asset_descriptors, "konserian_mesh");
-        state->asset_ids.konserian_texture = add_asset(asset_descriptors, "konserian_texture");
-        state->asset_ids.cactus_mesh = add_asset(asset_descriptors, "cactus_mesh");
-        state->asset_ids.cactus_texture = add_asset(asset_descriptors, "cactus_texture");
-        state->asset_ids.kitchen_mesh = add_asset(asset_descriptors, "kitchen_mesh");
-        state->asset_ids.kitchen_texture = add_asset(asset_descriptors, "kitchen_texture");
-        state->asset_ids.nature_pack_tree_mesh = add_asset(asset_descriptors, "nature_pack_tree_mesh");
-        state->asset_ids.nature_pack_tree_texture = add_asset(asset_descriptors, "nature_pack_tree_texture");
-        state->asset_ids.another_ground_0 = add_asset(asset_descriptors, "another_ground_0");
+        state->asset_ids.mouse_cursor = ASSET_ID("testing/kenney/cursor");
         state->asset_ids.cube_mesh = add_asset(asset_descriptors, "cube_mesh");
-        state->asset_ids.cube_texture = add_asset(asset_descriptors, "cube_texture");
 
         state->asset_ids.blocky_advanced_mesh = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh");
         state->asset_ids.blocky_advanced_mesh2 = add_asset(asset_descriptors, "kenney_blocky_advanced_mesh2");
@@ -3931,11 +3883,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->asset_ids.blockfigureRigged6_mesh = add_asset(asset_descriptors, "blockfigureRigged6_mesh");
         state->asset_ids.blockfigureRigged6_texture = add_asset(asset_descriptors, "blockfigureRigged6_texture");
 
-        state->asset_ids.knp_palette = add_asset(asset_descriptors, "knp_palette");
-        state->asset_ids.cube_bounds_mesh = add_asset(asset_descriptors, "cube_bounds_mesh");
         state->asset_ids.white_texture = add_asset(asset_descriptors, "white_texture");
         state->asset_ids.square_texture = add_asset(asset_descriptors, "square_texture");
-        state->asset_ids.knp_plate_grass = add_asset(asset_descriptors, "knp_Plate_Grass_01");
         state->asset_ids.dog2_mesh = add_asset(asset_descriptors, "dog2_mesh");
         state->asset_ids.dog2_texture = add_asset(asset_descriptors, "dog2_texture");
 
@@ -3947,7 +3896,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         state->debug.show_textures = 0;
         state->debug.show_lights = 0;
         state->debug.cull_front = 1;
-        state->debug.show_nature_pack = 0;
         state->debug.show_camera = 0;
 
         state->debug.debug_system = PushStruct("debug_system", &state->arena, DebugSystem);

@@ -67,11 +67,25 @@ void
 add_asset(RuntimeData *rtdata, std::string path, std::string relative_path)
 {
     std::string asset_name = relative_path.substr(0, relative_path.size() - 6);
-    printf("Asset name is %s\n", asset_name.c_str());
+
+    size_t found = 0;
+    while (true)
+    {
+        found = asset_name.find_first_of('\\', found);
+        if (found == std::string::npos)
+        {
+            break;
+        }
+        asset_name[found] = '/';
+    }
+    //printf("Asset name is %s\n", asset_name.c_str());
 
     std::ifstream file(path);
     std::string type;
     getline(file, type);
+
+    std::string subtype;
+    getline(file, subtype);
 
     std::string filename;
     getline(file, filename);
@@ -79,11 +93,14 @@ add_asset(RuntimeData *rtdata, std::string path, std::string relative_path)
     std::string relative_filename = relative_path.substr(0, relative_path.rfind("\\") + 1) + filename;
     filename = path.substr(0, path.rfind("\\") + 1) + filename;
 
+    /*
     printf("Type is %s\n", type.c_str());
+    printf("SubType is %s\n", subtype.c_str());
     printf("Filename is %s\n", filename.c_str());
     printf("Relative filename is %s\n", relative_filename.c_str());
-
     printf("Opening file %s\n", filename.c_str());
+    */
+
     HANDLE handle = CreateFile(
         filename.c_str(),
         GENERIC_READ,
@@ -96,13 +113,19 @@ add_asset(RuntimeData *rtdata, std::string path, std::string relative_path)
     if (handle == INVALID_HANDLE_VALUE)
     {
         DWORD error_code = GetLastError();
-        printf("Error code: %d", error_code);
+        printf("Error code: %d\n", error_code);
+
+        printf("Type is %s\n", type.c_str());
+        printf("SubType is %s\n", subtype.c_str());
+        printf("Filename is %s\n", filename.c_str());
+        printf("Relative filename is %s\n", relative_filename.c_str());
+
         assert(handle != INVALID_HANDLE_VALUE);
     }
 
     LARGE_INTEGER _size;
     GetFileSizeEx(handle, &_size);
-    printf("GetFileSize returns size of %lld\n", _size.QuadPart);
+    //printf("GetFileSize returns size of %lld\n", _size.QuadPart);
 
     unsigned char *buffer = (unsigned char *)malloc(_size.QuadPart);
     DWORD _bytes_read;
@@ -119,12 +142,34 @@ add_asset(RuntimeData *rtdata, std::string path, std::string relative_path)
     {
         Asset a;
         a.asset_type = AssetType::Texture;
-        a.asset_sub_type = AssetSubType::Diffuse;
+        if (subtype == "diffuse")
+        {
+            a.asset_sub_type.texture = TextureAssetSubType::Diffuse;
+        }
+        else if (subtype == "specular")
+        {
+            a.asset_sub_type.texture = TextureAssetSubType::Specular;
+        }
+        else if (subtype == "normal")
+        {
+            a.asset_sub_type.texture = TextureAssetSubType::Normal;
+        }
+        else
+        {
+            printf("Could not determine subtype of texture: %s\n", subtype.c_str());
+
+            printf("Type is %s\n", type.c_str());
+            printf("SubType is %s\n", subtype.c_str());
+            printf("Filename is %s\n", filename.c_str());
+            printf("Relative filename is %s\n", relative_filename.c_str());
+            return;
+        }
+
         a.last_modified = 0;
         a.num_asset_pieces = 1;
         a.asset_piece_id = (uint32_t)rtdata->asset_pieces.size();
-        printf("Asset name is %s\n", asset_name.c_str());
         uint32_t asset_id = fnv1a_32((uint8_t *)asset_name.c_str(), (uint32_t)asset_name.size());
+        printf("%u: %s\n", asset_id, asset_name.c_str());
         a.asset_id = asset_id;
         rtdata->assets.push_back(a);
 
@@ -136,12 +181,53 @@ add_asset(RuntimeData *rtdata, std::string path, std::string relative_path)
         rtdata->filenames.push_back(relative_filename);
         rtdata->filenames_size += (uint32_t)relative_filename.size() + 1;
         p.size = (uint32_t)_size.QuadPart;
-        printf("Asset piece size is %ld\n", p.size);
+        //printf("Asset piece size is %ld\n", p.size);
         p.metadata.texture.container_format = AssetContainerFormat::Plain;
         p.metadata.texture.texture_format = AssetTextureFormat::CompressedImage;
         p.metadata.texture.dimension = {x, y, 0};
         p.metadata.texture.bpp = 32;
         p.metadata.texture.num_mipmaps = 1;
+        rtdata->asset_pieces.push_back(p);
+    }
+    else if (type == "mesh")
+    {
+        Asset a;
+        a.asset_type = AssetType::Mesh;
+        if (subtype == "unknown")
+        {
+            a.asset_sub_type.mesh = MeshAssetSubType::Unknown;
+        }
+        else
+        {
+            printf("Could not determine subtype of mesh: %s\n", subtype.c_str());
+
+            printf("Type is %s\n", type.c_str());
+            printf("SubType is %s\n", subtype.c_str());
+            printf("Filename is %s\n", filename.c_str());
+            printf("Relative filename is %s\n", relative_filename.c_str());
+            return;
+        }
+
+        a.last_modified = 0;
+        a.num_asset_pieces = 1;
+        a.asset_piece_id = (uint32_t)rtdata->asset_pieces.size();
+        uint32_t asset_id = fnv1a_32((uint8_t *)asset_name.c_str(), (uint32_t)asset_name.size());
+        printf("%u: %s\n", asset_id, asset_name.c_str());
+        a.asset_id = asset_id;
+        rtdata->assets.push_back(a);
+
+        AssetPiece p;
+        p.offset = rtdata->filenames_size;
+        rtdata->filenames.push_back(relative_filename);
+        rtdata->filenames_size += (uint32_t)relative_filename.size() + 1;
+        p.size = (uint32_t)_size.QuadPart;
+        /*
+        p.metadata.texture.container_format = AssetContainerFormat::Plain;
+        p.metadata.texture.texture_format = AssetTextureFormat::CompressedImage;
+        p.metadata.texture.dimension = {x, y, 0};
+        p.metadata.texture.bpp = 32;
+        p.metadata.texture.num_mipmaps = 1;
+        */
         rtdata->asset_pieces.push_back(p);
     }
     free(buffer);
@@ -234,6 +320,47 @@ full_fwrite(const void *ptr, size_t size, size_t count, FILE *of)
     return count * size;
 }
 
+std::vector<uint32_t>
+build_hash(AssetFile_0 *af, RuntimeData *rtdata)
+{
+    // TODO(nbm): No, I don't know what I'm doing.
+    uint32_t asset_hash_size = 1;
+    while (af->asset_count + 10 > asset_hash_size)
+    {
+        asset_hash_size *= 2 + 1;
+    }
+
+    std::vector<uint32_t> res(0);
+    while (true)
+    {
+        res.clear();
+        res.resize(asset_hash_size);
+
+        bool collision = false;
+
+        for (uint32_t i = 0; i < af->asset_count; ++i)
+        {
+            Asset &asset = rtdata->assets[i];
+            uint32_t hash_slot = asset.asset_id % asset_hash_size;
+            if (res[hash_slot] != 0)
+            {
+                collision = true;
+                break;
+            }
+            res[hash_slot] = i + 1;
+        }
+        if (!collision)
+        {
+            break;
+        }
+        printf("Collision at asset_hash_size of %d, retrying...\n", asset_hash_size);
+        asset_hash_size += 2;
+    }
+
+    af->asset_hash_size = asset_hash_size;
+    return res;
+}
+
 void
 write_file(RuntimeData *rtdata, std::string outputfile)
 {
@@ -245,14 +372,6 @@ write_file(RuntimeData *rtdata, std::string outputfile)
     printf("Asset count: %d\n", af.asset_count);
     af.asset_piece_count = (uint32_t)rtdata->asset_pieces.size();
     printf("Piece count: %d\n", af.asset_piece_count);
-
-    // TODO(nbm): No, I don't know what I'm doing.
-    af.asset_hash_size = 1;
-    while (af.asset_count + 10 > af.asset_hash_size)
-    {
-        af.asset_hash_size *= 2 + 1;
-    }
-    printf("Asset Hash entries: %d\n", af.asset_hash_size);
 
     uint32_t offset = 0;
     af.asset_offset = offset;
@@ -266,6 +385,8 @@ write_file(RuntimeData *rtdata, std::string outputfile)
     printf("Piece offset: %d\n", af.piece_offset);
     printf("Piece size: %d\n", af.piece_size);
     offset += af.piece_size;
+
+    std::vector<uint32_t> hash = build_hash(&af, rtdata);
 
     af.hash_offset = offset;
     af.hash_size = af.asset_hash_size * sizeof(uint32_t);
@@ -296,14 +417,6 @@ write_file(RuntimeData *rtdata, std::string outputfile)
     assert(total_written == af.piece_offset);
     total_written += written = full_fwrite(&rtdata->asset_pieces[0], sizeof(AssetPiece), rtdata->asset_pieces.size(), of);
     assert(written == af.piece_size);
-
-    std::vector<uint32_t> hash(af.asset_hash_size);
-    for (uint32_t i = 0; i < af.asset_count; ++i)
-    {
-        Asset &asset = rtdata->assets[i];
-        printf("Asset %d with asset_id %d\n", i, asset.asset_id);
-        hash[asset.asset_id % af.asset_hash_size] = i + 1;
-    }
 
     assert(total_written == af.hash_offset);
     total_written += written = full_fwrite(&hash[0], sizeof(uint32_t), hash.size(), of);

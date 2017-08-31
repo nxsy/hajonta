@@ -8,11 +8,15 @@ find_asset_in_pack(AssetPack *pack, uint32_t asset_id)
     uint32_t asset_index_in_pack = pack->asset_hash[hash_index];
     if (!asset_index_in_pack)
     {
-        return result;
+        return 0;
     }
     asset_index_in_pack--;
     result = pack->assets + asset_index_in_pack;
-    return result;
+    if (result->asset_id == asset_id)
+    {
+        return result;
+    }
+    return 0;
 }
 
 AssetPiece *
@@ -32,6 +36,7 @@ choose_asset_piece_from_asset(AssetPack *pack, Asset *asset)
 LoadedAsset *
 get_asset_from_hash(AssetHash *hash, uint32_t asset_id)
 {
+    TIMED_FUNCTION();
     uint32_t asset_hash = asset_id % hash->asset_hash_size;
     AssetHashEntry *possibility = hash->hash[asset_hash];
 
@@ -47,6 +52,21 @@ get_asset_from_hash(AssetHash *hash, uint32_t asset_id)
     return 0;
 }
 
+void
+asset_hash_add_list(AssetHash *hash)
+{
+    AssetHashList *list = (AssetHashList *)PushStruct("asset_hash_list", hash->arena, AssetHashList);
+    list->next = hash->list;
+    hash->list = list;
+    list->entries[0].next = hash->free_entries;
+    for (uint32_t i = 1; i < harray_count(list->entries); ++i)
+    {
+        list->entries[i].next = list->entries + i - 1;
+    }
+    hash->free_entries = list->entries + harray_count(list->entries) - 1;
+    return;
+}
+
 LoadedAsset *
 add_asset_to_hash(AssetHash *hash, AssetPack *pack, Asset *asset, AssetPiece *asset_piece)
 {
@@ -57,10 +77,15 @@ add_asset_to_hash(AssetHash *hash, AssetPack *pack, Asset *asset, AssetPiece *as
         return result;
     }
 
-    hassert(hash->free_entries);
+    if (!hash->free_entries)
+    {
+        asset_hash_add_list(hash);
+    }
+
     AssetHashEntry *entry = hash->free_entries;
     AssetHashEntry *next = hash->free_entries->next;
 
+    entry->next = 0;
     result = &entry->loaded_asset;
     result->pack = pack;
     result->asset = asset;
@@ -86,25 +111,15 @@ add_asset_to_hash(AssetHash *hash, AssetPack *pack, Asset *asset, AssetPiece *as
 }
 
 void
-asset_hash_add_list(AssetHash *hash)
-{
-    AssetHashList *list = (AssetHashList *)PushStruct("asset_hash_list", hash->arena, AssetHashList);
-    list->next = hash->list;
-    hash->list = list;
-    list->entries[0].next = hash->free_entries;
-    for (uint32_t i = 1; i < harray_count(list->entries); ++i)
-    {
-        list->entries[i].next = list->entries + i - 1;
-    }
-    hash->free_entries = list->entries + harray_count(list->entries) - 1;
-    return;
-}
-
-void
 asset_hash_init(AssetHash* hash, MemoryArena *arena, uint32_t max_assets, uint32_t hash_size)
 {
     hash->arena = arena;
-    hash->hash = (AssetHashEntry **)PushSize("asset_hash", arena, sizeof(AssetHashEntry *) * hash_size);
+    hash->hash = (AssetHashEntry **)PushSize(
+        "asset_hash",
+        arena,
+        sizeof(AssetHashEntry *) * hash_size
+    );
+
     hash->asset_hash_size = hash_size;
     hash->free_entries = 0;
     hash->list = 0;
@@ -118,13 +133,6 @@ asset_hash_init(AssetHash* hash, MemoryArena *arena, uint32_t max_assets, uint32
 void
 asset_management_state_init(AssetManagementState *state, MemoryArena *arena, uint32_t max_assets, uint32_t hash_size)
 {
-
-    /*
-    state->max_assets = max_assets;
-    state->assets = (LoadedAsset *)PushSize("loaded_assets", arena, sizeof(LoadedAsset) * state->asset_state.max_assets);
-    state->asset_hash_size = 256;
-    state->asset_hash = (uint32_t *)PushSize("loaded_asset_hash", arena, sizeof(uint32_t) * state->asset_state.asset_hash_size);
-    */
     state->arena = arena;
     asset_hash_init(&state->asset_hash, arena, max_assets, hash_size);
 }
@@ -138,6 +146,7 @@ add_pack_to_asset_management_state(AssetManagementState *state, AssetPack *pack)
 LoadedAsset *
 load_asset(AssetManagementState *state, uint32_t asset_id, int32_t asset_piece_id = -1)
 {
+    TIMED_FUNCTION();
     LoadedAsset *result = get_asset_from_hash(&state->asset_hash, asset_id);
     if (result)
     {

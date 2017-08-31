@@ -11,14 +11,30 @@ AssetType
 };
 
 enum struct
-AssetSubType
+TextureAssetSubType
 {
     Diffuse,
     Normal,
     Specular,
-    Cubemap,
+    //Cubemap,
+};
+
+enum struct
+MeshAssetSubType
+{
+    Unknown,
+};
+
+/*
     MeshShader,
     ShaderFilter,
+*/
+
+union
+AssetSubType
+{
+    TextureAssetSubType texture;
+    MeshAssetSubType mesh;
 };
 
 enum struct
@@ -190,6 +206,15 @@ LoadedTextureAsset
 };
 
 struct
+LoadedMeshAsset
+{
+    bool initialized;
+    Mesh *mesh;
+    int32_t load_state;
+    V3Bones *v3bones;
+};
+
+struct
 LoadedAsset
 {
     AssetPack *pack;
@@ -199,6 +224,7 @@ LoadedAsset
     union
     {
         LoadedTextureAsset texture;
+        LoadedMeshAsset mesh;
     };
 };
 
